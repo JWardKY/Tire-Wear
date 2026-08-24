@@ -3,7 +3,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
 } from "recharts";
-import { supabase } from "./supabase.js";
 import { C, FD, FB, FM } from "./theme.js";
 import * as db from "./data.js";
 
@@ -75,8 +74,7 @@ const STATUS_COLOR = { good: C.good, watch: C.watch, pull: C.pull, none: "#94A3B
 const STATUS_LABEL = { good: "In service", watch: "Monitor", pull: "Pull", none: "No reading" };
 
 /* ── Root ─────────────────────────────────────────────────────── */
-export default function TireWear({ session }) {
-  const who = session?.user?.email || null;
+export default function TireWear({ who, onSwitchUser }) {
 
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
@@ -250,7 +248,7 @@ export default function TireWear({ session }) {
 
   return (
     <div style={{ fontFamily: FB, background: C.paper, minHeight: "100vh", color: C.ink }}>
-      <Header tab={tab} setTab={setTab} who={who} busy={busy} />
+      <Header tab={tab} setTab={setTab} who={who} busy={busy} onSwitchUser={onSwitchUser} />
       {err && (
         <div style={{ background: "#FDECEA", color: C.pull, borderBottom: `1px solid ${C.pull}33`,
           padding: "10px 20px", fontSize: 13, fontWeight: 600 }}>{err}</div>
@@ -275,7 +273,7 @@ export default function TireWear({ session }) {
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
-function Header({ tab, setTab, who, busy }) {
+function Header({ tab, setTab, who, busy, onSwitchUser }) {
   const tabs = [["fleet", "Fleet"], ["analysis", "Analysis"], ["settings", "Settings"]];
   return (
     <div style={{ background: C.navy900, borderBottom: `3px solid ${C.gold}` }}>
@@ -303,12 +301,12 @@ function Header({ tab, setTab, who, busy }) {
             {who && (
               <span style={{ fontFamily: FM, fontSize: 11.5, color: "#9DB2CC" }}>{who}</span>
             )}
-            <button onClick={() => supabase.auth.signOut()}
+            <button onClick={onSwitchUser}
               style={{ background: "none", border: `1px solid ${C.navy600}`, borderRadius: 4,
                 color: "#9DB2CC", fontFamily: FD, fontSize: 12, fontWeight: 600,
                 letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 10px",
                 cursor: "pointer" }}>
-              Sign out
+              Switch user
             </button>
           </div>
           <div className="flex" style={{ gap: 2 }}>

@@ -234,9 +234,17 @@ alter view tw_active_tires set (security_invoker = true);
 
 
 -- ── Row level security ──────────────────────────────────────
--- Small internal team: any signed-in Allen user can read and
--- write. Tighten to role-based if this opens up beyond the
--- shop and the Haul Division office.
+-- The app has no login: it asks for an Allen email, checks the
+-- domain in the browser, and lets you through. Requests therefore
+-- arrive as `anon`, the same posture as hct_jobs (the Haul Cycle
+-- Tracker has no login either). See HANDOFF.md for what that costs.
+--
+-- These policies are PER TABLE, so they open the tw_ tables only —
+-- the QC, bid and purchasing tables sharing this project still deny
+-- anon. scripts/check-anon-access.mjs asserts exactly that.
+--
+-- The `authenticated` policies are kept so that putting a real login
+-- back is only a matter of dropping the anon ones.
 
 alter table tw_vehicles       enable row level security;
 alter table tw_tire_brands    enable row level security;
@@ -255,5 +263,10 @@ begin
     execute format(
       'create policy %I on %I for all to authenticated using (true) with check (true)',
       t || '_authenticated_all', t);
+
+    execute format('drop policy if exists %I on %I', t || '_anon_all', t);
+    execute format(
+      'create policy %I on %I for all to anon using (true) with check (true)',
+      t || '_anon_all', t);
   end loop;
 end $$;
