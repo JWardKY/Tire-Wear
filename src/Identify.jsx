@@ -26,8 +26,9 @@ export default function Identify({ onDone }) {
         boxShadow: "0 14px 40px rgba(12,42,27,0.16)" }}>
         <div style={{ background: C.green900, padding: "20px 20px 18px",
           borderBottom: `3px solid ${C.yellow}` }}>
+          {/* Room here for the whole sign, fine print and all. */}
           <span style={{ color: C.yellow, display: "block" }}>
-            <AllenLogo height={40} />
+            <AllenLogo height={64} />
           </span>
           <div style={{ fontFamily: FD, fontSize: 11.5, letterSpacing: "0.22em",
             color: C.yellow, fontWeight: 600, textTransform: "uppercase", marginTop: 12 }}>
