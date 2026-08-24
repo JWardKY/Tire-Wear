@@ -4,6 +4,7 @@ import {
   LineChart, Line,
 } from "recharts";
 import { C, FD, FB, FM } from "./theme.js";
+import AllenLogo from "./AllenLogo.jsx";
 import * as db from "./data.js";
 
 /* ────────────────────────────────────────────────────────────────
@@ -71,6 +72,10 @@ function statusOf(depth, pull) {
   return "good";
 }
 const STATUS_COLOR = { good: C.good, watch: C.watch, pull: C.pull, none: "#94A3B8" };
+/* Same statuses, lifted for the dark green tire card on the diagram. */
+const STATUS_ON_DARK = {
+  good: C.goodOnDark, watch: C.watchOnDark, pull: C.pullOnDark, none: C.noneOnDark,
+};
 const STATUS_LABEL = { good: "In service", watch: "Monitor", pull: "Pull", none: "No reading" };
 
 /* ── Root ─────────────────────────────────────────────────────── */
@@ -277,19 +282,25 @@ export default function TireWear({ who, onSwitchUser }) {
 function Header({ tab, setTab, who, busy, onSwitchUser }) {
   const tabs = [["fleet", "Fleet"], ["analysis", "Analysis"], ["settings", "Settings"]];
   return (
-    <div style={{ background: C.navy900, borderBottom: `3px solid ${C.gold}` }}>
+    <div style={{ background: C.green900, borderBottom: `3px solid ${C.yellow}` }}>
       <div className="mx-auto w-full flex flex-wrap items-end justify-between gap-3"
         style={{ maxWidth: 1400, padding: "16px 16px 0" }}>
         <div>
-          <div style={{ fontFamily: FD, fontSize: 11, letterSpacing: "0.22em",
-            color: C.gold, fontWeight: 600, textTransform: "uppercase" }}>
-            The Allen Company · Haul Division
+          {/* The logo already says The Allen Company, so the old eyebrow
+              text is down to the division it belongs to. */}
+          <div className="flex items-center" style={{ gap: 11, marginBottom: 7 }}>
+            <span style={{ color: C.yellow }}><AllenLogo height={30} /></span>
+            <span style={{ width: 1, height: 24, background: C.green700 }} />
+            <span style={{ fontFamily: FD, fontSize: 11.5, letterSpacing: "0.22em",
+              color: C.yellow, fontWeight: 600, textTransform: "uppercase" }}>
+              Haul Division
+            </span>
           </div>
           <div style={{ fontFamily: FD, fontSize: 34, fontWeight: 700, color: "#fff",
             lineHeight: 1.05, letterSpacing: "0.01em", marginTop: 2 }}>
             Tire Wear
           </div>
-          <div style={{ fontSize: 12.5, color: "#9DB2CC", marginBottom: 12, marginTop: 2 }}>
+          <div style={{ fontSize: 12.5, color: C.onDark, marginBottom: 12, marginTop: 2 }}>
             Tread depth, miles run, and cost-per-mile by brand and position
           </div>
         </div>
@@ -297,14 +308,14 @@ function Header({ tab, setTab, who, busy, onSwitchUser }) {
         <div className="flex flex-col items-end" style={{ gap: 9 }}>
           <div className="flex items-center" style={{ gap: 10 }}>
             {busy && (
-              <span style={{ fontFamily: FM, fontSize: 11, color: C.gold }}>Saving…</span>
+              <span style={{ fontFamily: FM, fontSize: 11, color: C.yellow }}>Saving…</span>
             )}
             {who && (
-              <span style={{ fontFamily: FM, fontSize: 11.5, color: "#9DB2CC" }}>{who}</span>
+              <span style={{ fontFamily: FM, fontSize: 11.5, color: C.onDark }}>{who}</span>
             )}
             <button onClick={onSwitchUser}
-              style={{ background: "none", border: `1px solid ${C.navy600}`, borderRadius: 4,
-                color: "#9DB2CC", fontFamily: FD, fontSize: 12, fontWeight: 600,
+              style={{ background: "none", border: `1px solid ${C.green600}`, borderRadius: 4,
+                color: C.onDark, fontFamily: FD, fontSize: 12, fontWeight: 600,
                 letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 10px",
                 cursor: "pointer" }}>
               Switch user
@@ -317,7 +328,7 @@ function Header({ tab, setTab, who, busy, onSwitchUser }) {
                   fontFamily: FD, fontSize: 15, fontWeight: 600, letterSpacing: "0.06em",
                   textTransform: "uppercase", padding: "9px 18px",
                   background: tab === k ? C.paper : "transparent",
-                  color: tab === k ? C.navy900 : "#9DB2CC",
+                  color: tab === k ? C.green900 : C.onDark,
                   border: "none", borderRadius: "5px 5px 0 0", cursor: "pointer",
                 }}>{label}</button>
             ))}
@@ -353,8 +364,8 @@ function FleetView(props) {
                   <button key={d} onClick={() => setDivFilter(d)}
                     style={{ flex: 1, fontFamily: FD, fontSize: 13, fontWeight: 600,
                       letterSpacing: "0.08em", padding: "6px 0", borderRadius: 4, cursor: "pointer",
-                      border: `1px solid ${divFilter === d ? C.navy700 : C.line}`,
-                      background: divFilter === d ? C.navy700 : "#fff",
+                      border: `1px solid ${divFilter === d ? C.green700 : C.line}`,
+                      background: divFilter === d ? C.green700 : "#fff",
                       color: divFilter === d ? "#fff" : C.muted }}>{d}</button>
                 ))}
               </div>
@@ -409,10 +420,10 @@ function VehRow({ v, s, active, onClick }) {
     <button onClick={onClick}
       style={{ width: "100%", textAlign: "left", padding: "9px 11px", cursor: "pointer",
         border: "none", borderBottom: `1px solid ${C.lineSoft}`,
-        borderLeft: `3px solid ${active ? C.gold : "transparent"}`,
-        background: active ? "#F4F7FB" : "#fff", display: "block" }}>
+        borderLeft: `3px solid ${active ? C.yellow : "transparent"}`,
+        background: active ? "#F2F7F3" : "#fff", display: "block" }}>
       <div className="flex items-center justify-between" style={{ gap: 8 }}>
-        <span style={{ fontFamily: FM, fontWeight: 600, fontSize: 13.5, color: C.navy900 }}>
+        <span style={{ fontFamily: FM, fontWeight: 600, fontSize: 13.5, color: C.green900 }}>
           {v.num}
         </span>
         <span style={{ width: 8, height: 8, borderRadius: 8, background: dot, flexShrink: 0 }} />
@@ -432,7 +443,7 @@ function VehRow({ v, s, active, onClick }) {
 function StartHere({ attention, setSel, byNum }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 24 }}>
-      <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.navy900 }}>
+      <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
         Pick a truck to get started
       </div>
       <p style={{ fontSize: 14, color: C.muted, marginTop: 6, maxWidth: 620, lineHeight: 1.55 }}>
@@ -450,7 +461,7 @@ function StartHere({ attention, setSel, byNum }) {
                 style={{ textAlign: "left", padding: "10px 12px", borderRadius: 6, cursor: "pointer",
                   border: `1px solid ${r.pulls ? C.pull + "55" : C.watch + "55"}`,
                   background: r.pulls ? "#FDF3F2" : "#FDF9EF" }}>
-                <div style={{ fontFamily: FM, fontWeight: 600, fontSize: 13.5, color: C.navy900 }}>
+                <div style={{ fontFamily: FM, fontWeight: 600, fontSize: 13.5, color: C.green900 }}>
                   {r.num}
                 </div>
                 <div style={{ fontSize: 12, color: r.pulls ? C.pull : C.watch, fontWeight: 600, marginTop: 2 }}>
@@ -518,7 +529,7 @@ function VehicleDetail(props) {
           style={{ padding: "14px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
           <div>
             <div className="flex items-baseline" style={{ gap: 10 }}>
-              <span style={{ fontFamily: FD, fontSize: 30, fontWeight: 700, color: C.navy900, lineHeight: 1 }}>
+              <span style={{ fontFamily: FD, fontSize: 30, fontWeight: 700, color: C.green900, lineHeight: 1 }}>
                 {v.num}
               </span>
               <span style={{ fontSize: 13.5, color: C.muted }}>
@@ -553,7 +564,7 @@ function VehicleDetail(props) {
 
         {mode === "inspect" && (
           <div className="flex flex-wrap items-end gap-3"
-            style={{ padding: "12px 16px", background: "#F7FAFD", borderBottom: `1px solid ${C.lineSoft}` }}>
+            style={{ padding: "12px 16px", background: "#F4FAF6", borderBottom: `1px solid ${C.lineSoft}` }}>
             <Field label="Date">
               <input type="date" value={insDate} onChange={(e) => setInsDate(e.target.value)} style={inp} />
             </Field>
@@ -656,7 +667,7 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
           Front
         </div>
         <div style={{ width: 0, height: 0, borderTop: "7px solid transparent",
-          borderBottom: "7px solid transparent", borderRight: `9px solid ${C.gold}`, marginTop: 6 }} />
+          borderBottom: "7px solid transparent", borderRight: `9px solid ${C.yellow}`, marginTop: 6 }} />
       </div>
 
       <div className="flex" style={{ gap: GAP }}>
@@ -673,7 +684,7 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
               <div className="flex flex-col items-center" style={{ padding: "4px 0" }}>
                 <div style={{ width: 14, height: 30, background: "#C7D0DA", borderRadius: 3 }} />
                 <div style={{ fontFamily: FD, fontSize: 12, fontWeight: 600, letterSpacing: "0.1em",
-                  color: C.navy700, textTransform: "uppercase", marginTop: 5 }}>
+                  color: C.green700, textTransform: "uppercase", marginTop: 5 }}>
                   {a.role}
                 </div>
                 <div style={{ fontFamily: FM, fontSize: 10, color: C.muted }}>axle {a.n}</div>
@@ -691,14 +702,15 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
 
 function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, onEmpty, width }) {
   const st = stats?.status || "none";
-  const col = STATUS_COLOR[st];
+  const col = STATUS_COLOR[st];      // the solid badge, white text on it
+  const colOnDark = STATUS_ON_DARK[st]; // the tread numeral, on the card itself
   const inspecting = mode === "inspect" && tire;
 
   if (!tire) {
     return (
       <button onClick={() => onEmpty(pos)}
         style={{ width, height: 62, borderRadius: 6, cursor: "pointer",
-          border: `1px dashed ${C.line}`, background: "#FAFCFE", color: C.muted,
+          border: `1px dashed ${C.line}`, background: "#FAFDFB", color: C.muted,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
         <span style={{ fontFamily: FM, fontWeight: 600, fontSize: 12, color: "#94A3B8" }}>{pos.id}</span>
         <span style={{ fontSize: 12 }}>Mount tire</span>
@@ -707,8 +719,8 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
   }
 
   return (
-    <div style={{ width, height: 62, borderRadius: 6, background: C.navy900,
-      border: `1px solid ${C.navy800}`, display: "flex", overflow: "hidden" }}>
+    <div style={{ width, height: 62, borderRadius: 6, background: C.green900,
+      border: `1px solid ${C.green800}`, display: "flex", overflow: "hidden" }}>
       <div style={{ width: 34, background: col, color: "#fff", display: "flex",
         alignItems: "center", justifyContent: "center", fontFamily: FM, fontWeight: 600,
         fontSize: 11.5, flexShrink: 0, letterSpacing: "-0.02em" }}>
@@ -721,10 +733,10 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
             value={draft[pos.id] ?? ""}
             onChange={(e) => setDraft((p) => ({ ...p, [pos.id]: e.target.value }))}
             placeholder={stats?.depth != null ? String(stats.depth) : "--"}
-            style={{ width: 58, padding: "5px 6px", borderRadius: 4, border: `1px solid ${C.navy600}`,
-              background: "#0A1728", color: "#fff", fontFamily: FM, fontWeight: 600, fontSize: 16,
+            style={{ width: 58, padding: "5px 6px", borderRadius: 4, border: `1px solid ${C.green600}`,
+              background: C.wellDark, color: "#fff", fontFamily: FM, fontWeight: 600, fontSize: 16,
               textAlign: "center", outline: "none" }} />
-          <div style={{ fontFamily: FM, fontSize: 11, color: "#7E93AC", lineHeight: 1.25 }}>
+          <div style={{ fontFamily: FM, fontSize: 11, color: C.onDarkSoft, lineHeight: 1.25 }}>
             /32<br />
             <span style={{ fontSize: 10 }}>was {stats?.depth ?? "—"}</span>
           </div>
@@ -734,21 +746,21 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
           style={{ flex: 1, background: "transparent", border: "none", cursor: "pointer",
             textAlign: "left", padding: "5px 9px", color: "#fff", minWidth: 0 }}>
           <div className="flex items-baseline justify-between" style={{ gap: 6 }}>
-            <span style={{ fontFamily: FM, fontWeight: 600, fontSize: 18, color: col, lineHeight: 1 }}>
+            <span style={{ fontFamily: FM, fontWeight: 600, fontSize: 18, color: colOnDark, lineHeight: 1 }}>
               {stats?.depth != null ? stats.depth : "—"}
-              <span style={{ fontSize: 10, color: "#7E93AC", fontWeight: 400 }}>/32</span>
+              <span style={{ fontSize: 10, color: C.onDarkSoft, fontWeight: 400 }}>/32</span>
             </span>
-            <span style={{ fontFamily: FM, fontSize: 10, color: "#7E93AC" }}>
+            <span style={{ fontFamily: FM, fontSize: 10, color: C.onDarkSoft }}>
               {stats?.miPer32 ? `${nf(stats.miPer32 / 1000, 1)}k/32` : "—"}
             </span>
           </div>
-          <div style={{ fontSize: 10.5, color: "#9DB2CC", marginTop: 3, whiteSpace: "nowrap",
+          <div style={{ fontSize: 10.5, color: C.onDark, marginTop: 3, whiteSpace: "nowrap",
             overflow: "hidden", textOverflow: "ellipsis" }}>
             {/* A note is no use if nobody knows it is there — flag it on the
                 diagram, since that is the screen people actually look at. */}
             {tire.notes && (
               <span title={tire.notes}
-                style={{ color: C.goldHi, fontWeight: 700, marginRight: 4 }}>●</span>
+                style={{ color: C.yellowHi, fontWeight: 700, marginRight: 4 }}>●</span>
             )}
             {tire.brand || "Unbranded"}{tire.type === "retread" ? " · retread" : ""}
           </div>
@@ -822,16 +834,16 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
 function Modal({ title, sub, children, onClose, width = 520 }) {
   return (
     <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(11,29,51,0.55)", zIndex: 50,
+      style={{ position: "fixed", inset: 0, background: "rgba(12,42,27,0.60)", zIndex: 50,
         display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
       <div onClick={(e) => e.stopPropagation()}
         style={{ background: "#fff", borderRadius: 10, width: "100%", maxWidth: width,
           marginTop: 40, marginBottom: 40, overflow: "hidden", boxShadow: "0 18px 50px rgba(0,0,0,0.3)" }}>
-        <div style={{ background: C.navy900, padding: "13px 18px", borderBottom: `3px solid ${C.gold}` }}>
+        <div style={{ background: C.green900, padding: "13px 18px", borderBottom: `3px solid ${C.yellow}` }}>
           <div style={{ fontFamily: FD, fontSize: 21, fontWeight: 700, color: "#fff", lineHeight: 1.15 }}>
             {title}
           </div>
-          {sub && <div style={{ fontSize: 12, color: "#9DB2CC", marginTop: 2 }}>{sub}</div>}
+          {sub && <div style={{ fontSize: 12, color: C.onDark, marginTop: 2 }}>{sub}</div>}
         </div>
         <div style={{ padding: 18 }}>{children}</div>
       </div>
@@ -965,8 +977,8 @@ function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes,
                 border: `1px solid ${C.line}` }}
                 formatter={(val) => [`${val}/32`, "Tread"]}
                 labelFormatter={(l) => `${l} miles`} />
-              <Line type="monotone" dataKey="depth" stroke={C.navy700} strokeWidth={2.5}
-                dot={{ r: 3.5, fill: C.gold, stroke: C.navy700, strokeWidth: 1.5 }} />
+              <Line type="monotone" dataKey="depth" stroke={C.green700} strokeWidth={2.5}
+                dot={{ r: 3.5, fill: C.yellow, stroke: C.green700, strokeWidth: 1.5 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1122,7 +1134,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
   if (scored.length === 0)
     return (
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
-        <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.navy900 }}>
+        <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
           Nothing to compare yet
         </div>
         <p style={{ fontSize: 14, color: C.muted, marginTop: 6, maxWidth: 560, lineHeight: 1.55 }}>
@@ -1138,7 +1150,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
       <div className="flex flex-wrap items-center justify-between gap-3"
         style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: "12px 16px" }}>
         <div>
-          <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.navy900, lineHeight: 1.1 }}>
+          <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900, lineHeight: 1.1 }}>
             {scored.length} tire{scored.length > 1 ? "s" : ""} with a wear rate
           </div>
           <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
@@ -1149,8 +1161,8 @@ function Analysis({ tires, tireStats, settings, byNum }) {
           {[["32nd", "mi / 32nd"], ["mil", "mi / mil"]].map(([k, l]) => (
             <button key={k} onClick={() => setUnit(k)}
               style={{ fontFamily: FM, fontSize: 12.5, fontWeight: 600, padding: "7px 13px",
-                cursor: "pointer", border: `1px solid ${unit === k ? C.navy700 : C.line}`,
-                background: unit === k ? C.navy700 : "#fff",
+                cursor: "pointer", border: `1px solid ${unit === k ? C.green700 : C.line}`,
+                background: unit === k ? C.green700 : "#fff",
                 color: unit === k ? "#fff" : C.muted,
                 borderRadius: k === "32nd" ? "5px 0 0 5px" : "0 5px 5px 0" }}>{l}</button>
           ))}
@@ -1197,11 +1209,11 @@ function Analysis({ tires, tireStats, settings, byNum }) {
 }
 
 function ChartCard({ title, note, data, wide }) {
-  const palette = [C.navy700, C.navy600, C.gold, "#4A7AB0", "#8A6D1F", "#6D8FB8"];
+  const palette = [C.green700, C.green600, C.yellow, "#4E9166", "#7A6A12", "#7FAE92"];
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: "14px 16px 8px" }}>
       <div className="flex items-baseline justify-between" style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: FD, fontSize: 18, fontWeight: 700, color: C.navy900,
+        <span style={{ fontFamily: FD, fontSize: 18, fontWeight: 700, color: C.green900,
           letterSpacing: "0.02em" }}>{title}</span>
         <span style={{ fontFamily: FM, fontSize: 10.5, color: C.muted }}>{note}</span>
       </div>
@@ -1385,14 +1397,14 @@ const td = { fontSize: 13.5, padding: "9px 12px", verticalAlign: "middle" };
 const tdNum = { fontFamily: FM, textAlign: "right", whiteSpace: "nowrap" };
 const linkBtn = {
   background: "none", border: "none", padding: 0, cursor: "pointer",
-  color: C.navy600, fontWeight: 600, fontSize: "inherit", fontFamily: "inherit",
+  color: C.green600, fontWeight: 600, fontSize: "inherit", fontFamily: "inherit",
   textDecoration: "underline", textUnderlineOffset: 2,
 };
 
 function Btn({ children, onClick, disabled, tone = "solid" }) {
   const styles = {
-    solid: { background: C.navy700, color: "#fff", border: `1px solid ${C.navy700}` },
-    ghost: { background: "#fff", color: C.navy700, border: `1px solid ${C.line}` },
+    solid: { background: C.green700, color: "#fff", border: `1px solid ${C.green700}` },
+    ghost: { background: "#fff", color: C.green700, border: `1px solid ${C.line}` },
     danger: { background: C.pull, color: "#fff", border: `1px solid ${C.pull}` },
   }[tone];
   return (
@@ -1421,7 +1433,7 @@ function Stat({ label, value, unit, sub, color }) {
     <div>
       <div style={{ fontFamily: FD, fontSize: 11, fontWeight: 600, letterSpacing: "0.1em",
         textTransform: "uppercase", color: C.muted }}>{label}</div>
-      <div style={{ fontFamily: FM, fontSize: 19, fontWeight: 600, color: color || C.navy900,
+      <div style={{ fontFamily: FM, fontSize: 19, fontWeight: 600, color: color || C.green900,
         lineHeight: 1.15, marginTop: 1 }}>
         {value}{unit && <span style={{ fontSize: 11, color: C.muted, fontWeight: 400, marginLeft: 2 }}>{unit}</span>}
       </div>
@@ -1433,7 +1445,7 @@ function Stat({ label, value, unit, sub, color }) {
 function SectionLabel({ children, noMargin }) {
   return (
     <div style={{ fontFamily: FD, fontSize: 12.5, fontWeight: 600, letterSpacing: "0.13em",
-      textTransform: "uppercase", color: C.navy700, marginBottom: noMargin ? 0 : 9 }}>
+      textTransform: "uppercase", color: C.green700, marginBottom: noMargin ? 0 : 9 }}>
       {children}
     </div>
   );
@@ -1453,7 +1465,7 @@ function Pill({ status }) {
 function Card({ title, note, children }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: "14px 16px 16px" }}>
-      <div style={{ fontFamily: FD, fontSize: 19, fontWeight: 700, color: C.navy900, lineHeight: 1.15 }}>
+      <div style={{ fontFamily: FD, fontSize: 19, fontWeight: 700, color: C.green900, lineHeight: 1.15 }}>
         {title}
       </div>
       {note && <div style={{ fontSize: 12.5, color: C.muted, marginTop: 3, marginBottom: 12, lineHeight: 1.5 }}>{note}</div>}

@@ -129,12 +129,35 @@ If this ever needs to be a real lock, in rough order of effort:
 | `src/App.jsx` | Chooses between the name-badge prompt and the app |
 | `src/Identify.jsx` | The "who is entering data" screen |
 | `src/identity.js` | Allowed email domains, and remembering you on this device |
-| `src/theme.js` | Palette and type stacks |
+| `src/theme.js` | Palette and type stacks — the only place colours are written down |
+| `src/AllenLogo.jsx` | The company wordmark, drawn as SVG |
 | `src/index.css` | The handful of layout utilities the components use |
 | `scripts/check-anon-access.mjs` | Asserts anon reaches the `tw_` tables and nothing else |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
+
+### Look and feel
+
+Deep green chrome with a yellow accent. Every colour lives in `src/theme.js` — change
+it there and the whole app follows, including the logo and the charts.
+
+The logo is **drawn as SVG in `AllenLogo.jsx`, not a photograph of the sign.** The sign
+is black on a white wall, which cannot sit on a dark header, and a vector stays sharp
+from the favicon to a phone. It fills with `currentColor`, so the caller picks the
+colour. Every word carries a `textLength`, which pins the composition to the same width
+if Barlow Condensed has not loaded yet — without it a fallback face pushes the wordmark
+out of its own box.
+
+Two things worth knowing before touching the palette:
+
+- **The brand greens are all darker than the "in service" green** on purpose. Chrome
+  should not be mistakable for a status.
+- **The three status colours exist twice**: `good` / `watch` / `pull` are the on-white
+  values used by pills and tables, and `goodOnDark` / `watchOnDark` / `pullOnDark` are
+  lifted for the tread numeral on the dark green tire card. When the chrome went from
+  navy to green the on-white green landed almost on the card's own hue and the depth
+  turned to mud. If you restyle, keep both sets.
 
 `CONFIGS`, `positionsFor`, `TruckDiagram`, and `TireCard` are unchanged from the
 prototype. The diagram is the part people actually use and it took the most iteration
