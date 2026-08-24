@@ -1,8 +1,9 @@
 -- Allen Company · Haul Division — fleet seed
 -- Source: Motive list_vehicles, pulled 2026-08-24. Active units only.
--- 134 vehicles (50 DT, 84 HT)
+-- 134 vehicles (50 DT, 84 HT). Upserts on number, so re-running it
+-- refreshes make, model, year and Motive ID without touching tires.
 
-insert into vehicles (number, make, model, model_year, division, axle_config, motive_vehicle_id) values
+insert into tw_vehicles (number, make, model, model_year, division, axle_config, motive_vehicle_id) values
   ('DT-808', 'Mack', 'Gu713', '2013', 'DT', 'dump12', 1251744),
   ('DT-861', 'Mack', 'Gu713', '2018', 'DT', 'dump12', 1251760),
   ('DT-862', 'Mack', 'Gu713', '2018', 'DT', 'dump12', 1251762),

@@ -2,6 +2,11 @@
 -- Allen Company · Haul Division — Tire Wear
 -- Postgres / Supabase schema
 -- Run this before seed-fleet.sql
+--
+-- Applied to the shared Allen project (allen-qc). Tables are
+-- namespaced tw_ so they sit alongside the other apps already in
+-- that database, which follow the same convention: hct_ for the
+-- Haul Cycle Tracker, bid_ for the bid history, po_ for purchasing.
 -- ============================================================
 
 create extension if not exists "pgcrypto";
@@ -21,7 +26,7 @@ create extension if not exists "pgcrypto";
 --   single6  steer + single drive axle           =  6 tires
 --   light4   front + rear, all singles           =  4 tires
 
-create table if not exists vehicles (
+create table if not exists tw_vehicles (
   id                uuid primary key default gen_random_uuid(),
   number            text not null unique,           -- 'DT-882'
   make              text,
@@ -37,10 +42,10 @@ create table if not exists vehicles (
   updated_at        timestamptz not null default now()
 );
 
-create index if not exists vehicles_division_idx on vehicles (division) where active;
+create index if not exists tw_vehicles_division_idx on tw_vehicles (division) where active;
 
 
-create table if not exists tire_brands (
+create table if not exists tw_tire_brands (
   name       text primary key,
   sort_order integer not null default 100,
   active     boolean not null default true
@@ -49,8 +54,8 @@ create table if not exists tire_brands (
 -- The brands the Haul Division runs. Edit rows here to change the
 -- dropdown — no code change or migration needed. "Other" stays last
 -- and opens a free-text box in the app; whatever gets typed there is
--- stored on tires.brand as-is.
-insert into tire_brands (name, sort_order) values
+-- stored on tw_tires.brand as-is.
+insert into tw_tire_brands (name, sort_order) values
   ('Bridgestone', 10),
   ('Continental', 20),
   ('Firestone',   30),
@@ -60,9 +65,9 @@ insert into tire_brands (name, sort_order) values
 on conflict (name) do nothing;
 
 
-create table if not exists tires (
+create table if not exists tw_tires (
   id               uuid primary key default gen_random_uuid(),
-  vehicle_id       uuid not null references vehicles(id) on delete cascade,
+  vehicle_id       uuid not null references tw_vehicles(id) on delete cascade,
   position         text not null,                   -- '3RO'
   brand            text,
   model            text,
@@ -80,26 +85,26 @@ create table if not exists tires (
   created_by       text,
   created_at       timestamptz not null default now(),
 
-  constraint removal_is_complete check (
+  constraint tw_removal_is_complete check (
     (removed_date is null and removed_odometer is null)
     or (removed_date is not null and removed_odometer is not null)
   ),
-  constraint removed_after_mounted check (
+  constraint tw_removed_after_mounted check (
     removed_odometer is null or removed_odometer >= mounted_odometer
   )
 );
 
 -- Only one tire may occupy a position at a time.
-create unique index if not exists one_active_tire_per_position
-  on tires (vehicle_id, position) where removed_date is null;
+create unique index if not exists tw_one_active_tire_per_position
+  on tw_tires (vehicle_id, position) where removed_date is null;
 
-create index if not exists tires_vehicle_idx on tires (vehicle_id);
-create index if not exists tires_casing_idx  on tires (casing_id) where casing_id is not null;
+create index if not exists tw_tires_vehicle_idx on tw_tires (vehicle_id);
+create index if not exists tw_tires_casing_idx  on tw_tires (casing_id) where casing_id is not null;
 
 
-create table if not exists tread_readings (
+create table if not exists tw_tread_readings (
   id           uuid primary key default gen_random_uuid(),
-  tire_id      uuid not null references tires(id) on delete cascade,
+  tire_id      uuid not null references tw_tires(id) on delete cascade,
   reading_date date not null,
   odometer     integer not null check (odometer >= 0),
   depth_32nds  numeric(4,1) not null check (depth_32nds >= 0),
@@ -108,12 +113,12 @@ create table if not exists tread_readings (
   unique (tire_id, odometer)
 );
 
-create index if not exists readings_tire_idx on tread_readings (tire_id, odometer);
+create index if not exists tw_readings_tire_idx on tw_tread_readings (tire_id, odometer);
 
 
-create table if not exists odometer_log (
+create table if not exists tw_odometer_log (
   id           uuid primary key default gen_random_uuid(),
-  vehicle_id   uuid not null references vehicles(id) on delete cascade,
+  vehicle_id   uuid not null references tw_vehicles(id) on delete cascade,
   reading_date date not null,
   odometer     integer not null check (odometer >= 0),
   source       text not null default 'manual' check (source in ('manual','motive','inspection')),
@@ -122,10 +127,10 @@ create table if not exists odometer_log (
   unique (vehicle_id, reading_date, odometer)
 );
 
-create index if not exists odo_vehicle_idx on odometer_log (vehicle_id, odometer desc);
+create index if not exists tw_odo_vehicle_idx on tw_odometer_log (vehicle_id, odometer desc);
 
 
-create table if not exists settings (
+create table if not exists tw_settings (
   id                 boolean primary key default true check (id),  -- single row
   pull_steer_32nds   numeric(4,1) not null default 6,
   pull_other_32nds   numeric(4,1) not null default 4,
@@ -133,7 +138,7 @@ create table if not exists settings (
   updated_at         timestamptz not null default now()
 );
 
-insert into settings (id) values (true) on conflict do nothing;
+insert into tw_settings (id) values (true) on conflict do nothing;
 
 -- Federal minimums are 4/32 steer and 2/32 all other positions
 -- (49 CFR 393.75). Defaults above pull earlier than that on purpose.
@@ -145,12 +150,12 @@ insert into settings (id) values (true) on conflict do nothing;
 -- Rate = miles run divided by 32nds given up, first point to last.
 -- A tire needs at least one reading beyond the mount to get a rate.
 
-create or replace view tire_wear as
+create or replace view tw_tire_wear as
 with points as (
   select id as tire_id, mounted_odometer as odometer, mounted_depth as depth
-    from tires
+    from tw_tires
   union all
-  select tire_id, odometer, depth_32nds from tread_readings
+  select tire_id, odometer, depth_32nds from tw_tread_readings
 ),
 bounds as (
   select
@@ -190,7 +195,7 @@ from bounds b;
 
 
 -- Everything a screen needs about a currently mounted tire.
-create or replace view active_tires as
+create or replace view tw_active_tires as
 select
   t.id            as tire_id,
   v.id            as vehicle_id,
@@ -215,11 +220,17 @@ select
   end as est_miles_remaining,
   case when t.cost is not null and w.miles_run > 0
        then round(t.cost / w.miles_run, 4) end as cost_per_mile
-from tires t
-join vehicles v on v.id = t.vehicle_id
-join settings s on s.id = true
-left join tire_wear w on w.tire_id = t.id
+from tw_tires t
+join tw_vehicles v on v.id = t.vehicle_id
+join tw_settings s on s.id = true
+left join tw_tire_wear w on w.tire_id = t.id
 where t.removed_date is null;
+
+-- Views run with the caller's rights, not the owner's. Without this a
+-- view is a hole straight through the row level security below: anon
+-- could read every tire by selecting the view instead of the table.
+alter view tw_tire_wear    set (security_invoker = true);
+alter view tw_active_tires set (security_invoker = true);
 
 
 -- ── Row level security ──────────────────────────────────────
@@ -227,18 +238,20 @@ where t.removed_date is null;
 -- write. Tighten to role-based if this opens up beyond the
 -- shop and the Haul Division office.
 
-alter table vehicles       enable row level security;
-alter table tire_brands    enable row level security;
-alter table tires          enable row level security;
-alter table tread_readings enable row level security;
-alter table odometer_log   enable row level security;
-alter table settings       enable row level security;
+alter table tw_vehicles       enable row level security;
+alter table tw_tire_brands    enable row level security;
+alter table tw_tires          enable row level security;
+alter table tw_tread_readings enable row level security;
+alter table tw_odometer_log   enable row level security;
+alter table tw_settings       enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['vehicles','tire_brands','tires','tread_readings','odometer_log','settings']
+  foreach t in array array['tw_vehicles','tw_tire_brands','tw_tires',
+                           'tw_tread_readings','tw_odometer_log','tw_settings']
   loop
+    execute format('drop policy if exists %I on %I', t || '_authenticated_all', t);
     execute format(
       'create policy %I on %I for all to authenticated using (true) with check (true)',
       t || '_authenticated_all', t);
