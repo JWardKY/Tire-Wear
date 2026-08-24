@@ -49,6 +49,7 @@ const toTire = (r, vehNumById) => ({
   offDate: r.removed_date,
   offOdo: r.removed_odometer,
   offReason: r.removed_reason,
+  notes: r.notes || "",
 });
 
 const toReading = (r) => ({
@@ -150,8 +151,20 @@ export async function mountTire(vehicleId, t, who) {
       mounted_odometer: t.onOdo,
       mounted_depth: t.newDepth,
       cost: t.cost,
+      notes: t.notes || null,
       created_by: who,
     })
+  );
+}
+
+/* The note lives on the tire, so it is overwritten rather than appended
+   to — a dated observation belongs on a reading instead. */
+export async function setTireNotes(tireId, notes) {
+  check(
+    await supabase
+      .from("tw_tires")
+      .update({ notes: notes.trim() || null })
+      .eq("id", tireId)
   );
 }
 

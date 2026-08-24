@@ -224,6 +224,23 @@ retreaded twice produces three separate `tires` rows over its life. Use `casing_
 follow one physical casing across those rows — that is how you answer "how many turns
 are we getting out of a casing before it fails."
 
+### Notes on a wheel
+
+`tw_tires.notes` is free text about the tire as mounted — "sidewall plug from a road
+hazard, watch it." It is typed at mount time or edited from the tire dialog, shows
+under the brand on the wheel positions table, and puts a gold dot on that tire in the
+diagram so nobody has to go looking for it. It rides along in the tires CSV export.
+
+**It is overwritten, not appended to, and carries no history.** That is the deliberate
+limit: it answers "what should I know about this wheel right now," not "when did this
+start." A dated observation — "chunking on the outside shoulder, 07/15" — wants a note
+on the *reading* instead, which would be a `notes` column on `tw_tread_readings` and a
+second box on the walk-around screen. That was considered and left out to keep one box
+in front of a mechanic holding a gauge. Add it if the shop asks for dated notes.
+
+Neither is a substitute for measuring irregular wear properly — see the open decision
+on inside/center/outside depths below.
+
 ### Brands
 
 Brand is picked from a dropdown, never typed. This is not a nicety — free text produces
@@ -254,6 +271,7 @@ See `schema.sql` for the full definition. The shape:
   odometer sync.
 - **`tw_tires`** — a tire mounted at a position over a period. `removed_date` null means
   currently mounted. A partial unique index enforces one active tire per position.
+  `notes` is free text on that wheel — see below.
 - **`tw_tread_readings`** — one depth measurement on one tire at one odometer.
 - **`tw_odometer_log`** — mileage entries, whether from a walk-around, a manual entry, or
   a future Motive sync.

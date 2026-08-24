@@ -82,6 +82,7 @@ create table if not exists tw_tires (
   removed_date     date,
   removed_odometer integer,
   removed_reason   text,
+  notes            text,                            -- free text on this wheel, e.g. 'sidewall plug'
   created_by       text,
   created_at       timestamptz not null default now(),
 
@@ -97,6 +98,9 @@ create table if not exists tw_tires (
 -- Only one tire may occupy a position at a time.
 create unique index if not exists tw_one_active_tire_per_position
   on tw_tires (vehicle_id, position) where removed_date is null;
+
+comment on column tw_tires.notes is
+  'Free-text note on the mounted tire, shown on the wheel position. Overwritten in place, so it carries no history — a dated observation belongs on tw_tread_readings instead.';
 
 create index if not exists tw_tires_vehicle_idx on tw_tires (vehicle_id);
 create index if not exists tw_tires_casing_idx  on tw_tires (casing_id) where casing_id is not null;
@@ -219,7 +223,8 @@ select
          * w.miles_per_32nd, 0))
   end as est_miles_remaining,
   case when t.cost is not null and w.miles_run > 0
-       then round(t.cost / w.miles_run, 4) end as cost_per_mile
+       then round(t.cost / w.miles_run, 4) end as cost_per_mile,
+  t.notes
 from tw_tires t
 join tw_vehicles v on v.id = t.vehicle_id
 join tw_settings s on s.id = true
