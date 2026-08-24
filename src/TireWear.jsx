@@ -1,109 +1,20 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, Legend,
+  LineChart, Line,
 } from "recharts";
+import { supabase } from "./supabase.js";
+import { C, FD, FB, FM } from "./theme.js";
+import * as db from "./data.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
    Tread depth tracking + miles-per-32nd wear rate
-   Fleet roster pulled from Motive 08/24/2026 (active DT + HT)
+
+   Fleet, tires, readings and mileage live in Supabase, so what the
+   shop enters is what the office sees. The wear math itself lives in
+   the tw_tire_wear view — see data.js.
    ──────────────────────────────────────────────────────────────── */
-
-const C = {
-  navy900: "#0B1D33",
-  navy800: "#12294A",
-  navy700: "#1B3A63",
-  navy600: "#2A4E7E",
-  gold: "#C8A02C",
-  goldHi: "#E5BC3F",
-  paper: "#EDF0F4",
-  card: "#FFFFFF",
-  line: "#D5DDE6",
-  lineSoft: "#E6ECF2",
-  ink: "#10202F",
-  muted: "#64748B",
-  good: "#2F7D4F",
-  watch: "#C98A12",
-  pull: "#B4302A",
-};
-
-const FD = "'Barlow Condensed', 'Oswald', 'Arial Narrow', system-ui, sans-serif";
-const FB = "'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif";
-const FM = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
-
-/* ── Fleet roster from Motive ─────────────────────────────────── */
-const FLEET_RAW = [
-  // DT — dump trucks
-  ["DT-808","Mack","Gu713","2013"],["DT-861","Mack","Gu713","2018"],
-  ["DT-862","Mack","Gu713","2018"],["DT-864","Mack","Gu713","2018"],
-  ["DT-865","Mack","Gu713","2018"],["DT-866","Mack","Gu713","2018"],
-  ["DT-867","Mack","Gu713","2018"],["DT-868","Mack","Gu713","2018"],
-  ["DT-869","Mack","Gu713","2018"],["DT-870","Mack","Gu713","2018"],
-  ["DT-871","Mack","Gu713","2018"],["DT-873","Kenworth","T880","2018"],
-  ["DT-874","Mack","Gu713","2017"],["DT-875","Mack","Gu713","2017"],
-  ["DT-876","Kenworth","T880","2021"],["DT-877","Kenworth","T880","2021"],
-  ["DT-878","Peterbilt","567","2022"],["DT-879","Kenworth","T880","2022"],
-  ["DT-880","Kenworth","T880","2022"],["DT-881","Kenworth","T880","2022"],
-  ["DT-882","Kenworth","T880","2020"],["DT-883","Kenworth","T880","2020"],
-  ["DT-884","Peterbilt","567","2023"],["DT-885","Peterbilt","567","2023"],
-  ["DT-886","Peterbilt","567","2023"],["DT-887","Mack","Gu713","2023"],
-  ["DT-888","Mack","Gu713","2023"],["DT-889","Mack","Gu713","2023"],
-  ["DT-890","Mack","Gu713","2023"],["DT-891","Mack","Gu713","2023"],
-  ["DT-892","Peterbilt","567","2022"],["DT-893","Kenworth","T880","2023"],
-  ["DT-895","Kenworth","T880","2024"],["DT-896","Kenworth","T880",""],
-  ["DT-897","Kenworth","T880",""],["DT-898","Peterbilt","567","2025"],
-  ["DT-899","Peterbilt","567","2024"],["DT-1800","Kenworth","T880","2025"],
-  ["DT-1801","Kenworth","T880","2025"],["DT-1802","Peterbilt","567","2025"],
-  ["DT-1803","Peterbilt","567","2025"],["DT-1804","Kenworth","T880","2025"],
-  ["DT-1805","Peterbilt","567","2026"],["DT-1806","Mack","Granite","2024"],
-  ["DT-1807","Kenworth","T880","2024"],["DT-1808","Kenworth","T880","2025"],
-  ["DT-1809","Kenworth","T880","2024"],["DT-1810","Kenworth","T880","2026"],
-  ["DT-1811","Kenworth","T880","2027"],["DT-1812","Kenworth","T880","2027"],
-  // HT — haul / service trucks
-  ["HT-132","GMC","C7D","1990"],["HT-155","International","2654","1998"],
-  ["HT-169","International","4x2",""],["HT-183","GMC","7500","2006"],
-  ["HT-184","GMC","7500","2006"],["HT-194","International","7300",""],
-  ["HT-239","Chevrolet","C4 (DRS Maint)","2008"],["HT-304","Peterbilt","335",""],
-  ["HT-305","Ford","350 (CBQ Steam Jenny)","2010"],["HT-350","Mack","CV713",""],
-  ["HT-358","Freightliner","M2106","2012"],["HT-371","International","7300",""],
-  ["HT-396","Dodge","5500",""],["HT-455","Kenworth","T-270","2013"],
-  ["HT-468","Hino","268 (BBQ Maint)","2013"],["HT-504","Peterbilt","335","2006"],
-  ["HT-624","Peterbilt","338","2015"],["HT-642","Peterbilt","357","2001"],
-  ["HT-643","International","4300","2011"],["HT-644","International","4300","2011"],
-  ["HT-645","International","4300","2011"],["HT-712","Ford","F-550","2016"],
-  ["HT-713","Peterbilt","337","2016"],["HT-714","Freightliner","M2",""],
-  ["HT-746","Kenworth","T300","2007"],["HT-794","Chevrolet","3500","2016"],
-  ["HT-795","Peterbilt","220",""],["HT-852","Peterbilt","389","2012"],
-  ["HT-929","Ford","F-450","2016"],["HT-968","Chevrolet","3500",""],
-  ["HT-969","Ford","F-550","2018"],["HT-1010","International","7300",""],
-  ["HT-1014","Peterbilt","220",""],["HT-1037","International","4400","2003"],
-  ["HT-1078","Chevrolet","5500","2019"],["HT-1081","Chevrolet","3500","2016"],
-  ["HT-1115","Hino","268",""],["HT-1116","Kenworth","T880 (Danville Lowboy)","2020"],
-  ["HT-1119","Mack","Pinnacle","2021"],["HT-1128","Kenworth","T3","2015"],
-  ["HT-1129","Kenworth","270",""],["HT-1142","Ford","F-550","2020"],
-  ["HT-1148","Mack","P164T",""],["HT-1177","Chevrolet","4500","2021"],
-  ["HT-1178","Peterbilt","335","2014"],["HT-1190","Chevrolet","6500","2021"],
-  ["HT-1196","Chevrolet","6500","2021"],["HT-1198","Chevrolet","4500","2021"],
-  ["HT-1203","Chevrolet","5500","2021"],["HT-1208","Chevrolet","5500 (Field Mech)","2021"],
-  ["HT-1211","Ford","F-550",""],["HT-1258","Kenworth","T800 (Lowboy)","2014"],
-  ["HT-1259","Kenworth","W900","2005"],["HT-1264","Mack","MD6","2022"],
-  ["HT-1266","Freightliner","M2",""],["HT-1271","Mack","MD6","2023"],
-  ["HT-1294","Ford","F-550","2012"],["HT-1295","Chevrolet","3500","2020"],
-  ["HT-1296","Dodge","5500","2022"],["HT-1299","Chevrolet","3500","2006"],
-  ["HT-1300","International","4700","2001"],["HT-1301","Peterbilt","388","2014"],
-  ["HT-1302","Peterbilt","379","1997"],["HT-1306","Chevrolet","5500","2023"],
-  ["HT-1313","RAM","4500","2018"],["HT-1321","Chevrolet","5500","2023"],
-  ["HT-1323","Chevrolet","6500","2023"],["HT-1325","Ford","F-750","2011"],
-  ["HT-1333","Peterbilt","335","2007"],["HT-1336","GMC","515","2022"],
-  ["HT-1341","—","BBQ Grease Truck","2007"],["HT-1348","Peterbilt","567","2025"],
-  ["HT-1349","GMC","Savana","2019"],["HT-1371","Mack","MD6","2025"],
-  ["HT-1373","Peterbilt","548","2025"],["HT-1403","Ford","F-750","2018"],
-  ["HT-1404","Ford","F-750","2019"],["HT-1420","Mack","MD (Danville Flatbed)","2025"],
-  ["HT-1448","Ford","F-550","2024"],["HT-1470","Freightliner","M2","2026"],
-  ["HT-1494","Mack","—",""],["HT-1495","—","—",""],
-  ["HT-1512","Western Star","4700","2021"],["HT-1523","Mack","MD6","2025"],
-];
 
 /* ── Axle configurations ──────────────────────────────────────── */
 const CONFIGS = {
@@ -144,22 +55,7 @@ function positionsFor(cfgKey) {
   return out;
 }
 
-function defaultConfig(num, model) {
-  if (num.startsWith("DT")) return "dump12";
-  const m = `${model}`.toLowerCase();
-  if (/t880|t800|w900|389|388|379|567|548|pinnacle|p164|cv713|4700 sweeper|western/.test(m))
-    return "tandem10";
-  if (/savana|f-150|1500/.test(m)) return "light4";
-  return "single6";
-}
-
-const FLEET = FLEET_RAW.map(([num, make, model, year]) => ({
-  num, make, model, year, div: num.startsWith("DT") ? "DT" : "HT",
-  cfg: defaultConfig(num, model),
-}));
-
 /* ── Helpers ──────────────────────────────────────────────────── */
-const uid = () => Math.random().toString(36).slice(2, 10);
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const nf = (n, d = 0) =>
   n === null || n === undefined || !isFinite(n) ? "—"
@@ -168,13 +64,6 @@ const fmtDate = (s) => (s ? s.slice(5).replace("-", "/") + "/" + s.slice(2, 4) :
 const MILS_PER_32ND = 31.25;
 
 const DEFAULTS = { pullSteer: 6, pullOther: 4, newDepth: 28, unit: "32nd" };
-
-/* Brands we run. "Other" opens a text box so nothing gets lost —
-   anything typed there is stored as-is and shows up in Analysis. */
-const BRANDS = [
-  "Bridgestone", "Continental", "Firestone",
-  "Goodyear", "Maxam", "Michelin",
-];
 
 function statusOf(depth, pull) {
   if (depth === null || depth === undefined) return "none";
@@ -186,73 +75,75 @@ const STATUS_COLOR = { good: C.good, watch: C.watch, pull: C.pull, none: "#94A3B
 const STATUS_LABEL = { good: "In service", watch: "Monitor", pull: "Pull", none: "No reading" };
 
 /* ── Root ─────────────────────────────────────────────────────── */
-export default function TireWear() {
+export default function TireWear({ session }) {
+  const who = session?.user?.email || null;
+
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState("fleet");
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [divFilter, setDivFilter] = useState("ALL");
 
-  const [vehCfg, setVehCfg] = useState({});
+  const [fleet, setFleet] = useState([]);
   const [tires, setTires] = useState([]);
   const [readings, setReadings] = useState([]);
   const [odos, setOdos] = useState([]);
+  const [wear, setWear] = useState({});
+  const [brands, setBrands] = useState([]);
   const [settings, setSettings] = useState(DEFAULTS);
 
-  const dirty = useRef(false);
-  const saveTimer = useRef(null);
-
-  useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap";
-    document.head.appendChild(link);
+  const reload = useCallback(async () => {
+    const d = await db.loadAll();
+    setFleet(d.vehicles);
+    setTires(d.tires);
+    setReadings(d.readings);
+    setOdos(d.odos);
+    setWear(d.wear);
+    setBrands(d.brands);
+    setSettings({ ...DEFAULTS, ...d.settings });
   }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get("tireapp:v1");
-        if (r && r.value) {
-          const d = JSON.parse(r.value);
-          setVehCfg(d.vehCfg || {});
-          setTires(d.tires || []);
-          setReadings(d.readings || []);
-          setOdos(d.odos || []);
-          setSettings({ ...DEFAULTS, ...(d.settings || {}) });
-        }
+        await reload();
       } catch (e) {
-        // No saved data yet — first run.
+        setErr(`Could not load the tire records — ${e.message || e}`);
       }
       setReady(true);
     })();
-  }, []);
+  }, [reload]);
 
-  useEffect(() => {
-    if (!ready) return;
-    dirty.current = true;
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await window.storage.set(
-          "tireapp:v1",
-          JSON.stringify({ vehCfg, tires, readings, odos, settings })
-        );
-        dirty.current = false;
-        setErr(null);
-      } catch (e) {
-        setErr("Changes did not save. Check your connection and try again.");
-      }
-    }, 700);
-    return () => clearTimeout(saveTimer.current);
-  }, [vehCfg, tires, readings, odos, settings, ready]);
+  /* Every change is written to the database and then read back. The
+     wear numbers come out of a view, so reading back is what keeps the
+     screen and the database from ever disagreeing. */
+  const run = useCallback(async (fn) => {
+    setBusy(true);
+    try {
+      await fn();
+      await reload();
+      setErr(null);
+    } catch (e) {
+      setErr(`That did not save — ${e.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [reload]);
 
-  const fleet = useMemo(
-    () => FLEET.map((v) => ({ ...v, cfg: vehCfg[v.num] || v.cfg })),
-    [vehCfg]
-  );
+  const actions = useMemo(() => ({
+    setVehicleConfig: (vehId, cfg) => run(() => db.setVehicleConfig(vehId, cfg)),
+    mountTire: (vehId, t) => run(() => db.mountTire(vehId, t, who)),
+    pullTire: (tireId, off) => run(() => db.pullTire(tireId, off)),
+    saveInspection: (vehId, date, odo, entries) =>
+      run(() => db.saveInspection(vehId, date, odo, entries, who)),
+    deleteReading: (id) => run(() => db.deleteReading(id)),
+    logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
+    updateSettings: (patch) => run(() => db.updateSettings(patch)),
+    eraseAll: () => run(() => db.eraseAll()),
+  }), [run, who]);
+
   const byNum = useMemo(() => Object.fromEntries(fleet.map((v) => [v.num, v])), [fleet]);
 
   const readingsByTire = useMemo(() => {
@@ -262,6 +153,9 @@ export default function TireWear() {
     return m;
   }, [readings]);
 
+  /* Per tire: the point series the chart draws, plus the rate straight
+     from tw_tire_wear. Only the pull threshold is applied here — the
+     wear arithmetic itself stays in the view. */
   const tireStats = useMemo(() => {
     const m = {};
     tires.forEach((t) => {
@@ -273,22 +167,24 @@ export default function TireWear() {
       pts.sort((a, b) => a.odo - b.odo);
       const last = pts[pts.length - 1] || null;
       const first = pts[0] || null;
-      let miPer32 = null, worn = null, miles = null;
-      if (first && last && pts.length > 1) {
-        worn = first.d - last.d;
-        miles = last.odo - first.odo;
-        if (worn > 0 && miles > 0) miPer32 = miles / worn;
-      }
+      const w = wear[t.id] || {};
+      const depth = w.depth != null ? w.depth : last ? last.d : null;
       const isSteer = /^1[LR]$/.test(t.pos);
       const pull = isSteer ? settings.pullSteer : settings.pullOther;
-      const remain = last && miPer32 ? Math.max(0, (last.d - pull) * miPer32) : null;
+      const miPer32 = w.miPer32 ?? null;
+      const remain =
+        depth != null && miPer32 ? Math.max(0, (depth - pull) * miPer32) : null;
       m[t.id] = {
-        pts, first, last, miPer32, worn, miles, pull, remain,
-        depth: last ? last.d : null, status: statusOf(last ? last.d : null, pull),
+        pts, first, last, miPer32,
+        miPerMil: w.miPerMil ?? null,
+        worn: w.worn ?? null,
+        miles: w.miles ?? null,
+        pull, remain, depth,
+        status: statusOf(depth, pull),
       };
     });
     return m;
-  }, [tires, readingsByTire, settings]);
+  }, [tires, readingsByTire, wear, settings]);
 
   const activeTireAt = useMemo(() => {
     const m = {};
@@ -348,13 +244,13 @@ export default function TireWear() {
   if (!ready)
     return (
       <div style={{ fontFamily: FB, background: C.paper, minHeight: "100vh", padding: 40, color: C.muted }}>
-        Loading your tire records…
+        Loading the fleet…
       </div>
     );
 
   return (
     <div style={{ fontFamily: FB, background: C.paper, minHeight: "100vh", color: C.ink }}>
-      <Header tab={tab} setTab={setTab} />
+      <Header tab={tab} setTab={setTab} who={who} busy={busy} />
       {err && (
         <div style={{ background: "#FDECEA", color: C.pull, borderBottom: `1px solid ${C.pull}33`,
           padding: "10px 20px", fontSize: 13, fontWeight: 600 }}>{err}</div>
@@ -363,16 +259,15 @@ export default function TireWear() {
         {tab === "fleet" && (
           <FleetView
             {...{ filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
-              byNum, activeTireAt, tireStats, settings, attention,
-              setVehCfg, setTires, setReadings, setOdos, lastOdoFor }}
+              byNum, activeTireAt, tireStats, settings, attention, brands,
+              actions, busy, lastOdoFor }}
           />
         )}
         {tab === "analysis" && (
           <Analysis {...{ tires, tireStats, settings, byNum }} />
         )}
         {tab === "settings" && (
-          <Settings {...{ settings, setSettings, tires, readings, odos, tireStats, byNum,
-            setTires, setReadings, setOdos, setVehCfg }} />
+          <Settings {...{ settings, tires, readings, odos, tireStats, actions, busy }} />
         )}
       </div>
     </div>
@@ -380,7 +275,7 @@ export default function TireWear() {
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
-function Header({ tab, setTab }) {
+function Header({ tab, setTab, who, busy }) {
   const tabs = [["fleet", "Fleet"], ["analysis", "Analysis"], ["settings", "Settings"]];
   return (
     <div style={{ background: C.navy900, borderBottom: `3px solid ${C.gold}` }}>
@@ -399,17 +294,35 @@ function Header({ tab, setTab }) {
             Tread depth, miles run, and cost-per-mile by brand and position
           </div>
         </div>
-        <div className="flex" style={{ gap: 2 }}>
-          {tabs.map(([k, label]) => (
-            <button key={k} onClick={() => setTab(k)}
-              style={{
-                fontFamily: FD, fontSize: 15, fontWeight: 600, letterSpacing: "0.06em",
-                textTransform: "uppercase", padding: "9px 18px",
-                background: tab === k ? C.paper : "transparent",
-                color: tab === k ? C.navy900 : "#9DB2CC",
-                border: "none", borderRadius: "5px 5px 0 0", cursor: "pointer",
-              }}>{label}</button>
-          ))}
+
+        <div className="flex flex-col items-end" style={{ gap: 9 }}>
+          <div className="flex items-center" style={{ gap: 10 }}>
+            {busy && (
+              <span style={{ fontFamily: FM, fontSize: 11, color: C.gold }}>Saving…</span>
+            )}
+            {who && (
+              <span style={{ fontFamily: FM, fontSize: 11.5, color: "#9DB2CC" }}>{who}</span>
+            )}
+            <button onClick={() => supabase.auth.signOut()}
+              style={{ background: "none", border: `1px solid ${C.navy600}`, borderRadius: 4,
+                color: "#9DB2CC", fontFamily: FD, fontSize: 12, fontWeight: 600,
+                letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 10px",
+                cursor: "pointer" }}>
+              Sign out
+            </button>
+          </div>
+          <div className="flex" style={{ gap: 2 }}>
+            {tabs.map(([k, label]) => (
+              <button key={k} onClick={() => setTab(k)}
+                style={{
+                  fontFamily: FD, fontSize: 15, fontWeight: 600, letterSpacing: "0.06em",
+                  textTransform: "uppercase", padding: "9px 18px",
+                  background: tab === k ? C.paper : "transparent",
+                  color: tab === k ? C.navy900 : "#9DB2CC",
+                  border: "none", borderRadius: "5px 5px 0 0", cursor: "pointer",
+                }}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -419,14 +332,14 @@ function Header({ tab, setTab }) {
 /* ── Fleet view ───────────────────────────────────────────────── */
 function FleetView(props) {
   const { filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
-    byNum, activeTireAt, tireStats, settings, attention,
-    setVehCfg, setTires, setReadings, setOdos, lastOdoFor } = props;
+    byNum, activeTireAt, tireStats, settings, attention, brands,
+    actions, busy, lastOdoFor } = props;
 
   const dtCount = filtered.filter((v) => v.div === "DT").length;
 
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>
-      <div className="grid gap-4" style={{ gridTemplateColumns: "300px minmax(0,1fr)" }}>
+      <div className="grid gap-4 rail-grid" style={{ gridTemplateColumns: "300px minmax(0,1fr)" }}>
         {/* Left rail */}
         <div className="hidden md:block">
           <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
@@ -480,8 +393,7 @@ function FleetView(props) {
             <VehicleDetail
               key={sel}
               v={byNum[sel]} summary={vehSummary[sel]}
-              {...{ activeTireAt, tireStats, settings, setVehCfg, setTires, setReadings,
-                setOdos, lastOdoFor }}
+              {...{ activeTireAt, tireStats, settings, brands, actions, busy, lastOdoFor }}
             />
           ) : (
             <StartHere attention={attention} setSel={setSel} byNum={byNum} />
@@ -559,8 +471,8 @@ function StartHere({ attention, setSel, byNum }) {
 
 /* ── Vehicle detail ───────────────────────────────────────────── */
 function VehicleDetail(props) {
-  const { v, summary, activeTireAt, tireStats, settings,
-    setVehCfg, setTires, setReadings, setOdos, lastOdoFor } = props;
+  const { v, summary, activeTireAt, tireStats, settings, brands,
+    actions, busy, lastOdoFor } = props;
 
   const [mode, setMode] = useState("view"); // view | inspect
   const [openTire, setOpenTire] = useState(null);
@@ -582,18 +494,17 @@ function VehicleDetail(props) {
     setMode("inspect");
   }
 
-  function saveInspection() {
+  async function saveInspection() {
     const odo = Number(insOdo);
     if (!odo || odo <= 0) return;
-    const entries = Object.entries(draft).filter(([, val]) => val !== "" && val != null);
-    const newReadings = [];
-    entries.forEach(([pos, val]) => {
+    const entries = [];
+    Object.entries(draft).forEach(([pos, val]) => {
+      if (val === "" || val == null) return;
       const t = activeTireAt[`${v.num}|${pos}`];
       if (!t) return;
-      newReadings.push({ id: uid(), tire: t.id, date: insDate, odo, d: Number(val) });
+      entries.push({ tireId: t.id, depth: Number(val) });
     });
-    setReadings((prev) => [...prev, ...newReadings]);
-    setOdos((prev) => [...prev, { id: uid(), veh: v.num, date: insDate, odo }]);
+    await actions.saveInspection(v.id, insDate, odo, entries);
     setMode("view");
   }
 
@@ -627,7 +538,7 @@ function VehicleDetail(props) {
             </div>
           </div>
           <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
-            <select value={v.cfg} onChange={(e) => setVehCfg((p) => ({ ...p, [v.num]: e.target.value }))}
+            <select value={v.cfg} onChange={(e) => actions.setVehicleConfig(v.id, e.target.value)}
               style={{ padding: "7px 8px", border: `1px solid ${C.line}`, borderRadius: 5,
                 fontSize: 12.5, fontFamily: FB, background: "#fff", maxWidth: 240 }}>
               {Object.entries(CONFIGS).map(([k, c]) => (
@@ -663,7 +574,7 @@ function VehicleDetail(props) {
             <div style={{ fontFamily: FM, fontSize: 12, color: C.muted, paddingBottom: 8 }}>
               {filled}/{mountable} entered
             </div>
-            <Btn onClick={saveInspection} disabled={!Number(insOdo) || filled === 0}>
+            <Btn onClick={saveInspection} disabled={busy || !Number(insOdo) || filled === 0}>
               Save {filled > 0 ? `${filled} reading${filled > 1 ? "s" : ""}` : "readings"}
             </Btn>
           </div>
@@ -687,21 +598,27 @@ function VehicleDetail(props) {
 
       {mountPos && (
         <MountDialog pos={mountPos} veh={v.num} lastOdo={lastOdo} settings={settings}
+          brands={brands} busy={busy}
           onClose={() => setMountPos(null)}
-          onSave={(t) => { setTires((p) => [...p, t]); setMountPos(null); }} />
+          onSave={async (t) => { await actions.mountTire(v.id, t); setMountPos(null); }} />
       )}
       {openTire && (
         <TireDialog tire={openTire} stats={tireStats[openTire.id]} settings={settings}
+          busy={busy}
           onClose={() => setOpenTire(null)}
-          onPull={(off) => {
-            setTires((p) => p.map((x) => (x.id === openTire.id ? { ...x, ...off } : x)));
+          onPull={async (off) => {
+            await actions.pullTire(openTire.id, off);
             setOpenTire(null);
           }}
-          onDeleteReading={(rid) => setReadings((p) => p.filter((r) => r.id !== rid))} />
+          onDeleteReading={(rid) => actions.deleteReading(rid)} />
       )}
       {odoOpen && (
-        <OdoDialog veh={v.num} lastOdo={lastOdo} onClose={() => setOdoOpen(false)}
-          onSave={(o) => { setOdos((p) => [...p, o]); setOdoOpen(false); }} />
+        <OdoDialog veh={v.num} lastOdo={lastOdo} busy={busy}
+          onClose={() => setOdoOpen(false)}
+          onSave={async (o) => {
+            await actions.logOdometer(v.id, o.date, o.odo);
+            setOdoOpen(false);
+          }} />
       )}
     </div>
   );
@@ -903,7 +820,7 @@ function Modal({ title, sub, children, onClose, width = 520 }) {
   );
 }
 
-function MountDialog({ pos, veh, lastOdo, settings, onClose, onSave }) {
+function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSave }) {
   const [f, setF] = useState({
     brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin",
     newDepth: String(settings.newDepth), onDate: todayISO(),
@@ -920,7 +837,7 @@ function MountDialog({ pos, veh, lastOdo, settings, onClose, onSave }) {
         <Field label="Brand">
           <select value={f.brand} onChange={set("brand")} style={inp}>
             <option value="">Choose a brand…</option>
-            {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+            {brands.map((b) => <option key={b} value={b}>{b}</option>)}
             <option value="Other">Other…</option>
           </select>
         </Field>
@@ -963,18 +880,18 @@ function MountDialog({ pos, veh, lastOdo, settings, onClose, onSave }) {
       </p>
       <div className="flex justify-end mt-4" style={{ gap: 8 }}>
         <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn disabled={!ok} onClick={() => onSave({
-          id: uid(), veh, pos: pos.id, brand: brandFinal, model: f.model.trim(),
+        <Btn disabled={busy || !ok} onClick={() => onSave({
+          pos: pos.id, brand: brandFinal, model: f.model.trim(),
           size: f.size.trim(), type: f.type, newDepth: Number(f.newDepth),
           onDate: f.onDate, onOdo: Number(f.onOdo),
-          cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(), notes: "",
+          cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(),
         })}>Mount tire</Btn>
       </div>
     </Modal>
   );
 }
 
-function TireDialog({ tire, stats, settings, onClose, onPull, onDeleteReading }) {
+function TireDialog({ tire, stats, settings, busy, onClose, onPull, onDeleteReading }) {
   const [pulling, setPulling] = useState(false);
   const [offOdo, setOffOdo] = useState(stats?.last ? String(stats.last.odo) : "");
   const [offDate, setOffDate] = useState(todayISO());
@@ -1070,8 +987,8 @@ function TireDialog({ tire, stats, settings, onClose, onPull, onDeleteReading })
           </div>
           <div className="flex justify-end mt-3" style={{ gap: 8 }}>
             <Btn tone="ghost" onClick={() => setPulling(false)}>Never mind</Btn>
-            <Btn tone="danger" onClick={() => onPull({
-              offDate, offOdo: Number(offOdo) || null, offReason: reason })}>
+            <Btn tone="danger" disabled={busy || !Number(offOdo)} onClick={() => onPull({
+              offDate, offOdo: Number(offOdo), offReason: reason })}>
               Pull tire
             </Btn>
           </div>
@@ -1081,7 +998,7 @@ function TireDialog({ tire, stats, settings, onClose, onPull, onDeleteReading })
   );
 }
 
-function OdoDialog({ veh, lastOdo, onClose, onSave }) {
+function OdoDialog({ veh, lastOdo, busy, onClose, onSave }) {
   const [date, setDate] = useState(todayISO());
   const [odo, setOdo] = useState(lastOdo != null ? String(lastOdo) : "");
   const delta = lastOdo != null && Number(odo) ? Number(odo) - lastOdo : null;
@@ -1102,8 +1019,8 @@ function OdoDialog({ veh, lastOdo, onClose, onSave }) {
       )}
       <div className="flex justify-end mt-4" style={{ gap: 8 }}>
         <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn disabled={!Number(odo)} onClick={() =>
-          onSave({ id: uid(), veh, date, odo: Number(odo) })}>Save mileage</Btn>
+        <Btn disabled={busy || !Number(odo)} onClick={() =>
+          onSave({ date, odo: Number(odo) })}>Save mileage</Btn>
       </div>
     </Modal>
   );
@@ -1261,10 +1178,25 @@ function ChartCard({ title, note, data, wide }) {
 }
 
 /* ── Settings ─────────────────────────────────────────────────── */
-function Settings({ settings, setSettings, tires, readings, odos, tireStats, byNum,
-  setTires, setReadings, setOdos, setVehCfg }) {
+function Settings({ settings, tires, readings, odos, tireStats, actions, busy }) {
+  /* Thresholds are shared, so they are written on blur rather than on
+     every keystroke — nobody wants a half-typed "1" from someone else's
+     edit flipping their screen to all-pull for a second. */
+  const [draft, setDraft] = useState(settings);
   const [confirm, setConfirm] = useState(false);
-  const set = (k) => (e) => setSettings((p) => ({ ...p, [k]: Number(e.target.value) }));
+  const [typed, setTyped] = useState("");
+
+  useEffect(() => { setDraft(settings); }, [settings]);
+
+  const edit = (k) => (e) => setDraft((p) => ({ ...p, [k]: e.target.value }));
+  const commit = (k) => () => {
+    const val = Number(draft[k]);
+    if (!isFinite(val) || val < 0 || val === settings[k]) {
+      setDraft(settings);
+      return;
+    }
+    actions.updateSettings({ [k]: val });
+  };
 
   function download(name, text) {
     const blob = new Blob([text], { type: "text/csv" });
@@ -1303,25 +1235,28 @@ function Settings({ settings, setSettings, tires, readings, odos, tireStats, byN
   }
 
   function exportMileage() {
-    const head = ["date", "truck", "odometer"];
+    const head = ["date", "truck", "odometer", "source"];
     const rows = [...odos].sort((a, b) => (a.date < b.date ? 1 : -1))
-      .map((o) => [o.date, o.veh, o.odo]);
+      .map((o) => [o.date, o.veh, o.odo, o.source]);
     download("allen-mileage.csv", toCSV([head, ...rows]));
   }
 
   return (
     <div className="grid gap-4" style={{ maxWidth: 720 }}>
       <Card title="Pull thresholds"
-        note="Federal minimums are 4/32 on steer and 2/32 everywhere else. Most fleets pull earlier.">
+        note="Federal minimums are 4/32 on steer and 2/32 everywhere else. Most fleets pull earlier. These apply to everyone.">
         <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
           <Field label="Pull steer tires at (/32)">
-            <input type="number" step="0.5" value={settings.pullSteer} onChange={set("pullSteer")}
+            <input type="number" step="0.5" value={draft.pullSteer}
+              onChange={edit("pullSteer")} onBlur={commit("pullSteer")}
               style={{ ...inp, fontFamily: FM }} /></Field>
           <Field label="Pull all other tires at (/32)">
-            <input type="number" step="0.5" value={settings.pullOther} onChange={set("pullOther")}
+            <input type="number" step="0.5" value={draft.pullOther}
+              onChange={edit("pullOther")} onBlur={commit("pullOther")}
               style={{ ...inp, fontFamily: FM }} /></Field>
           <Field label="Default tread on a new tire (/32)">
-            <input type="number" step="0.5" value={settings.newDepth} onChange={set("newDepth")}
+            <input type="number" step="0.5" value={draft.newDepth}
+              onChange={edit("newDepth")} onBlur={commit("newDepth")}
               style={{ ...inp, fontFamily: FM }} /></Field>
         </div>
       </Card>
@@ -1335,7 +1270,7 @@ function Settings({ settings, setSettings, tires, readings, odos, tireStats, byN
       </Card>
 
       <Card title="Stored records"
-        note="Everything saves automatically and stays with this app between sessions.">
+        note="Everything saves as you enter it and is shared with everyone signed in.">
         <div className="flex flex-wrap" style={{ gap: 22 }}>
           <Stat label="Tires" value={tires.length} />
           <Stat label="Tread readings" value={readings.length} />
@@ -1343,18 +1278,27 @@ function Settings({ settings, setSettings, tires, readings, odos, tireStats, byN
         </div>
         <div style={{ marginTop: 16, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 14 }}>
           {!confirm ? (
-            <button onClick={() => setConfirm(true)} style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
+            <button onClick={() => { setConfirm(true); setTyped(""); }}
+              style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
               Erase all tire data
             </button>
           ) : (
-            <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
-              <span style={{ fontSize: 13, color: C.pull, fontWeight: 600 }}>
-                This deletes every tire, reading, and mileage entry. Export first if you need them.
-              </span>
-              <Btn tone="ghost" onClick={() => setConfirm(false)}>Keep my data</Btn>
-              <Btn tone="danger" onClick={() => {
-                setTires([]); setReadings([]); setOdos([]); setVehCfg({}); setConfirm(false);
-              }}>Erase everything</Btn>
+            <div>
+              <div style={{ fontSize: 13, color: C.pull, fontWeight: 600, lineHeight: 1.5 }}>
+                This deletes every tire, reading, and mileage entry for the whole
+                division — not just yours. Export first if you need them.
+                Axle configurations are left alone.
+              </div>
+              <div className="flex items-end flex-wrap mt-3" style={{ gap: 10 }}>
+                <Field label="Type ERASE to confirm">
+                  <input value={typed} onChange={(e) => setTyped(e.target.value)}
+                    style={{ ...inp, fontFamily: FM, width: 140 }} /></Field>
+                <Btn tone="ghost" onClick={() => setConfirm(false)}>Keep my data</Btn>
+                <Btn tone="danger" disabled={busy || typed.trim().toUpperCase() !== "ERASE"}
+                  onClick={async () => { await actions.eraseAll(); setConfirm(false); }}>
+                  Erase everything
+                </Btn>
+              </div>
             </div>
           )}
         </div>

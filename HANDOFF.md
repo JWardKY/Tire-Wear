@@ -2,6 +2,7 @@
 
 **The Allen Company · Haul Division**
 Prepared 08/24/2026 · Owner: Jason Ward, Superintendent, Haul Division
+Built and deployed 08/24/2026 · Live at https://tirewear.netlify.app
 
 ---
 
@@ -24,52 +25,89 @@ tread depth against mileage. That is the whole job.
 
 ## Current state
 
-There is a working prototype — `TireWear.jsx` — with the full fleet loaded, the tire
-diagram, tread entry, mileage entry, and the wear-rate reports. It runs as a
-self-contained React component and stores data in browser-scoped storage.
+**Built and running.** The app is live at `tirewear.netlify.app`, backed by Supabase.
+Sign in with an Allen email and you get a link — no password. Everything entered is
+shared: what the shop records, the office sees.
 
-**It cannot be handed to a second person as-is.** Storage is per-user. If the shop
-foreman opens it, he sees an empty fleet, and nothing he enters reaches anyone else.
-That is the one blocker between the prototype and a real tool, and it is why this
-package exists.
+The prototype's layout, wear math, and interaction model were kept as-is. What changed
+is underneath — browser-scoped storage became a real database, and the fleet roster
+became rows instead of a hard-coded array.
 
-Treat `TireWear.jsx` as a **reference implementation**, not the codebase. The layout,
-the wear math, and the interaction model are all worked out and worth keeping. The
-storage layer is the part to replace.
+What is done:
+
+- All 134 units (50 DT, 84 HT) seeded from Motive with their Motive vehicle IDs.
+- Tread entry, mileage entry, mounting, pulling, the diagram, and the reports.
+- Wear rates computed in a database view, not in the React — see below.
+- Email magic-link sign-in. Every reading is stamped with who took it.
+- CSV exports for tires, tread readings, and the mileage log.
+
+What is not:
+
+- **Motive odometer sync.** Mileage is still typed in. This is the next real feature
+  and it is described near the bottom of this document.
+- **HT axle configurations.** Assigned by a guess from the model name and still need
+  correcting truck by truck. The dropdown on the vehicle screen is there for that.
 
 ---
 
-## Recommended build
+## How it is built
 
 Same stack as the tire tracker rebuild and the truck ordering app, so there is nothing
 new to learn and nothing new to pay for:
 
-| Layer | Choice | Why |
-|---|---|---|
-| Frontend | React + Vite | Matches the existing prototype; lift components over nearly as-is |
-| Database | Supabase (Postgres) | Shared data, row level security, real backups |
-| Auth | Supabase Auth, email magic link | No passwords for shop staff to lose |
-| Hosting | Netlify | Already in use; deploy from Git on push |
-| Charts | Recharts | Already used in the prototype |
+| Layer | Choice |
+|---|---|
+| Frontend | React + Vite |
+| Database | Supabase (Postgres), project `allen-qc` |
+| Auth | Supabase Auth, email magic link |
+| Hosting | Netlify, deploys from `main` on push |
+| Charts | Recharts |
 
-Rough effort for someone comfortable in React: **three to five days.** Most of it is
-wiring the prototype's state to Supabase queries. The hard thinking — the position
-model, the wear math, the fleet data — is already done and is captured below.
+### Where the data lives
 
-### Steps
+The tables are in the **existing `allen-qc` Supabase project**, not a new one, and are
+namespaced `tw_` — the same pattern the other apps in that database already use
+(`hct_` for the Haul Cycle Tracker, `bid_` for bid history, `po_` for purchasing). One
+database to back up, one set of logins, and a project that is actively used and so is
+never going to go idle and pause.
 
-1. Create the Supabase project. Run `schema.sql`, then `seed-fleet.sql`.
-2. `npm create vite@latest -- --template react`, add `@supabase/supabase-js` and `recharts`.
-3. Lift the components out of `TireWear.jsx`. Keep `CONFIGS`, `positionsFor`,
-   `TruckDiagram`, and `TireCard` intact — the diagram is the part people will actually
-   use and it took the most iteration to get right.
-4. Replace the `window.storage` load/save effect with Supabase queries. The
-   `active_tires` view returns everything the vehicle detail screen needs in one call.
-5. Delete `FLEET_RAW` from the component. Vehicles come from the database now.
-6. Turn on Supabase Auth. Stamp `recorded_by` with the signed-in user's email on every
-   insert so we know who took a reading.
-7. Deploy to Netlify. Environment variables: `VITE_SUPABASE_URL`,
-   `VITE_SUPABASE_ANON_KEY`.
+If tire wear ever needs to stand on its own, moving it out is a schema dump of the
+`tw_` tables into a fresh project and a change of two environment variables.
+
+### Running it locally
+
+```
+npm install
+cp .env.example .env.local     # then fill in the anon key
+npm run dev
+```
+
+### Deploying
+
+Netlify builds `npm run build` and publishes `dist/`. Two environment variables have to
+be set in the Netlify UI, and they are the only configuration there is:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+The anon key is safe in the browser. It grants nothing on its own: every `tw_` table
+denies anonymous access, and both views run with the caller's rights so they cannot be
+used to read around that.
+
+### Layout of the code
+
+| File | What it is |
+|---|---|
+| `src/TireWear.jsx` | The whole UI — fleet list, diagram, dialogs, analysis, settings |
+| `src/data.js` | Every database read and write. The only file that knows SQL exists |
+| `src/App.jsx` | Sign-in gate |
+| `src/SignIn.jsx` | Magic-link screen |
+| `src/theme.js` | Palette and type stacks |
+| `src/index.css` | The handful of layout utilities the components use |
+
+`CONFIGS`, `positionsFor`, `TruckDiagram`, and `TireCard` are unchanged from the
+prototype. The diagram is the part people actually use and it took the most iteration
+to get right — leave it alone unless the truck changes.
 
 ---
 
@@ -181,23 +219,29 @@ column.
 
 See `schema.sql` for the full definition. The shape:
 
-- **`vehicles`** — the fleet. Seeded from Motive, carries `motive_vehicle_id` for
+- **`tw_vehicles`** — the fleet. Seeded from Motive, carries `motive_vehicle_id` for
   odometer sync.
-- **`tires`** — a tire mounted at a position over a period. `removed_date` null means
+- **`tw_tires`** — a tire mounted at a position over a period. `removed_date` null means
   currently mounted. A partial unique index enforces one active tire per position.
-- **`tread_readings`** — one depth measurement on one tire at one odometer.
-- **`odometer_log`** — mileage entries, whether from a walk-around, a manual entry, or
+- **`tw_tread_readings`** — one depth measurement on one tire at one odometer.
+- **`tw_odometer_log`** — mileage entries, whether from a walk-around, a manual entry, or
   a future Motive sync.
-- **`settings`** — single row, pull thresholds.
+- **`tw_settings`** — single row, pull thresholds.
+- **`tw_tire_brands`** — the brand dropdown. Adding a vendor is a row insert.
 
 Two views do the arithmetic so it lives in one place and cannot drift between screens:
 
-- **`tire_wear`** — per tire: miles run, 32nds worn, miles per 32nd, miles per mil.
-- **`active_tires`** — everything the vehicle screen needs, including projected
+- **`tw_tire_wear`** — per tire: miles run, 32nds worn, miles per 32nd, miles per mil.
+- **`tw_active_tires`** — everything the vehicle screen needs, including projected
   remaining miles and cost per mile.
 
-**Put the math in the views, not in the React.** If someone later builds a Power BI
-report off this database, it needs to produce the same numbers as the app.
+**The math is in the views, not in the React.** The app reads `tw_tire_wear` for every
+rate it shows and only applies the pull threshold itself. If someone later builds a
+Power BI report off this database, it produces the same numbers as the app because it
+is the same arithmetic.
+
+A tire with only its mount record has no rate, and the view returns null rather than
+zero for it. The app shows a dash. Do not change either half of that.
 
 ---
 
@@ -223,11 +267,12 @@ Mileage is entered by hand today. It does not have to be. This is the highest-va
 thing left undone and it should be the first item after launch.
 
 Motive exposes engine miles per vehicle through `get_vehicle_utilization` on the fleet
-endpoint. `vehicles.motive_vehicle_id` is already populated for all 134 units, so the
+endpoint. `tw_vehicles.motive_vehicle_id` is already populated for all 134 units, so the
 join is done.
 
 Suggested shape: a scheduled Supabase Edge Function, nightly, writing one
-`odometer_log` row per vehicle with `source = 'motive'`. Then the walk-around screen
+`tw_odometer_log` row per vehicle with `source = 'motive'`. The `source` column already
+accepts `'motive'` and the app already shows it. Then the walk-around screen
 pre-fills the odometer and the person with the gauge only types tread depths.
 
 Two cautions from prior work against this API:
@@ -286,6 +331,9 @@ Flagging these so whoever picks this up knows they are choices, not oversights.
 Monthly is enough. Weekly produces more data than the wear rate needs and burns
 goodwill in the shop.
 
+Entering a depth at an odometer you already recorded corrects that reading rather than
+adding a second one, so a typo caught later in the day is just re-entered.
+
 ### Reading the numbers
 
 - **Miles per 32nd** is the comparison number. Higher is better.
@@ -308,9 +356,10 @@ Committee or a vendor conversation.
 | File | What it is |
 |---|---|
 | `HANDOFF.md` | This document |
-| `schema.sql` | Postgres/Supabase schema, views, RLS policies |
-| `seed-fleet.sql` | 134 active DT and HT units with Motive IDs |
-| `TireWear.jsx` | Working prototype — reference for layout and behavior |
+| `schema.sql` | Postgres/Supabase schema, views, RLS policies. Already applied |
+| `seed-fleet.sql` | 134 active DT and HT units with Motive IDs. Already run |
+| `src/` | The app — see the layout table above |
+| `netlify.toml` | Build command, publish directory, SPA redirect |
 
 **Questions on intent, the metric, or what the shop will actually do:** Jason Ward,
 Haul Division.
