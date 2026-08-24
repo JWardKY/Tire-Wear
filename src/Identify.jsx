@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ALLOWED_DOMAINS, domainOk, saveWho } from "./identity.js";
 import { C, FB, FD } from "./theme.js";
+import AllenLogo from "./AllenLogo.jsx";
 
 export default function Identify({ onDone }) {
   const [email, setEmail] = useState("");
@@ -22,15 +23,18 @@ export default function Identify({ onDone }) {
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10,
         width: "100%", maxWidth: 420, overflow: "hidden",
-        boxShadow: "0 14px 40px rgba(11,29,51,0.14)" }}>
-        <div style={{ background: C.navy900, padding: "18px 20px",
-          borderBottom: `3px solid ${C.gold}` }}>
-          <div style={{ fontFamily: FD, fontSize: 11, letterSpacing: "0.22em",
-            color: C.gold, fontWeight: 600, textTransform: "uppercase" }}>
-            The Allen Company · Haul Division
+        boxShadow: "0 14px 40px rgba(12,42,27,0.16)" }}>
+        <div style={{ background: C.green900, padding: "20px 20px 18px",
+          borderBottom: `3px solid ${C.yellow}` }}>
+          <span style={{ color: C.yellow, display: "block" }}>
+            <AllenLogo height={40} />
+          </span>
+          <div style={{ fontFamily: FD, fontSize: 11.5, letterSpacing: "0.22em",
+            color: C.yellow, fontWeight: 600, textTransform: "uppercase", marginTop: 12 }}>
+            Haul Division
           </div>
           <div style={{ fontFamily: FD, fontSize: 30, fontWeight: 700, color: "#fff",
-            lineHeight: 1.05, marginTop: 2 }}>
+            lineHeight: 1.05, marginTop: 1 }}>
             Tire Wear
           </div>
         </div>
@@ -61,8 +65,8 @@ export default function Identify({ onDone }) {
               </div>
             )}
             <button type="submit"
-              style={{ width: "100%", marginTop: 16, background: C.navy700, color: "#fff",
-                border: `1px solid ${C.navy700}`, fontFamily: FD, fontSize: 15,
+              style={{ width: "100%", marginTop: 16, background: C.green700, color: "#fff",
+                border: `1px solid ${C.green700}`, fontFamily: FD, fontSize: 15,
                 fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase",
                 padding: "11px 15px", borderRadius: 5, cursor: "pointer" }}>
               Start
