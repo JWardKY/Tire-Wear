@@ -1,31 +1,20 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "./supabase.js";
+import React, { useState } from "react";
 import TireWear from "./TireWear.jsx";
-import SignIn from "./SignIn.jsx";
-import { C, FB } from "./theme.js";
+import Identify from "./Identify.jsx";
+import { readWho, clearWho } from "./identity.js";
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [checking, setChecking] = useState(true);
+  const [who, setWho] = useState(readWho);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setChecking(false);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
-  }, []);
+  if (!who) return <Identify onDone={setWho} />;
 
-  if (checking)
-    return (
-      <div style={{ fontFamily: FB, background: C.paper, minHeight: "100vh",
-        padding: 40, color: C.muted }}>
-        Checking your sign-in…
-      </div>
-    );
-
-  if (!session) return <SignIn />;
-
-  return <TireWear session={session} />;
+  return (
+    <TireWear
+      who={who}
+      onSwitchUser={() => {
+        clearWho();
+        setWho(null);
+      }}
+    />
+  );
 }

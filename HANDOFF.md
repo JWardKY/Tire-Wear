@@ -26,8 +26,8 @@ tread depth against mileage. That is the whole job.
 ## Current state
 
 **Built and running.** The app is live at `tirewear.netlify.app`, backed by Supabase.
-Sign in with an Allen email and you get a link — no password. Everything entered is
-shared: what the shop records, the office sees.
+Open it, type your Allen email, and you are in — no password and nothing to wait for.
+Everything entered is shared: what the shop records, the office sees.
 
 The prototype's layout, wear math, and interaction model were kept as-is. What changed
 is underneath — browser-scoped storage became a real database, and the fleet roster
@@ -38,7 +38,7 @@ What is done:
 - All 134 units (50 DT, 84 HT) seeded from Motive with their Motive vehicle IDs.
 - Tread entry, mileage entry, mounting, pulling, the diagram, and the reports.
 - Wear rates computed in a database view, not in the React — see below.
-- Email magic-link sign-in. Every reading is stamped with who took it.
+- Every reading is stamped with the email of whoever took it.
 - CSV exports for tires, tread readings, and the mileage log.
 
 What is not:
@@ -59,7 +59,7 @@ new to learn and nothing new to pay for:
 |---|---|
 | Frontend | React + Vite |
 | Database | Supabase (Postgres), project `allen-qc` |
-| Auth | Supabase Auth, email magic link |
+| Access | None. The app asks for an Allen email and takes your word for it — see below |
 | Hosting | Netlify, deploys from `main` on push |
 | Charts | Recharts |
 
@@ -90,9 +90,35 @@ be set in the Netlify UI, and they are the only configuration there is:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-The anon key is safe in the browser. It grants nothing on its own: every `tw_` table
-denies anonymous access, and both views run with the caller's rights so they cannot be
-used to read around that.
+### Who can get in — read this before assuming it is locked
+
+**There is no login.** The app asks for an email, checks it ends in `@theallen.com`,
+and lets you through. That check runs in the browser, so it is a name badge, not a
+lock: anyone with the URL can read and change tire data. This was a deliberate call —
+waiting on a sign-in email every time was not worth it for a monthly walk-around, and
+the Haul Cycle Tracker already runs the same way.
+
+What that costs, stated plainly:
+
+- Anyone who has the link can read every tread reading and edit or delete any of it.
+- The email on a reading says who *claimed* to take it. It is not proof.
+
+What it does **not** cost — the hole is exactly the `tw_` tables and nothing more.
+Row level security is per table, so the QC tests, the bid history and purchasing that
+share this Supabase project all still refuse anonymous access. `scripts/check-anon-access.mjs`
+asserts that; run it after any policy change:
+
+```
+set -a && . ./.env.local && set +a && node scripts/check-anon-access.mjs
+```
+
+If this ever needs to be a real lock, in rough order of effort:
+
+1. **Netlify password protection** on the project — one shared password, no email
+   round-trip, nothing to build. Closest thing to free.
+2. **Supabase Auth** — the magic-link screen this replaced is in the git history at
+   `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
+   the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
 ### Layout of the code
 
@@ -100,10 +126,15 @@ used to read around that.
 |---|---|
 | `src/TireWear.jsx` | The whole UI — fleet list, diagram, dialogs, analysis, settings |
 | `src/data.js` | Every database read and write. The only file that knows SQL exists |
-| `src/App.jsx` | Sign-in gate |
-| `src/SignIn.jsx` | Magic-link screen |
+| `src/App.jsx` | Chooses between the name-badge prompt and the app |
+| `src/Identify.jsx` | The "who is entering data" screen |
+| `src/identity.js` | Allowed email domains, and remembering you on this device |
 | `src/theme.js` | Palette and type stacks |
 | `src/index.css` | The handful of layout utilities the components use |
+| `scripts/check-anon-access.mjs` | Asserts anon reaches the `tw_` tables and nothing else |
+
+To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
+`src/identity.js`. That is the only place it is written down.
 
 `CONFIGS`, `positionsFor`, `TruckDiagram`, and `TireCard` are unchanged from the
 prototype. The diagram is the part people actually use and it took the most iteration
