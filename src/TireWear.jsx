@@ -286,19 +286,17 @@ function Header({ tab, setTab, who, busy, onSwitchUser }) {
       <div className="mx-auto w-full flex flex-wrap items-end justify-between gap-3"
         style={{ maxWidth: 1400, padding: "16px 16px 0" }}>
         <div>
-          {/* The logo already says The Allen Company, so the old eyebrow
-              text is down to the division it belongs to. */}
-          <div className="flex items-center" style={{ gap: 11, marginBottom: 7 }}>
-            <span style={{ color: C.yellow }}><AllenLogo height={30} /></span>
-            <span style={{ width: 1, height: 24, background: C.green700 }} />
-            <span style={{ fontFamily: FD, fontSize: 11.5, letterSpacing: "0.22em",
+          {/* The mark carries the header on its own — the compact variant,
+              because the fine print cannot be set honestly at this size. */}
+          <div className="flex items-center" style={{ gap: 13, marginBottom: 6 }}>
+            <span style={{ color: C.yellow }}>
+              <AllenLogo variant="compact" height={42} />
+            </span>
+            <span style={{ width: 1, height: 26, background: C.green600 }} />
+            <span style={{ fontFamily: FD, fontSize: 13, letterSpacing: "0.22em",
               color: C.yellow, fontWeight: 600, textTransform: "uppercase" }}>
               Haul Division
             </span>
-          </div>
-          <div style={{ fontFamily: FD, fontSize: 34, fontWeight: 700, color: "#fff",
-            lineHeight: 1.05, letterSpacing: "0.01em", marginTop: 2 }}>
-            Tire Wear
           </div>
           <div style={{ fontSize: 12.5, color: C.onDark, marginBottom: 12, marginTop: 2 }}>
             Tread depth, miles run, and cost-per-mile by brand and position

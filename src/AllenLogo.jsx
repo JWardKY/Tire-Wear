@@ -7,8 +7,23 @@ import { FD } from "./theme.js";
 
    Vector rather than a photograph of the sign, because the sign is black
    on white and the header is neither, and because this has to stay sharp
-   from a favicon to a phone header. Fills with currentColor, so the
-   caller sets the colour.
+   from a favicon to a phone. Fills with currentColor, so the caller sets
+   the colour.
+
+   Two variants, and the reason matters:
+
+     full     the whole sign. Needs roughly 56px of height or more —
+              below that the SERVING KENTUCKY line falls under about
+              8px and stops being type at all, it just reads as fuzz.
+     compact  the same mark with the fine print dropped. For chrome,
+              where there is no room to set the small line honestly.
+
+   Squashing the full lockup into a header is the thing to avoid; pick
+   compact instead and it stays crisp.
+
+   INC is centred on the broken rule, matching the sign — the rule
+   passes through its middle, not below it, or INC floats up off the
+   line. RULE_Y and INC_BASE are kept in step for that reason.
 
    textLength is set on every word: if Barlow Condensed has not loaded
    yet, the fallback face is pinned to the same width instead of pushing
@@ -16,10 +31,20 @@ import { FD } from "./theme.js";
 
 const R = { fill: "currentColor" };
 
-export default function AllenLogo({ height = 34, title = "The Allen Company", style }) {
+const INC_BASE = 134; // INC sits on this
+const RULE_Y = 114; // 7 tall, so centred on INC's midpoint
+
+export default function AllenLogo({
+  height = 34,
+  variant = "full",
+  title = "The Allen Company",
+  style,
+}) {
+  const compact = variant === "compact";
+
   return (
     <svg
-      viewBox="0 0 600 172"
+      viewBox={compact ? "0 0 600 144" : "0 0 600 178"}
       height={height}
       role="img"
       aria-label={title}
@@ -51,33 +76,37 @@ export default function AllenLogo({ height = 34, title = "The Allen Company", st
         <tspan fontSize="31">O.</tspan>
       </text>
 
-      {/* INC, sitting in the gap in the lower rule */}
-      <text x="300" y="128" fontFamily={FD} fontWeight="700" fontSize="46"
+      {/* INC, nested in the gap in the broken rule */}
+      <text x="300" y={INC_BASE} fontFamily={FD} fontWeight="700" fontSize="46"
         textAnchor="middle" letterSpacing="1"
         textLength="104" lengthAdjust="spacingAndGlyphs" {...R}>
         INC
       </text>
 
-      {/* Lower rule, broken either side of INC */}
-      <rect x="6" y="112" width="196" height="7" {...R} />
-      <rect x="398" y="112" width="196" height="7" {...R} />
+      {/* The broken rule, either side of INC */}
+      <rect x="6" y={RULE_Y} width="196" height="7" {...R} />
+      <rect x="398" y={RULE_Y} width="196" height="7" {...R} />
 
-      {/* SERVING KENTUCKY */}
-      <text x="8" y="166" fontFamily={FD} fontWeight="600" letterSpacing="1.5"
-        textLength="250" lengthAdjust="spacingAndGlyphs" {...R}>
-        <tspan fontSize="32">S</tspan>
-        <tspan fontSize="24">ERVING </tspan>
-        <tspan fontSize="32">K</tspan>
-        <tspan fontSize="24">ENTUCKY</tspan>
-      </text>
+      {!compact && (
+        <>
+          {/* SERVING KENTUCKY */}
+          <text x="8" y="172" fontFamily={FD} fontWeight="600" letterSpacing="1.5"
+            textLength="250" lengthAdjust="spacingAndGlyphs" {...R}>
+            <tspan fontSize="32">S</tspan>
+            <tspan fontSize="24">ERVING </tspan>
+            <tspan fontSize="32">K</tspan>
+            <tspan fontSize="24">ENTUCKY</tspan>
+          </text>
 
-      {/* SINCE 1939 */}
-      <text x="592" y="166" fontFamily={FD} fontWeight="600" letterSpacing="1.5"
-        textAnchor="end" textLength="180" lengthAdjust="spacingAndGlyphs" {...R}>
-        <tspan fontSize="32">S</tspan>
-        <tspan fontSize="24">INCE </tspan>
-        <tspan fontSize="32">1939</tspan>
-      </text>
+          {/* SINCE 1939 */}
+          <text x="592" y="172" fontFamily={FD} fontWeight="600" letterSpacing="1.5"
+            textAnchor="end" textLength="180" lengthAdjust="spacingAndGlyphs" {...R}>
+            <tspan fontSize="32">S</tspan>
+            <tspan fontSize="24">INCE </tspan>
+            <tspan fontSize="32">1939</tspan>
+          </text>
+        </>
+      )}
     </svg>
   );
 }
