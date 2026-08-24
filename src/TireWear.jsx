@@ -134,6 +134,7 @@ export default function TireWear({ who, onSwitchUser }) {
     setVehicleConfig: (vehId, cfg) => run(() => db.setVehicleConfig(vehId, cfg)),
     mountTire: (vehId, t) => run(() => db.mountTire(vehId, t, who)),
     pullTire: (tireId, off) => run(() => db.pullTire(tireId, off)),
+    setTireNotes: (tireId, notes) => run(() => db.setTireNotes(tireId, notes)),
     saveInspection: (vehId, date, odo, entries) =>
       run(() => db.saveInspection(vehId, date, odo, entries, who)),
     deleteReading: (id) => run(() => db.deleteReading(id)),
@@ -601,13 +602,18 @@ function VehicleDetail(props) {
           onSave={async (t) => { await actions.mountTire(v.id, t); setMountPos(null); }} />
       )}
       {openTire && (
-        <TireDialog tire={openTire} stats={tireStats[openTire.id]} settings={settings}
+        /* Re-read the tire from the freshly loaded list each render, so a
+           saved note shows up in the dialog that just saved it. */
+        <TireDialog
+          tire={activeTireAt[`${v.num}|${openTire.pos}`] || openTire}
+          stats={tireStats[openTire.id]} settings={settings}
           busy={busy}
           onClose={() => setOpenTire(null)}
           onPull={async (off) => {
             await actions.pullTire(openTire.id, off);
             setOpenTire(null);
           }}
+          onSaveNotes={(notes) => actions.setTireNotes(openTire.id, notes)}
           onDeleteReading={(rid) => actions.deleteReading(rid)} />
       )}
       {odoOpen && (
@@ -738,6 +744,12 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
           </div>
           <div style={{ fontSize: 10.5, color: "#9DB2CC", marginTop: 3, whiteSpace: "nowrap",
             overflow: "hidden", textOverflow: "ellipsis" }}>
+            {/* A note is no use if nobody knows it is there — flag it on the
+                diagram, since that is the screen people actually look at. */}
+            {tire.notes && (
+              <span title={tire.notes}
+                style={{ color: C.goldHi, fontWeight: 700, marginRight: 4 }}>●</span>
+            )}
             {tire.brand || "Unbranded"}{tire.type === "retread" ? " · retread" : ""}
           </div>
         </button>
@@ -777,8 +789,17 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
                 </td>
                 <td style={{ ...td, color: C.muted }}>{p.role}{p.slot === "O" ? " outer" : p.slot === "I" ? " inner" : ""}</td>
                 <td style={td}>
-                  {t ? `${t.brand || "Unbranded"}${t.model ? " " + t.model : ""}`
-                    : <button onClick={() => onEmpty(p)} style={linkBtn}>Mount a tire</button>}
+                  {t ? (
+                    <>
+                      {`${t.brand || "Unbranded"}${t.model ? " " + t.model : ""}`}
+                      {t.notes && (
+                        <div style={{ fontSize: 12, color: C.watch, marginTop: 2,
+                          lineHeight: 1.4, maxWidth: 320 }}>
+                          {t.notes}
+                        </div>
+                      )}
+                    </>
+                  ) : <button onClick={() => onEmpty(p)} style={linkBtn}>Mount a tire</button>}
                 </td>
                 <td style={{ ...td, color: C.muted }}>{t ? (t.type === "retread" ? "Retread" : "Virgin") : "—"}</td>
                 <td style={{ ...td, ...tdNum, color: s ? STATUS_COLOR[s.status] : C.muted, fontWeight: 600 }}>
@@ -871,6 +892,12 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSav
           <Field label="Casing / serial (optional)">
             <input value={f.casing} onChange={set("casing")} style={inp} /></Field>
         </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Note (optional)">
+            <input value={f.notes} onChange={set("notes")}
+              placeholder="Anything worth knowing about this tire"
+              style={inp} /></Field>
+        </div>
       </div>
       <p style={{ fontSize: 12, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
         The mount odometer and tread depth become the first data point. One walk-around after
@@ -883,14 +910,25 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSav
           size: f.size.trim(), type: f.type, newDepth: Number(f.newDepth),
           onDate: f.onDate, onOdo: Number(f.onOdo),
           cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(),
+          notes: f.notes.trim(),
         })}>Mount tire</Btn>
       </div>
     </Modal>
   );
 }
 
-function TireDialog({ tire, stats, settings, busy, onClose, onPull, onDeleteReading }) {
+function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes, onDeleteReading }) {
   const [pulling, setPulling] = useState(false);
+  const [note, setNote] = useState(tire.notes || "");
+  const noteDirty = note.trim() !== (tire.notes || "").trim();
+
+  /* Someone else may have edited the note while this was open. Take their
+     version unless this person has started typing over it. */
+  useEffect(() => {
+    if (!noteDirty) setNote(tire.notes || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tire.notes]);
+
   const [offOdo, setOffOdo] = useState(stats?.last ? String(stats.last.odo) : "");
   const [offDate, setOffDate] = useState(todayISO());
   const [reason, setReason] = useState("Worn out");
@@ -933,6 +971,21 @@ function TireDialog({ tire, stats, settings, busy, onClose, onPull, onDeleteRead
           </ResponsiveContainer>
         </div>
       )}
+
+      <SectionLabel>Note on this tire</SectionLabel>
+      <textarea
+        value={note} rows={2}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Sidewall plug · cupping on the outside · keep an eye on it"
+        style={{ ...inp, resize: "vertical", lineHeight: 1.45, minHeight: 56 }} />
+      <div className="flex items-center justify-between mt-2" style={{ gap: 10, marginBottom: 16 }}>
+        <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45 }}>
+          Stays on this wheel until the tire comes off. Everyone sees the same note.
+        </span>
+        <Btn tone="ghost" disabled={busy || !noteDirty} onClick={() => onSaveNotes(note)}>
+          {noteDirty ? "Save note" : "Saved"}
+        </Btn>
+      </div>
 
       <SectionLabel>Readings</SectionLabel>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14 }}>
@@ -1208,13 +1261,15 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
   function exportTires() {
     const head = ["truck", "position", "brand", "model", "size", "type", "casing",
       "mounted_date", "mounted_odo", "mounted_32nds", "current_32nds",
-      "miles_run", "miles_per_32nd", "miles_per_mil", "est_miles_left", "cost", "status"];
+      "miles_run", "miles_per_32nd", "miles_per_mil", "est_miles_left", "cost", "status",
+      "note"];
     const rows = tires.map((t) => {
       const s = tireStats[t.id] || {};
       return [t.veh, t.pos, t.brand, t.model, t.size, t.type, t.casing, t.onDate, t.onOdo,
         t.newDepth, s.depth ?? "", s.miles ?? "", s.miPer32 ? Math.round(s.miPer32) : "",
         s.miPer32 ? Math.round(s.miPer32 / MILS_PER_32ND) : "",
-        s.remain ? Math.round(s.remain) : "", t.cost ?? "", STATUS_LABEL[s.status] || ""];
+        s.remain ? Math.round(s.remain) : "", t.cost ?? "", STATUS_LABEL[s.status] || "",
+        t.notes || ""];
     });
     download("allen-tires.csv", toCSV([head, ...rows]));
   }
