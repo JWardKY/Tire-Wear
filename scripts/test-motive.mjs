@@ -112,7 +112,7 @@ const d = (o) => ({
 
 {
   const existing = [{ id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
-                      category: "Mirrors", state: "open", report_count: 1,
+                      category: "Mirrors", note: "cracked", state: "open", report_count: 1,
                       first_reported: "2026-08-20", last_reported: "2026-08-20" }];
   const p = planDefects([d({})], VEH, existing);
   is(p.create.length, 0, "the same defect key twice creates nothing");
@@ -123,7 +123,7 @@ const d = (o) => ({
   /* Motive gives a new id per inspection, so the same fault written up
      again arrives looking brand new. */
   const existing = [{ id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
-                      category: "Mirrors", state: "open", report_count: 1,
+                      category: "Mirrors", note: "cracked", state: "open", report_count: 1,
                       first_reported: "2026-08-20", last_reported: "2026-08-20" }];
   const p = planDefects([d({ key: "motive:2:7", date: "2026-08-25" })], VEH, existing);
   is(p.create.length, 0, "a repeat of an open fault does not open a second row");
@@ -135,7 +135,7 @@ const d = (o) => ({
 
 {
   const existing = [{ id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
-                      category: "Mirrors", state: "repaired", report_count: 1,
+                      category: "Mirrors", note: "cracked", state: "repaired", report_count: 1,
                       first_reported: "2026-08-20", last_reported: "2026-08-20" }];
   const p = planDefects([d({ key: "motive:2:7", date: "2026-08-25" })], VEH, existing);
   is(p.create.length, 1, "the same fault after a repair is a NEW job, not a reopening");
@@ -144,7 +144,7 @@ const d = (o) => ({
 
 {
   const existing = [{ id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
-                      category: "Mirrors", state: "open", report_count: 1,
+                      category: "Mirrors", note: "cracked", state: "open", report_count: 1,
                       first_reported: "2026-08-20", last_reported: "2026-08-20" }];
   const p = planDefects([d({ key: "motive:2:7", date: "2026-08-25", unsafe: true })], VEH, existing);
   is(p.bump[0].safety, "unsafe", "an unsafe repeat upgrades a fault we had as minor");
@@ -187,7 +187,8 @@ const d = (o) => ({
 {
   const p = planDefects([d({ category: "  mirrors  " })], VEH,
     [{ id: "d1", defect_key: "x", unit_number: "DT-882", category: "Mirrors",
-       state: "open", report_count: 1, first_reported: "2026-08-20", last_reported: "2026-08-20" }]);
+       note: "cracked", state: "open", report_count: 1,
+       first_reported: "2026-08-20", last_reported: "2026-08-20" }]);
   is(p.bump.length, 1, "category matching ignores case and stray spacing");
 }
 
@@ -264,22 +265,86 @@ const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
 }
 
 {
+  /* The real shape, taken from an actual response. Every field sits one
+     level lower than Motive documents it, and most of the "defects" are
+     checklist lines that were inspected and found fine. */
   stub(() => ok({ inspection_reports: [{
     inspection_report: {
-      id: 55, date: "2026-08-26", status: "with_defects",
-      driver: { first_name: "Jason", last_name: "Ward" },
-      vehicle: { id: 101, number: "DT-882" },
-      defects: [{ id: 7, category: "Brakes", notes: "soft pedal" },
-                { id: 8, category: "Mirrors", notes: null }],
+      log_id: 2413521978,
+      date: "2026-08-26",
+      time: "2026-08-26T20:24:13Z",
+      vehicle_number: "DT-899",
+      location: "Interstate Dr, Lexington, KY, US",
+      status: "resolved",
+      inspection_type: "post_trip",
+      defects: [
+        { defect: { id: 1, category: "Other", notes: "Broken board mount.", type: "minor", area: "tractor" } },
+        { defect: { id: 2, category: "Air Lines", notes: null, type: "none", area: "tractor" } },
+        { defect: { id: 3, category: "Battery", notes: null, type: "none", area: "tractor" } },
+        { defect: { id: 4, category: "Brakes", notes: "grinding", type: "major", area: "tractor" } },
+      ],
     },
   }] }));
   const got = await fetchInspectionDefects("k", "2026-08-01");
-  is(got.length, 2, "one inspection with two defects becomes two rows");
-  is(got[0].key, "motive:55:7", "keyed by inspection and defect together");
-  is(got[1].key, "motive:55:8", "so two defects on one report stay distinct");
-  is(got[0].driver, "Jason Ward", "the driver name is joined up");
-  is(got[0].unsafe, true, "a with_defects report reads as unsafe");
+  is(got.length, 2, "only real defects come through, not the whole checklist");
+  is(got.checklistLines, 2, "and the clean lines are counted, not silently dropped");
+  is(got[0].key, "motive:2413521978:1", "keyed on log_id, which is what the report calls its id");
+  is(got[0].category, "Other", "the category is read from inside the defect envelope");
+  is(got[0].note, "Broken board mount.", "as are the notes");
+  is(got[0].unit, "DT-899", "the unit comes from vehicle_number — there is no vehicle object");
+  is(got[0].where, "Interstate Dr, Lexington, KY, US", "and the inspection location is kept");
+  is(got[0].unsafe, false, "a minor defect is not unsafe");
+  is(got[1].unsafe, true, "a major one is");
   is(got[0].date, "2026-08-26", "dated from the report");
 }
 
+{
+  stub(() => ok({ inspection_reports: [{ inspection_report: {
+    log_id: 9, date: "2026-08-26", vehicle_number: "DT-899",
+    status: "with_defects",
+    defects: [{ defect: { id: 1, category: "Tires", notes: null, type: "none" } }],
+  } }] }));
+  const got = await fetchInspectionDefects("k", "2026-08-01");
+  is(got.length, 0,
+     "a report whose every line is clean yields nothing, whatever its status says");
+}
+
+/* ── Matching and splitting, on the real shape ─────────────────── */
+
+{
+  /* No vehicle id in an inspection report, so the unit number has to
+     carry the match on its own. */
+  const p = planDefects(
+    [{ key: "motive:1:1", motiveVehicleId: null, unit: " dt-882 ",
+       date: "2026-08-20", category: "Brakes", note: "soft", unsafe: false }],
+    VEH, []);
+  is(p.create[0].vehicle_id, "v1", "matched by unit number, case and spacing ignored");
+  is(p.create[0].unit_number, "DT-882", "and stored under our spelling of it");
+}
+
+{
+  /* The one that matters. Motive's commonest category is "Other", where
+     the note is the only thing saying which fault it is. */
+  const base = { motiveVehicleId: 101, unit: "DT-882", date: "2026-08-20",
+                 category: "Other", unsafe: false };
+  const p = planDefects([
+    { ...base, key: "motive:1:1", note: "Broken board mount, left rear" },
+    { ...base, key: "motive:1:2", note: "Cracked mirror" },
+  ], VEH, []);
+  is(p.create.length, 2,
+     "two different 'Other' faults on one truck stay two defects");
+}
+
+{
+  const base = { motiveVehicleId: 101, unit: "DT-882", category: "Other",
+                 note: "Broken board mount", unsafe: false };
+  const p = planDefects([
+    { ...base, key: "motive:1:1", date: "2026-08-20" },
+    { ...base, key: "motive:2:9", date: "2026-08-25" },
+  ], VEH, []);
+  is(p.create.length, 1, "but the same one written up twice is still one defect");
+  is(p.create[0].report_count, 2, "reported twice");
+}
+
+report(state, true);
 report(state, true);

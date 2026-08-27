@@ -682,12 +682,37 @@ truck — from the log or from what a tire was mounted at — the reading is **r
 reported**, never written. A backwards reading in the middle of a wear calculation
 produces negative miles run, and the number that comes out of that looks plausible.
 
+### A DVIR is mostly not defects
+
+Motive returns **every line of the checklist**, not just the faults. An entry with
+`type: "none"` means the driver looked at it and it was fine. Thirty days of those came
+to **2,967 rows, of which a couple of dozen were real defects.** Only `minor` and
+`major` are imported; the rest are counted and dropped, and the dry run reports the
+count so that if it ever falls to zero somebody notices the filter has broken before
+the board fills with "Air Lines — fine".
+
+Every field in an inspection report sits one level lower than Motive documents it:
+`defects[].defect.{...}`, the report is keyed `log_id` rather than `id`, and there is no
+nested vehicle object at all — only `vehicle_number`, so defects match on the unit
+number rather than the Motive id. Same story on the odometer, which lives in
+`current_location`, not on the vehicle. **Check a real response before trusting the
+documentation on this API.**
+
+`picture_url` is deliberately not stored: it is a signed S3 link that expires in fifteen
+minutes, so keeping it would save a dead link.
+
 ### Repeat defects
 
 Motive issues a fresh defect id on every inspection, so the same cracked mirror written
 up on Monday and again on Tuesday arrives as two unrelated defects. A defect matching
-one already **open** on the same unit and category bumps `report_count` and
-`last_reported` instead of opening a second row. A **repaired** one is never matched
+one already **open** on the same unit, category *and note* bumps `report_count` and
+`last_reported` instead of opening a second row.
+
+The note is part of that key on purpose. Motive's commonest category is literally
+`Other`, where the note is the only thing saying which fault it is — so merging on
+category alone would quietly fold two unrelated faults into one. Splitting when we
+should have merged leaves a visible duplicate somebody closes in a second; merging when
+we should have split loses a fault nobody ever sees. A **repaired** one is never matched
 against: if it was fixed and is written up again, it genuinely broke again, and that is
 a new job.
 

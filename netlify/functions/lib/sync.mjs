@@ -129,8 +129,11 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
   const [fromMotive, vehicles, existing] = await Promise.all([
     fetchInspectionDefects(motiveKey, start),
     all(db, "tw_vehicles", "id,number,motive_vehicle_id,active", "number"),
+    /* note is in here because the fault key uses it — Motive's commonest
+       category is "Other", where the note is the only thing that says
+       which fault it actually is. */
     all(db, "tw_defects",
-        "id,defect_key,unit_number,category,state,report_count,first_reported,last_reported",
+        "id,defect_key,unit_number,category,note,state,report_count,first_reported,last_reported",
         "defect_key"),
   ]);
 
@@ -138,6 +141,10 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
   const out = {
     since: start,
     motiveReturned: fromMotive.length,
+    /* Checklist lines that were inspected and found fine. Reported so
+       the ratio is visible: if this ever drops to zero, the filter has
+       stopped working and the board is about to fill with clean rows. */
+    cleanChecklistLines: fromMotive.checklistLines ?? null,
     wouldCreate: plan.create.length,
     wouldBump: plan.bump.length,
     alreadyHave: plan.already.length,

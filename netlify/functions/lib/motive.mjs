@@ -102,6 +102,19 @@ export async function fetchRawInspections(key, sinceISO, n = 2) {
   return (d.inspection_reports || []).slice(0, n);
 }
 
+/* A DVIR comes back as every line of the checklist, not just the faults.
+   An entry with type "none" means the driver looked at it and it was
+   fine. Thirty days of those is roughly three thousand rows, and
+   importing them would bury the real defects under "Air Lines — fine".
+   So only minor and major are defects; everything else is a clean
+   inspection and is dropped.
+
+   Every field here sits one level lower than Motive documents it:
+   defects[].defect.{...}, the report is keyed log_id rather than id,
+   and there is no nested vehicle object at all — just vehicle_number.
+   All of that was found by looking at a real response. */
+const REAL_DEFECT = new Set(["minor", "major"]);
+
 export async function fetchInspectionDefects(key, sinceISO) {
   const rows = await motiveAll(
     "/v1/inspection_reports", key,
@@ -109,27 +122,35 @@ export async function fetchInspectionDefects(key, sinceISO) {
     (d) => d.inspection_reports || []
   );
   const out = [];
+  let checklistLines = 0;
   for (const w of rows) {
     const r = w.inspection_report || w;
-    const driver = [r.driver?.first_name, r.driver?.last_name].filter(Boolean).join(" ");
-    for (const d of r.defects || []) {
+    const reportId = r.log_id ?? r.id;
+    for (const dw of r.defects || []) {
+      const d = dw.defect || dw;
+      const type = (d.type || "").toLowerCase();
+      if (!REAL_DEFECT.has(type)) { checklistLines++; continue; }
       out.push({
-        /* Stable across runs, and prefixed so it can never collide with a
-           hand-logged defect — those are keyed manual:unit:timestamp. */
-        key: `motive:${r.id}:${d.id}`,
+        /* Stable across runs, and prefixed so it can never collide with
+           a hand-logged defect — those are keyed manual:unit:timestamp. */
+        key: `motive:${reportId}:${d.id}`,
         motiveVehicleId: r.vehicle?.id ?? null,
         unit: r.vehicle?.number || r.vehicle_number || "",
         date: (r.date || r.time || "").slice(0, 10),
+        where: r.location || null,
         category: d.category || null,
         note: d.notes || null,
-        driver: driver || null,
-        /* Motive marks the report, not the line. "with_defects" that is
-           not yet corrected is the closest thing to out-of-service it
-           gives us, and the shop re-reads it anyway. */
-        unsafe: r.status === "with_defects",
+        area: d.area || null,
+        /* Motive's own word for it. The report-level status is about the
+           paperwork being signed off, not about the truck. */
+        unsafe: type === "major",
+        /* Deliberately not kept: picture_url is a signed S3 link that
+           expires in fifteen minutes, so storing it would save a dead
+           link. */
       });
     }
   }
+  out.checklistLines = checklistLines;
   return out;
 }
 
@@ -219,24 +240,28 @@ export function planDefects(fromMotive, vehicles, existing) {
     vehicles.filter((v) => v.motive_vehicle_id != null)
             .map((v) => [String(v.motive_vehicle_id), v])
   );
+  /* Inspection reports carry no vehicle id, only vehicle_number, so the
+     unit number has to be able to do the matching on its own. */
+  const byNumber = new Map(vehicles.map((v) => [norm(v.number), v]));
 
   const seenKeys = new Set(existing.map((d) => d.defect_key));
   /* Only open and claimed ones are candidates to be "the same fault". */
   const openIdx = new Map();
   for (const d of existing) {
     if (d.state === "repaired") continue;
-    openIdx.set(faultOf(d.unit_number, d.category), d);
+    openIdx.set(faultOf(d.unit_number, d.category, d.note), d);
   }
 
   const create = [], bump = [], already = [];
 
   for (const d of fromMotive) {
     if (seenKeys.has(d.key)) { already.push(d.key); continue; }
-    const v = d.motiveVehicleId == null ? null : byMotiveId.get(String(d.motiveVehicleId));
+    const v = (d.motiveVehicleId != null && byMotiveId.get(String(d.motiveVehicleId)))
+      || byNumber.get(norm(d.unit)) || null;
     const unit = v ? v.number : (d.unit || "unknown");
     const date = d.date || todayISO();
 
-    const open = openIdx.get(faultOf(unit, d.category));
+    const open = openIdx.get(faultOf(unit, d.category, d.note));
 
     /* Matched a row this same run created rather than one already in the
        database. There is no id to update yet, so fold the repeat into the
@@ -277,7 +302,8 @@ export function planDefects(fromMotive, vehicles, existing) {
       unit_number: unit,
       category: d.category,
       note: d.note,
-      driver: d.driver,
+      driver: d.driver || null,
+      location: d.where,
       severity: d.unsafe ? "major" : "minor",
       safety: d.unsafe ? "unsafe" : "safe",
       first_reported: date,
@@ -289,13 +315,21 @@ export function planDefects(fromMotive, vehicles, existing) {
     create.push(row);
     /* The same object, not a copy: a repeat later in this run folds into
        the row that is about to be inserted. */
-    openIdx.set(faultOf(unit, d.category), row);
+    openIdx.set(faultOf(unit, d.category, d.note), row);
   }
   return { create, bump, already };
 }
 
-/* Category is free text from the driver's phone, so compare it loosely. */
-const faultOf = (unit, category) =>
-  `${(unit || "").trim().toLowerCase()}|${(category || "").trim().toLowerCase()}`;
+/* What counts as "the same fault reported again".
+
+   The notes are part of it, not just the category. Motive's commonest
+   category is literally "Other", where the note IS the fault — merging
+   two different "Other" write-ups on one truck would silently lose a
+   real defect. Splitting when we should have merged leaves a visible
+   duplicate somebody can close in a second; merging when we should have
+   split loses a fault nobody ever sees. So it splits. */
+const norm = (x) => (x || "").trim().toLowerCase().replace(/\s+/g, " ");
+const faultOf = (unit, category, note) =>
+  `${norm(unit)}|${norm(category)}|${norm(note)}`;
 
 export { MotiveError, WHICH_ODOMETER };
