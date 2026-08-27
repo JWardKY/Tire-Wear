@@ -18,6 +18,7 @@ const SUITES = [
   ["test-pins", "PIN plumbing — the security properties"],
   ["test-timecards", "time entries and the hours rollup"],
   ["test-parts", "stock, movements, CSV import"],
+  ["test-setup", "the roster and the cost-code paste"],
   ["check-anon-access", "what the anon key can reach"],
 ];
 

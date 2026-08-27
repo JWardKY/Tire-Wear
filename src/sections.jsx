@@ -4,6 +4,7 @@ import PmSection from "./PmSection.jsx";
 import TimecardSection from "./TimecardSection.jsx";
 import HoursSection from "./HoursSection.jsx";
 import InventorySection from "./InventorySection.jsx";
+import SetupSection from "./SetupSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
    component — the shell renders the nav, owns which section is showing,
@@ -79,6 +80,13 @@ export const SECTIONS = [
       ["settings", "Settings"],
     ],
     Component: TiresSection,
+  },
+  {
+    key: "setup",
+    label: "Setup",
+    blurb: "The roster and the cost codes everything else books against",
+    subTabs: [["roster", "Mechanics"], ["codes", "Cost codes"]],
+    Component: SetupSection,
   },
 ];
 
