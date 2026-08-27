@@ -117,8 +117,11 @@ try {
       manual: `delete from tw_time_entries where mechanic_id='${mechanicId}';`,
     },
     {
-      label: "test mechanic (the app cannot delete one, by design)",
-      run: async () => {},
+      label: "test mechanic",
+      /* Deletable only through tw_purge_test_mechanic, which refuses any
+         address that is not @invalid. The app itself still cannot delete
+         a mechanic, which is the point. */
+      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: TEST_MECHANIC }); },
       verify: async () => {
         const { count, error } = await c.from("tw_mechanics")
           .select("id", { count: "exact", head: true }).eq("email", TEST_MECHANIC);
