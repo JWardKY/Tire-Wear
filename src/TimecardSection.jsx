@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { C, FD, FM } from "./theme.js";
 import {
-  todayISO, fmtDate, nf, Modal, Btn, Field, SectionLabel, Card,
+  todayISO, fmtDate, nf, toCSV, Modal, Btn, Field, SectionLabel, Card,
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as clock from "./nowData.js";
 import * as setup from "./setupData.js";
+import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
 
 /* ── The Timecard section ─────────────────────────────────────────
@@ -101,6 +102,14 @@ export default function TimecardSection({ who, tab, onBusy }) {
 
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading your timecard…</div>;
 
+  if (tab === "history") {
+    return (
+      <Body err={err}>
+        <MyHistory unlocked={unlocked} />
+      </Body>
+    );
+  }
+
   if (tab === "pin") {
     return (
       <Body err={err}>
@@ -141,7 +150,8 @@ export default function TimecardSection({ who, tab, onBusy }) {
         </div>
       </div>
 
-      <Punch mechanicId={unlocked.id} onBusy={onBusy} onErr={setErr} />
+      <Shift mechanicId={unlocked.id} date={date} entries={entries}
+        onBusy={onBusy} onErr={setErr} />
 
       {entries.length === 0 ? (
         <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
@@ -616,20 +626,30 @@ function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
   );
 }
 
-/* ── Punching in and out ──────────────────────────────────────────
+/* ── The shift card ───────────────────────────────────────────────
    The clock is not the timecard. This says a mechanic is in the shop;
-   the entries below say what the work was and what it charges to. They
-   are deliberately separate, because the Now board has to show somebody
-   the moment they arrive, not once they have filled a form in. */
+   the entries below say what the work was and what it charges to.
 
-function Punch({ mechanicId, onBusy, onErr }) {
-  const [open, setOpen] = React.useState(null);
+   Both times are editable and there is a lunch deduction, straight from
+   the mockup — "the clock fills these in, type over them if you forgot
+   to punch". A punch clock nobody can correct is one they stop using
+   the first morning they forget it.
+
+   Underneath, the bar reconciles the two: hours on the clock against
+   hours booked to a truck and a code. The gap is the whole point. It
+   catches somebody who clocked nine and booked six, on their own
+   screen, while they can still remember why. */
+
+const LUNCH = [0, 15, 30, 45, 60];
+
+function Shift({ mechanicId, date, entries, onBusy, onErr }) {
+  const [sh, setSh] = React.useState(null);
   const [, tick] = React.useState(0);
 
   const load = React.useCallback(async () => {
-    try { setOpen(await clock.openShift(mechanicId)); }
+    try { setSh(await clock.shiftForDay(mechanicId, date)); }
     catch (e) { onErr?.(e.message || String(e)); }
-  }, [mechanicId, onErr]);
+  }, [mechanicId, date, onErr]);
 
   React.useEffect(() => { load(); }, [load]);
   React.useEffect(() => {
@@ -647,31 +667,229 @@ function Punch({ mechanicId, onBusy, onErr }) {
     finally { onBusy?.(false); }
   };
 
+  const edit = (patch) => go(async () => {
+    if (!sh) return;
+    await clock.editShift(sh.id, sh.date, patch);
+  });
+
+  const running = sh?.open;
+  const acc = clock.accountedFor(sh?.clockHours || 0, entries);
+  const segColour = { shop: C.green700, call: C.watch, idle: C.muted };
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3"
-      style={{ background: open ? C.green700 : C.card,
-        color: open ? "#fff" : C.ink,
-        border: `1px solid ${open ? C.green700 : C.line}`,
-        borderRadius: 8, padding: "10px 16px", marginBottom: 16 }}>
-      <div>
-        <div style={{ fontFamily: FD, fontSize: 18, fontWeight: 700, lineHeight: 1.15 }}>
-          {open
-            ? `On the clock · ${clock.fmtHMS(clock.elapsedSec(open.started_at))}`
-            : "Not on the clock"}
+    <div style={{ background: C.card, border: `1px solid ${C.line}`,
+                  borderRadius: 8, padding: "12px 16px", marginBottom: 16 }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div style={{ fontFamily: FD, fontSize: 20, fontWeight: 700,
+                        color: running ? C.green700 : C.ink, lineHeight: 1.15 }}>
+            {running
+              ? clock.fmtHMS(clock.elapsedSec(sh.startedAt))
+              : sh ? `${nf(sh.clockHours, 2)} hours on the clock` : "Not clocked in"}
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+            {running ? "On the clock now"
+              : "Punching in shows you on the shop board. It does not book hours."}
+          </div>
         </div>
-        <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>
-          {open
-            ? `In at ${new Date(open.started_at).toLocaleTimeString([], {
-                hour: "numeric", minute: "2-digit" })}`
-            : "Punching in shows you on the shop board. It does not book hours."}
+        <Btn tone={running ? "ghost" : "solid"}
+          onClick={() => go(() => running
+            ? clock.punchOut(mechanicId)
+            : clock.punchIn(mechanicId))}>
+          {running ? "Clock out" : "Clock in"}
+        </Btn>
+      </div>
+
+      {sh && (
+        <>
+          <div className="flex flex-wrap" style={{ gap: 10, marginTop: 12 }}>
+            <Field label="Clocked in">
+              <input type="time" value={clock.hm(sh.startedAt)}
+                onChange={(e) => edit({ start: e.target.value })}
+                style={{ ...inp, width: 130 }} />
+            </Field>
+            <Field label="Clocked out">
+              <input type="time" value={clock.hm(sh.endedAt)}
+                onChange={(e) => edit({ stop: e.target.value })}
+                style={{ ...inp, width: 130 }} />
+            </Field>
+            <Field label="Lunch / breaks">
+              <select value={sh.lunch} onChange={(e) => edit({ lunch: e.target.value })}
+                style={{ ...inp, width: 130 }}>
+                {LUNCH.map((m) => (
+                  <option key={m} value={m}>{m ? `${m} min` : "None"}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <p style={{ fontSize: 11.5, color: C.muted, margin: "2px 0 0" }}>
+            The clock fills these in. Type over them if you forgot to punch.
+          </p>
+
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+            <div className="flex flex-wrap items-baseline justify-between" style={{ gap: 8 }}>
+              <span style={{ fontFamily: FD, fontSize: 12.5, letterSpacing: "0.06em",
+                             textTransform: "uppercase", color: C.muted }}>
+                Time accounted for
+              </span>
+              <span style={{ fontFamily: FD, fontSize: 14 }}>
+                {nf(acc.booked, 2)} of {nf(acc.total, 2)} hrs
+              </span>
+            </div>
+
+            <div style={{ display: "flex", height: 12, borderRadius: 3,
+                          overflow: "hidden", background: C.paper,
+                          border: `1px solid ${C.line}`, margin: "7px 0 6px" }}>
+              {acc.segments.map((g, i) => (
+                <div key={i} title={`${g.label} — ${g.hours} hr`}
+                  style={{ width: `${g.pct}%`, background: segColour[g.kind] }} />
+              ))}
+            </div>
+
+            <div style={{ fontSize: 12.5, fontWeight: 600,
+                          color: acc.tone === "warn" ? C.pull
+                               : acc.tone === "ok" ? C.good : C.muted }}>
+              {acc.note}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+/* ── My history ───────────────────────────────────────────────────
+   Everything one person has worked on, and the shifts they have
+   closed. The same rows the office sees, narrowed to them.
+
+   The note about permanence is the mockup's and it stays: entries are
+   added, never edited or removed. It is a record of what happened, and
+   a record you can quietly rewrite is not one. */
+
+function MyHistory({ unlocked }) {
+  const [rows, setRows] = React.useState(null);
+  const [cards, setCards] = React.useState([]);
+  const [kind, setKind] = React.useState("all");
+
+  React.useEffect(() => {
+    if (!unlocked) return;
+    const name = unlocked.name;
+    Promise.all([
+      buy.myHistory(name).catch(() => []),
+      buy.myShifts(unlocked.id).catch(() => []),
+    ]).then(([h, c]) => { setRows(h); setCards(c); });
+  }, [unlocked]);
+
+  const kinds = React.useMemo(
+    () => ["all", ...new Set((rows || []).map((r) => r.kind))], [rows]);
+  const shown = React.useMemo(
+    () => (rows || []).filter((r) => kind === "all" || r.kind === kind), [rows, kind]);
+
+  const exportCsv = (name, header, lines) => {
+    const csv = toCSV([header, ...lines]);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  if (!unlocked) {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <Card title="Not signed in"
+          note="Open the Today tab and tap your name to see what you have worked on." />
+      </div>
+    );
+  }
+  if (rows === null) return <div style={{ padding: 30, color: C.muted }}>Reading…</div>;
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between" style={{ gap: 8, marginBottom: 8 }}>
+        <SectionLabel>Everything I've worked on · {shown.length}</SectionLabel>
+        <div className="flex flex-wrap" style={{ gap: 6 }}>
+          <select value={kind} onChange={(e) => setKind(e.target.value)}
+            style={{ ...inp, width: "auto" }}>
+            {kinds.map((k) => (
+              <option key={k} value={k}>{k === "all" ? "All work" : k}</option>
+            ))}
+          </select>
+          <Btn tone="ghost" disabled={!shown.length}
+            onClick={() => exportCsv(`my-work_${unlocked.name.replace(/\W+/g, "-")}.csv`,
+              ["Timestamp", "What", "Unit", "Detail", "Work order", "Hours"],
+              shown.map((r) => [r.at, r.what, r.unit, r.summary, r.workOrder, r.hours ?? ""]))}>
+            EXPORT
+          </Btn>
         </div>
       </div>
-      <Btn tone={open ? "ghost" : "solid"}
-        onClick={() => go(() => open
-          ? clock.punchOut(mechanicId)
-          : clock.punchIn(mechanicId))}>
-        {open ? "Punch out" : "Punch in"}
-      </Btn>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead><tr>
+            <th style={th}>When</th><th style={th}>What</th>
+            <th style={th}>Unit</th><th style={th}>Detail</th><th style={th}>Hours</th>
+          </tr></thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={`${r.id}-${i}`}>
+                <td style={{ ...td, whiteSpace: "nowrap" }}>
+                  {fmtDate(r.at.slice(0, 10))}
+                  <span style={{ color: C.muted }}> {r.at.slice(11, 16)}</span>
+                </td>
+                <td style={td}>{r.what}</td>
+                <td style={td}>{r.unit}</td>
+                <td style={td}>{r.summary}</td>
+                <td style={tdNum}>{r.hours ?? ""}</td>
+              </tr>
+            ))}
+            {!shown.length && (
+              <tr><td style={{ ...td, color: C.muted }} colSpan={5}>
+                Nothing recorded against your name yet.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 26px", maxWidth: 620 }}>
+        This record is permanent — entries are added, never edited or removed. If
+        something needs correcting, do the work and it gets recorded as a new entry.
+      </p>
+
+      <div className="flex flex-wrap items-center justify-between" style={{ gap: 8, marginBottom: 8 }}>
+        <SectionLabel>My saved timecards · {cards.length}</SectionLabel>
+        <Btn tone="ghost" disabled={!cards.length}
+          onClick={() => exportCsv(`my-timecards_${unlocked.name.replace(/\W+/g, "-")}.csv`,
+            ["Date", "Clocked in", "Clocked out", "Lunch (min)", "Hours"],
+            cards.map((c) => [c.date, clock.hm(c.startedAt), clock.hm(c.endedAt),
+                              c.lunch, c.hours]))}>
+          EXPORT CSV
+        </Btn>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead><tr>
+            <th style={th}>Date</th><th style={th}>In</th><th style={th}>Out</th>
+            <th style={th}>Lunch</th><th style={th}>Hours</th>
+          </tr></thead>
+          <tbody>
+            {cards.map((c) => (
+              <tr key={c.id}>
+                <td style={td}>{fmtDate(c.date)}</td>
+                <td style={td}>{clock.hm(c.startedAt)}</td>
+                <td style={td}>{clock.hm(c.endedAt)}</td>
+                <td style={td}>{c.lunch ? `${c.lunch} min` : "—"}</td>
+                <td style={tdNum}>{nf(c.hours, 2)}</td>
+              </tr>
+            ))}
+            {!cards.length && (
+              <tr><td style={{ ...td, color: C.muted }} colSpan={5}>
+                No closed shifts yet.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

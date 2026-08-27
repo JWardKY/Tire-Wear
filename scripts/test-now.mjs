@@ -72,6 +72,62 @@ try {
   });
   truthy(bad.error, "the database refuses a shift that ends before it starts");
 
+  /* ── The shift card: lunch, corrections, and the reconciliation ── */
+  const today = new Date().toISOString().slice(0, 10);
+  await now.punchIn(mechId, MARK);
+  let sd = await now.shiftForDay(mechId, today);
+  truthy(sd, "the day's shift reads back");
+  is(sd.lunch, 30, "with a default lunch of thirty minutes");
+  is(sd.open, true, "and still open");
+
+  await now.editShift(sd.id, today, { start: "07:00", stop: "15:30", lunch: 30 });
+  sd = await now.shiftById(sd.id);
+  is(sd.clockHours, 8, "seven to half three less a half hour lunch is eight hours");
+
+  await now.editShift(sd.id, today, { lunch: 60 });
+  sd = await now.shiftById(sd.id);
+  is(sd.clockHours, 7.5, "an hour lunch takes it to seven and a half");
+
+  await now.editShift(sd.id, today, { lunch: 0 });
+  sd = await now.shiftById(sd.id);
+  is(sd.clockHours, 8.5, "and no lunch gives the full eight and a half");
+
+  /* The one that would otherwise produce a negative shift. */
+  await now.editShift(sd.id, today, { start: "22:00", stop: "06:00", lunch: 0 });
+  sd = await now.shiftById(sd.id);
+  is(sd.clockHours, 8, "a shift running past midnight is eight hours, not minus sixteen");
+
+  await now.editShift(sd.id, today, { start: "07:00", stop: "15:30", lunch: 30 });
+  sd = await now.shiftById(sd.id);
+
+  const acc = (h, es) => now.accountedFor(h, es);
+  let a = acc(8, [{ hours: 5, where: "shop", unit: "DT-882" },
+                  { hours: 3, where: "road", unit: "DT-901" }]);
+  is(a.booked, 8, "eight hours booked against eight on the clock");
+  is(a.diff, 0, "leaves nothing unaccounted");
+  is(a.tone, "ok", "and reads as fine");
+  is(a.note, "Every hour is accounted for.", "in those words");
+  is(a.segments.length, 2, "with a segment per entry");
+  is(a.segments[1].kind, "call", "a road entry is a service call");
+
+  a = acc(8, [{ hours: 6, where: "shop", unit: "DT-882" }]);
+  is(a.diff, 2, "booking six of eight leaves two");
+  is(a.tone, "warn", "which is flagged");
+  truthy(a.note.includes("2.00 hrs still need"), "and says how many: " + a.note);
+
+  a = acc(8, [{ hours: 9.5, where: "shop", unit: "DT-882" }]);
+  is(a.tone, "warn", "booking more than the clock is flagged too");
+  truthy(a.note.includes("more than the clock"), "with its own wording");
+
+  a = acc(0, []);
+  is(a.tone, "muted", "no times yet is not an error");
+  is(a.note, "Enter a start and stop time to begin.", "it just says what to do");
+
+  a = acc(8, [{ hours: 8, where: "plant", unit: "Shop" }]);
+  is(a.segments[0].kind, "idle", "plant and parts-run time reads as indirect");
+
+  await now.punchOut(mechId);
+
   const n = await now.boardNumbers("2026-01-01", "2026-12-31");
   truthy(typeof n.onClock === "number", "the board numbers compute");
   truthy(n.openDefects >= 0, "open defects counted");
