@@ -6,7 +6,7 @@ import { supabase } from "./supabase.js";
 const PAGE = 1000;
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
-async function fetchAll(table, columns, orderBy) {
+export async function fetchAll(table, columns, orderBy) {
   const rows = [];
   for (let from = 0; ; from += PAGE) {
     let q = supabase.from(table).select(columns).range(from, from + PAGE - 1);

@@ -40,11 +40,16 @@ What is done:
 - Wear rates computed in a database view, not in the React — see below.
 - Every reading is stamped with the email of whoever took it.
 - CSV exports for tires, tread readings, and the mileage log.
+- **Defects** — log a fault, claim it, mark it repaired, with the out-of-service
+  ones sorted to the top.
+- **PM** — twelve service programs, a due board by miles and by months, and a
+  history per truck.
 
 What is not:
 
 - **Motive odometer sync.** Mileage is still typed in. This is the next real feature
-  and it is described near the bottom of this document.
+  and it is described near the bottom of this document. The same Netlify Function
+  work also brings DVIR defects in on their own instead of by hand.
 - **HT axle configurations.** Assigned by a guess from the model name and still need
   correcting truck by truck. The dropdown on the vehicle screen is there for that.
 
@@ -126,18 +131,18 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Still to come, from the foreman's mockups: Now, Timecard, My jobs, Defects, PM,
-Inventory, Hours, Setup.
+Defects and PM are built. Still to come, from the foreman's mockups: Now,
+Timecard, My jobs, Inventory, Hours, Setup.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
 sub-tabs from that row. Nothing else needs touching.
 
 ```js
-{ key: "defects", label: "Defects",
-  blurb: "Open DVIR defects and what has been done about them",
-  subTabs: [["open", "Open"], ["closed", "Closed"]],
-  Component: DefectsSection }
+{ key: "hours", label: "Hours",
+  blurb: "Labour hours by mechanic and by truck",
+  subTabs: [["week", "This week"], ["month", "This month"]],
+  Component: HoursSection }
 ```
 
 A section component is handed `{ who, tab, onBusy }` and renders its own body.
@@ -161,8 +166,12 @@ needs to record tread, it calls this section's code, not a copy of it.
 |---|---|
 | `src/AppShell.jsx` | The frame: logo, who you are, section nav, sub-tabs |
 | `src/sections.jsx` | The section registry — add a section here |
+| `src/ui.jsx` | Buttons, fields, modal, card, table styles. Shared by every section |
 | `src/TireWear.jsx` | The Tires section — fleet list, diagram, dialogs, analysis, settings |
-| `src/data.js` | Every database read and write. The only file that knows SQL exists |
+| `src/DefectsSection.jsx` | The Defects section |
+| `src/PmSection.jsx` | The PM section |
+| `src/data.js` | Tire reads and writes. The only tire file that knows SQL exists |
+| `src/shopData.js` | Defect and PM reads and writes |
 | `src/App.jsx` | Chooses between the name-badge prompt and the shell |
 | `src/Identify.jsx` | The "who is entering data" screen |
 | `src/identity.js` | Allowed email domains, and remembering you on this device |
@@ -242,6 +251,51 @@ Five configurations cover the fleet. `dump12` is the default for every DT.
 HT configs were assigned by a guess from the model name and **will need correcting
 truck by truck** as people work through them. That is expected, not a defect. The
 dropdown on the vehicle screen is there for exactly this.
+
+### Defects
+
+A defect is something wrong with a truck. Today they are typed in; once the
+Motive sync exists they will mostly arrive on their own, because **a defect is a
+mirror of an open DVIR item plus the shop's workflow on top**.
+
+That split is the thing to hold onto. The Motive columns — category, note,
+driver, how many times it has been reported — are refreshed on every sync.
+The workflow columns — claimed, repaired, hours, work order — belong to the shop
+and survive a refresh. `defect_key` is how a Motive item is recognised across
+syncs, and **gone from Motive means fixed, so it closes.** A defect the shop
+finds itself is `source = 'manual'` with a key no sync will ever produce, so
+reconciling against Motive can never close it by accident.
+
+The Open list sorts out of service first, then major, then oldest. A truck that
+cannot legally roll outranks a truck with a broken mirror, however long the
+mirror has been broken.
+
+Reopening a repaired defect clears the repair details. A `repaired_by` sitting
+on a defect that is not repaired is a lie in the record, and the database
+refuses the half-written version of it too.
+
+### Preventive maintenance
+
+A **program** is a service and how often it comes due: by miles, by months, or
+both. **Whichever trigger fires first wins.** `lead_miles` and `lead_days` are
+how early the warning starts — an oil change with a 1,500 mile lead goes amber
+at 13,500 miles into a 15,000 mile interval.
+
+A **completion** is a service actually performed. The newest one for a truck and
+program is the baseline the next due date counts from; the older ones are the
+history, and they stay.
+
+**A program with no completion recorded against a truck has no baseline, and
+reports `nobaseline` — not overdue.** This is the same rule as a tire with only
+its mount reading, and for the same reason: you cannot know a truck is late for
+an oil change if nobody ever wrote down the last one. 134 trucks against 12
+programs is 1,608 pairs, all of them starting with no baseline, so the board
+says so plainly rather than drowning the shop in false overdues. Recording the
+last service anyone remembers starts the clock.
+
+Due dates are worked out against `tw_vehicle_meter`, which is the latest row in
+the same `tw_odometer_log` the tire screens use. One answer to "how far has this
+truck run", so PM and tires can never disagree about it.
 
 ### The wear rate
 
@@ -337,6 +391,16 @@ See `schema.sql` for the full definition. The shape:
   a future Motive sync.
 - **`tw_settings`** — single row, pull thresholds.
 - **`tw_tire_brands`** — the brand dropdown. Adding a vendor is a row insert.
+- **`tw_defects`** — one row per fault. Motive-sourced columns plus the shop's
+  workflow; see Defects above.
+- **`tw_pm_programs`** — the services and their intervals.
+- **`tw_pm_completions`** — one row per service performed. Newest is the baseline.
+
+Two more views:
+
+- **`tw_vehicle_meter`** — the latest odometer per truck, in one place.
+- **`tw_pm_due`** — every active truck against every active program, with
+  whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
 
 Two views do the arithmetic so it lives in one place and cannot drift between screens:
 
