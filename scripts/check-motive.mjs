@@ -8,7 +8,7 @@
    choice is made on evidence.
 
    Run:
-     SYNC_URL=https://tirewear.netlify.app SYNC_TOKEN=... node scripts/check-motive.mjs
+     SYNC_URL=https://allenhaul.netlify.app SYNC_TOKEN=... node scripts/check-motive.mjs
      ... node scripts/check-motive.mjs --write        (actually sync)
      ... node scripts/check-motive.mjs --since 2026-07-28
 */

@@ -13,16 +13,29 @@ import {
   todayISO, WHICH_ODOMETER,
 } from "./motive.mjs";
 
+/* SUPABASE_URL / SUPABASE_ANON_KEY rather than the VITE_ ones, because a
+   VITE_ prefix means "gets compiled into the browser bundle" and those
+   are scoped to builds only — a function reading them at runtime sees
+   nothing. The VITE_ names are still accepted as a fallback so a local
+   .env.local with only those in it keeps working. Same values either
+   way; the anon key is public by design. */
 export function env() {
   const motiveKey = process.env.MOTIVE_API_KEY;
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.VITE_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   const missing = [
     !motiveKey && "MOTIVE_API_KEY",
-    !url && "VITE_SUPABASE_URL",
-    !key && "VITE_SUPABASE_ANON_KEY",
+    !url && "SUPABASE_URL",
+    !key && "SUPABASE_ANON_KEY",
   ].filter(Boolean);
-  if (missing.length) throw new Error(`Not configured: ${missing.join(", ")} is not set`);
+  if (missing.length) {
+    throw new Error(
+      `Not configured: ${missing.join(", ")} is not set. Netlify bakes ` +
+      `environment variables into a function at deploy time, and only ` +
+      `those scoped to Functions, so check both the scope and that a ` +
+      `deploy has run since the variable was saved.`
+    );
+  }
   return { motiveKey, db: createClient(url, key) };
 }
 

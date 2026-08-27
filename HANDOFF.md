@@ -2,7 +2,7 @@
 
 **The Allen Company · Haul Division**
 Prepared 08/24/2026 · Owner: Jason Ward, Superintendent, Haul Division
-Built and deployed 08/24/2026 · Live at https://tirewear.netlify.app
+Built and deployed 08/24/2026 · Live at https://allenhaul.netlify.app
 
 ---
 
@@ -25,7 +25,7 @@ tread depth against mileage. That is the whole job.
 
 ## Current state
 
-**Built and running.** The app is live at `tirewear.netlify.app`, backed by Supabase.
+**Built and running.** The app is live at `allenhaul.netlify.app`, backed by Supabase.
 Open it, type your Allen email, and you are in — no password and nothing to wait for.
 Everything entered is shared: what the shop records, the office sees.
 
@@ -640,6 +640,19 @@ they must never reach the browser:
 
 - `MOTIVE_API_KEY` — the organisation key from the Motive dashboard.
 - `SYNC_TOKEN` — any long random string, gating the on-demand endpoint.
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` — the same values as the `VITE_` pair, under
+  names without the prefix.
+
+That last one is not duplication for its own sake. A `VITE_` variable is compiled into
+the browser bundle, so those two are scoped to **Builds** only, and a function reading
+them at runtime sees nothing at all. The unprefixed pair is scoped to **Functions**.
+
+Two things about Netlify environment variables that cost an afternoon:
+
+- They are baked into a function **at deploy time**. Saving a variable does nothing to
+  a function that is already deployed — it needs a new deploy before it can see it.
+- A variable has a **scope**. One scoped to Builds is invisible to Functions even
+  though both belong to the same site.
 
 ### Which odometer
 
@@ -657,7 +670,7 @@ That is checkable rather than assumed. A dry run prints both fields against the
 readings we already hold and says which one lines up:
 
 ```
-SYNC_URL=https://tirewear.netlify.app SYNC_TOKEN=... node scripts/check-motive.mjs
+SYNC_URL=https://allenhaul.netlify.app SYNC_TOKEN=... node scripts/check-motive.mjs
 ```
 
 Pass `--field true_odometer` to see the plan the other way round.
@@ -685,7 +698,7 @@ the road.
 ### Running it by hand
 
 ```
-export SYNC_URL=https://tirewear.netlify.app SYNC_TOKEN=...
+export SYNC_URL=https://allenhaul.netlify.app SYNC_TOKEN=...
 node scripts/check-motive.mjs                    # dry run, changes nothing
 node scripts/check-motive.mjs --write            # actually sync
 node scripts/check-motive.mjs --since 2026-07-28 # reach further back for defects
