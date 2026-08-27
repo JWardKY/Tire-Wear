@@ -2,7 +2,7 @@
 
 **The Allen Company · Haul Division**
 Prepared 08/24/2026 · Owner: Jason Ward, Superintendent, Haul Division
-Built and deployed 08/24/2026 · Live at https://tirewear.netlify.app
+Built and deployed 08/24/2026 · Live at https://allenhaul.netlify.app
 
 ---
 
@@ -25,7 +25,7 @@ tread depth against mileage. That is the whole job.
 
 ## Current state
 
-**Built and running.** The app is live at `tirewear.netlify.app`, backed by Supabase.
+**Built and running.** The app is live at `allenhaul.netlify.app`, backed by Supabase.
 Open it, type your Allen email, and you are in — no password and nothing to wait for.
 Everything entered is shared: what the shop records, the office sees.
 
@@ -48,12 +48,11 @@ What is done:
   and the hours roll up by mechanic and by unit.
 - **Inventory** — parts stock, a reorder list, and a CSV import from whatever the
   shop exports today. This app is the system of record for stock now.
+- **Motive sync** — a nightly Netlify Function pulls every truck's odometer and
+  any new DVIR defects. Mileage is no longer typed in.
 
 What is not:
 
-- **Motive odometer sync.** Mileage is still typed in. This is the next real feature
-  and it is described near the bottom of this document. The same Netlify Function
-  work also brings DVIR defects in on their own instead of by hand.
 - **HT axle configurations.** Assigned by a guess from the model name and still need
   correcting truck by truck. The dropdown on the vehicle screen is there for that.
 
@@ -120,6 +119,22 @@ adding a table**:
 ```
 set -a && . ./.env.local && set +a && node scripts/check-anon-access.mjs
 ```
+
+Everything at once, which is the way to run them:
+
+```
+set -a && . ./.env.local && set +a && node scripts/test-all.mjs
+```
+
+**Read the exit code, not the output.** A suite that fails to clean up prints
+`CLEANUP DID NOT FINISH`, which contains no `!!` — grepping for failure markers once
+reported a clean run that had left a row in the production database. `test-all.mjs`
+exists so that cannot happen again.
+
+The PIN suites have to create a mechanic, and the app deliberately cannot delete one.
+They clean up through `tw_purge_test_mechanic`, which refuses any address not ending in
+`@invalid` — a reserved TLD that can never be a real person. Real mechanics stay
+undeletable, which is the property the suite is testing in the first place.
 
 It names every table and view in the `public` schema, on purpose. A relation nobody
 remembered to add to the list is the one that leaks, so the script fails on a name it
@@ -214,6 +229,13 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/AllenLogo.jsx` | The company wordmark, drawn as SVG |
 | `src/index.css` | The handful of layout utilities the components use |
 | `scripts/check-anon-access.mjs` | Every relation in `public`: what anon may reach, what must stay shut, and `pin_hash` |
+| `scripts/test-all.mjs` | Runs every suite and believes the exit code |
+| `scripts/test-motive.mjs` | The Motive sync logic, on fixtures. No key needed |
+| `scripts/check-motive.mjs` | Asks a deployed sync endpoint what it would do |
+| `netlify/functions/lib/motive.mjs` | Talks to Motive and decides what should change |
+| `netlify/functions/lib/sync.mjs` | Reads our side, runs the plan, writes it |
+| `netlify/functions/motive-sync.mjs` | On demand over HTTP, dry run by default |
+| `netlify/functions/motive-nightly.mjs` | The same on a schedule, 05:00 UTC |
 | `scripts/_testkit.mjs` | Safety rig for the write tests — read this before touching them |
 | `scripts/test-tires.mjs` | Exercises the tire data layer against the real database |
 | `scripts/test-shop.mjs` | Exercises defects and PM against the real database |
@@ -596,26 +618,128 @@ appear twice in Motive with one record deactivated; take the active one.
 
 ---
 
-## Motive odometer sync — the next real feature
+## The Motive sync
 
-Mileage is entered by hand today. It does not have to be. This is the highest-value
-thing left undone and it should be the first item after launch.
+Two Netlify Functions, both in `netlify/functions/`:
 
-Motive exposes engine miles per vehicle through `get_vehicle_utilization` on the fleet
-endpoint. `tw_vehicles.motive_vehicle_id` is already populated for all 134 units, so the
-join is done.
+| File | What it is |
+|---|---|
+| `lib/motive.mjs` | Talks to Motive, and decides what should change. No database. |
+| `lib/sync.mjs` | Reads our side, runs the plan, writes it. |
+| `motive-sync.mjs` | On demand over HTTP. Dry run unless told otherwise. |
+| `motive-nightly.mjs` | The same thing on a schedule, 05:00 UTC. |
 
-Suggested shape: a scheduled Supabase Edge Function, nightly, writing one
-`tw_odometer_log` row per vehicle with `source = 'motive'`. The `source` column already
-accepts `'motive'` and the app already shows it. Then the walk-around screen
-pre-fills the odometer and the person with the gauge only types tread depths.
+Shared code lives in `lib/` deliberately. Netlify turns **every top-level file** in the
+functions directory into a deployed, publicly reachable function — so helpers named
+`_motive.mjs` and `_sync.mjs` sitting next to the real ones became two extra endpoints
+that answered `502 Runtime.HandlerNotFound` and printed an internal stack trace. A
+subdirectory is not auto-discovered, so `lib/` is the fix. Anything shared goes there.
 
-Two cautions from prior work against this API:
+Two environment variables, set in the Netlify UI, **not** prefixed `VITE_` because
+they must never reach the browser:
 
-- Pagination is quirky. Page through explicitly and verify counts rather than trusting
-  a single response.
-- Some units have no ELD device attached and will return nothing. Fall back to the last
-  manual entry rather than writing a zero.
+- `MOTIVE_API_KEY` — the organisation key from the Motive dashboard.
+- `SYNC_TOKEN` — any long random string, gating the on-demand endpoint.
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` — the same values as the `VITE_` pair, under
+  names without the prefix.
+
+That last one is not duplication for its own sake. A `VITE_` variable is compiled into
+the browser bundle, so those two are scoped to **Builds** only, and a function reading
+them at runtime sees nothing at all. The unprefixed pair is scoped to **Functions**.
+
+Two things about Netlify environment variables that cost an afternoon:
+
+- They are baked into a function **at deploy time**. Saving a variable does nothing to
+  a function that is already deployed — it needs a new deploy before it can see it.
+- A variable has a **scope**. One scoped to Builds is invisible to Functions even
+  though both belong to the same site.
+
+### Which odometer
+
+Motive returns two numbers per truck. `odometer` is the engine's own, the one on the
+dash. `true_odometer` is Motive's calibrated distance, and Motive's docs recommend it
+for service scheduling.
+
+**We take `odometer`.** Not because it is better in the abstract, but because every
+reading already in this app was typed in by somebody reading a dash, and tire wear
+here is the difference between the odometer when a tire was mounted and the odometer
+now. Mixing the two would not look wrong — it would quietly produce wear rates that
+are wrong, on the one screen the whole tool exists to make trustworthy.
+
+That is checkable rather than assumed. A dry run prints both fields against the
+readings we already hold and says which one lines up:
+
+```
+SYNC_URL=https://allenhaul.netlify.app SYNC_TOKEN=... node scripts/check-motive.mjs
+```
+
+Pass `--field true_odometer` to see the plan the other way round.
+
+### Nothing is ever written backwards
+
+An odometer only goes up. If Motive reports fewer miles than we already hold for a
+truck — from the log or from what a tire was mounted at — the reading is **refused and
+reported**, never written. A backwards reading in the middle of a wear calculation
+produces negative miles run, and the number that comes out of that looks plausible.
+
+### A DVIR is mostly not defects
+
+Motive returns **every line of the checklist**, not just the faults. An entry with
+`type: "none"` means the driver looked at it and it was fine. Thirty days of those came
+to **2,967 rows, of which a couple of dozen were real defects.** Only `minor` and
+`major` are imported; the rest are counted and dropped, and the dry run reports the
+count so that if it ever falls to zero somebody notices the filter has broken before
+the board fills with "Air Lines — fine".
+
+Every field in an inspection report sits one level lower than Motive documents it:
+`defects[].defect.{...}`, the report is keyed `log_id` rather than `id`, and there is no
+nested vehicle object at all — only `vehicle_number`, so defects match on the unit
+number rather than the Motive id. Same story on the odometer, which lives in
+`current_location`, not on the vehicle. **Check a real response before trusting the
+documentation on this API.**
+
+`picture_url` is deliberately not stored: it is a signed S3 link that expires in fifteen
+minutes, so keeping it would save a dead link.
+
+### Repeat defects
+
+Motive issues a fresh defect id on every inspection, so the same cracked mirror written
+up on Monday and again on Tuesday arrives as two unrelated defects. A defect matching
+one already **open** on the same unit, category *and note* bumps `report_count` and
+`last_reported` instead of opening a second row.
+
+The note is part of that key on purpose. Motive's commonest category is literally
+`Other`, where the note is the only thing saying which fault it is — so merging on
+category alone would quietly fold two unrelated faults into one. Splitting when we
+should have merged leaves a visible duplicate somebody closes in a second; merging when
+we should have split loses a fault nobody ever sees. A **repaired** one is never matched
+against: if it was fixed and is written up again, it genuinely broke again, and that is
+a new job.
+
+An unsafe write-up upgrades a fault we had logged as minor. It never downgrades — once
+a truck is called unsafe, a later quieter report is not permission to put it back on
+the road.
+
+### Running it by hand
+
+```
+export SYNC_URL=https://allenhaul.netlify.app SYNC_TOKEN=...
+node scripts/check-motive.mjs                    # dry run, changes nothing
+node scripts/check-motive.mjs --write            # actually sync
+node scripts/check-motive.mjs --since 2026-07-28 # reach further back for defects
+```
+
+Everything is idempotent — odometer rows collide on
+`(vehicle_id, reading_date, odometer)` and defects on `defect_key` — so running twice
+is the same as running once, and a run that dies halfway can just be run again.
+
+### What this does not fix
+
+**PM still needs a first completion recorded by a human.** The due board works off the
+gap between the last time a service was done and where the truck is now. The sync
+supplies the second half. Until somebody records "we did this service, on this date, at
+this mileage", every program reports `nobaseline` rather than guessing — which is the
+right answer, but it means the PM board does not light up on its own.
 
 ---
 

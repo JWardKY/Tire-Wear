@@ -1,8 +1,14 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
 
 # Single-page app: every path serves index.html.
+# Function routes (/.netlify/functions/*) are matched before redirects,
+# so this does not swallow them.
 [[redirects]]
   from = "/*"
   to = "/index.html"

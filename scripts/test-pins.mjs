@@ -95,9 +95,11 @@ try {
   cleanupOk = await cleanup(c, [
     {
       label: "test mechanic",
-      /* the app cannot delete mechanics, by design — this is the one
-         thing the test needs a privileged hand for, so it says so */
-      run: async () => {},
+      /* The app cannot delete mechanics, by design — that is one of the
+         properties tested above. tw_purge_test_mechanic is the narrow
+         exception: it refuses any address that is not @invalid, so the
+         suite can tidy up without a real mechanic becoming deletable. */
+      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL }); },
       verify: async () => {
         /* id is granted; "*" is not, and would error into a false all-clear */
         const { count, error } = await c.from("tw_mechanics")
