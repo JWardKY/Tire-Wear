@@ -44,6 +44,10 @@ What is done:
   ones sorted to the top.
 - **PM** — twelve service programs, a due board by miles and by months, and a
   history per truck.
+- **Timecard and Hours** — mechanics book time against a truck and a cost code,
+  and the hours roll up by mechanic and by unit.
+- **Inventory** — parts stock, a reorder list, and a CSV import from whatever the
+  shop exports today. This app is the system of record for stock now.
 
 What is not:
 
@@ -108,14 +112,39 @@ What that costs, stated plainly:
 - Anyone who has the link can read every tread reading and edit or delete any of it.
 - The email on a reading says who *claimed* to take it. It is not proof.
 
-What it does **not** cost — the hole is exactly the `tw_` tables and nothing more.
-Row level security is per table, so the QC tests, the bid history and purchasing that
-share this Supabase project all still refuse anonymous access. `scripts/check-anon-access.mjs`
-asserts that; run it after any policy change:
+What it does **not** cost: row level security is per table, so the QC tests, the bid
+history and purchasing that share this Supabase project still refuse anonymous access.
+`scripts/check-anon-access.mjs` asserts that. Run it after any policy change **and after
+adding a table**:
 
 ```
 set -a && . ./.env.local && set +a && node scripts/check-anon-access.mjs
 ```
+
+It names every table and view in the `public` schema, on purpose. A relation nobody
+remembered to add to the list is the one that leaks, so the script fails on a name it
+has never heard of rather than skipping past it. It also fails if a listed name has
+been dropped or renamed, because an empty answer and a missing table look identical
+from the outside and a typo would otherwise pass forever.
+
+Two things it will not tell you:
+
+- **It only checks reads.** Postgres answers a blocked `DELETE` by matching no rows
+  instead of erroring, so the only probe that gives a straight answer on writes is an
+  `INSERT` — and one that RLS turns out to allow would leave a junk row in a
+  production database. Not a thing to do from a script that runs unattended.
+- **Six tables outside Tire Wear are open to anon**, and it reports them every run
+  rather than filing them away. `hct_jobs` and `hct_dispatch` are the Haul Cycle
+  Tracker, which has no login either. `bid_geo_pods`, `bid_geo_prices` and the views
+  `v_pod_membership` and `v_pod_prices` were opened deliberately by the bid app
+  (migrations `bid_geo_prices_for_cascade_backtest` and `v_pod_prices_readonly`).
+  None of them are Tire Wear's doing and closing one would break the app that opened
+  it — raise it with that app's owner instead.
+
+One column is held back from the browser rather than the whole table:
+`tw_mechanics.pin_hash` is not granted to `anon`, so a `select *` on that table is
+refused outright. The app asks for named columns. The check does too, and separately
+asserts that `pin_hash` itself stays refused.
 
 If this ever needs to be a real lock, in rough order of effort:
 
@@ -131,8 +160,8 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Defects, PM, Timecard and Hours are built. Still to come, from the foreman's
-mockups: Now, My jobs, Inventory, Setup.
+Defects, PM, Timecard, Hours and Inventory are built. Still to come, from the
+foreman's mockups: Now, My jobs, Setup.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -184,7 +213,7 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/theme.js` | Palette and type stacks — the only place colours are written down |
 | `src/AllenLogo.jsx` | The company wordmark, drawn as SVG |
 | `src/index.css` | The handful of layout utilities the components use |
-| `scripts/check-anon-access.mjs` | Asserts anon reaches the `tw_` tables and nothing else |
+| `scripts/check-anon-access.mjs` | Every relation in `public`: what anon may reach, what must stay shut, and `pin_hash` |
 | `scripts/_testkit.mjs` | Safety rig for the write tests — read this before touching them |
 | `scripts/test-tires.mjs` | Exercises the tire data layer against the real database |
 | `scripts/test-shop.mjs` | Exercises defects and PM against the real database |
