@@ -733,6 +733,26 @@ Everything is idempotent — odometer rows collide on
 `(vehicle_id, reading_date, odometer)` and defects on `defect_key` — so running twice
 is the same as running once, and a run that dies halfway can just be run again.
 
+### Two things the first live run turned up
+
+**Running it twice in a day adds rows rather than replacing them.** The unique key is
+`(vehicle_id, reading_date, odometer)`, so a truck that has moved since the last run
+reports a different number and that is a new reading, not a duplicate. Correct — the log
+is a history and the wear maths uses first and last — but it means the nightly is the
+normal path and hammering the on-demand endpoint inflates the log.
+
+**Three units report a device odometer rather than a dash odometer.** HT-468 (a 2013
+Hino) came back with **1 mile**, HT-1299 (2006) with 132, HT-239 (2008) with 267. Those
+are what the ELD has counted since it was fitted, not what the truck has done. None of
+the three has ever had a tire recorded against it, and there are no negative wear rows
+anywhere, so nothing is corrupted — and the guard self-corrects, since a real dash
+reading typed in later is higher and therefore accepted, after which Motive's next tiny
+number is refused for going backwards.
+
+The proper fix is in Motive, by setting the odometer offset on those three devices.
+Until then their mileage on the truck screen is wrong in an obvious way rather than a
+subtle one, which is the failure worth having.
+
 ### What this does not fix
 
 **PM still needs a first completion recorded by a human.** The due board works off the
