@@ -169,14 +169,40 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### The lock on the front door
+
+`netlify/edge-functions/gate.js` asks for one shared password before anything is
+served, and sets a signed cookie for thirty days. The password is `SITE_PASSWORD` in
+the Netlify environment.
+
+It runs at the **edge**, before the page exists, and that placement is the whole point:
+the bundle carries the Supabase key, so a password box inside the React app would stop
+nobody — view source, take the key, query the database directly. Gating here means an
+unauthenticated visitor never receives the bundle.
+
+The cookie is an HMAC of a fixed phrase keyed by the password, so it cannot be forged
+and changing the password invalidates every cookie already issued. Nothing is stored
+server side.
+
+Two deliberate holes. `/.netlify/functions/*` is excluded, because the sync endpoints
+carry their own token and are called by machines that would choke on a login page. And
+if `SITE_PASSWORD` is unset the gate lets everything through, with an `x-gate` header
+saying so, rather than failing shut — a misconfiguration should not lock the shop out
+of its own tools mid-shift.
+
+This is still not identity. The email box says who you are; the PIN on the timecard tab
+is the only thing that proves it.
+
 ### This is a shop system now, and tires are one section of it
 
 The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Defects, PM, Timecard, Hours and Inventory are built. Still to come, from the
-foreman's mockups: Now, My jobs, Setup.
+Defects, PM, Timecard, Hours, Inventory and Setup are built. Still to come, from
+the foreman's mockup: **Now** (who is on the clock, plus the KPI row — needs a punch
+clock, which does not exist yet), **Inventory purchasing** (vendors, ordering,
+requests, issued), and **work history / work orders**.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -230,6 +256,11 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/index.css` | The handful of layout utilities the components use |
 | `scripts/check-anon-access.mjs` | Every relation in `public`: what anon may reach, what must stay shut, and `pin_hash` |
 | `scripts/test-all.mjs` | Runs every suite and believes the exit code |
+| `scripts/test-setup.mjs` | The roster admin and the cost-code paste reader |
+| `netlify/edge-functions/gate.js` | The site password, checked before anything is served |
+| `src/SetupSection.jsx` | The roster and the cost codes |
+| `src/setupData.js` | Roster and cost-code I/O |
+| `src/codePaste.js` | Reads a pasted cost-code list. Pure |
 | `scripts/test-motive.mjs` | The Motive sync logic, on fixtures. No key needed |
 | `scripts/check-motive.mjs` | Asks a deployed sync endpoint what it would do |
 | `netlify/functions/lib/motive.mjs` | Talks to Motive and decides what should change |
