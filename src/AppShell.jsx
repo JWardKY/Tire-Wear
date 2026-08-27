@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import AllenLogo from "./AllenLogo.jsx";
 import { C, FB, FD, FM } from "./theme.js";
 import { SECTIONS, findSection } from "./sections.jsx";
+import SupervisorGate, { readSupervisor, forgetSupervisor } from "./SupervisorGate.jsx";
 
 /* The frame every section hangs in: the mark, who you are, the section
    nav, and the active section's own sub-tabs.
@@ -18,6 +19,9 @@ export default function AppShell({ who, onSwitchUser }) {
   const [sectionKey, setSectionKey] = useState(SECTIONS[0].key);
   const [subTabs, setSubTabs] = useState({});
   const [busy, setBusy] = useState(false);
+  /* Hours and Setup are the only two the shop floor does not open.
+     Everything else is theirs to use without a password in the way. */
+  const [supervisor, setSupervisor] = useState(() => readSupervisor());
 
   const section = findSection(sectionKey);
   const Body = section.Component;
@@ -89,6 +93,16 @@ export default function AppShell({ who, onSwitchUser }) {
               {who && (
                 <span style={{ fontFamily: FM, fontSize: 11.5, color: C.onDark }}>{who}</span>
               )}
+              {supervisor && (
+                <button onClick={() => { forgetSupervisor(); setSupervisor(null); }}
+                  title={`Signed in as ${supervisor.name} for Hours and Setup`}
+                  style={{ background: "none", border: `1px solid ${C.green600}`, borderRadius: 4,
+                    color: C.onDark, fontFamily: FD, fontSize: 12, fontWeight: 600,
+                    letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 10px",
+                    cursor: "pointer" }}>
+                  Lock {supervisor.name.split(" ")[0]}
+                </button>
+              )}
               <button onClick={onSwitchUser}
                 style={{ background: "none", border: `1px solid ${C.green600}`, borderRadius: 4,
                   color: C.onDark, fontFamily: FD, fontSize: 12, fontWeight: 600,
@@ -118,7 +132,12 @@ export default function AppShell({ who, onSwitchUser }) {
         </div>
       </div>
 
-      <Body who={who} tab={tab} onBusy={setBusy} />
+      {section.supervisor && !supervisor ? (
+        <SupervisorGate what={section.label}
+          onIn={(u) => setSupervisor(u)} />
+      ) : (
+        <Body who={who} tab={tab} onBusy={setBusy} />
+      )}
     </div>
   );
 }

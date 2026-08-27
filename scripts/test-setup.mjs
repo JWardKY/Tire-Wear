@@ -157,6 +157,34 @@ try {
   const dupe = await setup.addMechanic(`${MARK} No Email`, "mechanic");
   is(dupe.existing, true, "adding the same name again matches rather than duplicating");
 
+  /* ── The supervisor gate turns on this ────────────────────────
+     Hours and Setup let somebody in only if checkPin says their role
+     is dashboard or admin. So the role coming back has to be right,
+     and a mechanic's own PIN must not read as a supervisor's. */
+  const ALLOWED = new Set(["dashboard", "admin"]);
+
+  await setup.setRole(nid, "mechanic");
+  let rv = await setup.checkPin(nid, "9988");
+  truthy(rv.ok, "a mechanic's PIN still verifies");
+  is(rv.role, "mechanic", "and comes back as a mechanic");
+  is(ALLOWED.has(rv.role), false, "which the supervisor gate refuses");
+
+  await setup.setRole(nid, "dashboard");
+  rv = await setup.checkPin(nid, "9988");
+  is(rv.role, "dashboard", "promoted to dashboard, the role follows");
+  is(ALLOWED.has(rv.role), true, "and the gate would let them in");
+
+  await setup.setRole(nid, "admin");
+  rv = await setup.checkPin(nid, "9988");
+  is(ALLOWED.has(rv.role), true, "an admin gets in too");
+
+  /* A wrong PIN must not leak the role either. */
+  const bad2 = await setup.checkPin(nid, "0000");
+  is(bad2.ok, false, "a wrong PIN is refused");
+  is(bad2.role, undefined, "and says nothing about who they are");
+  await setup.resetPin(nid);
+  await setup.setPin(nid, "9988");
+
   const missing = await setup.resetPin("00000000-0000-0000-0000-000000000000");
   is(missing.ok, false, "resetting somebody who does not exist says so");
 } catch (e) {

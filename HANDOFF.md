@@ -293,29 +293,34 @@ hours — those are entered on the timecard, by the mechanic, behind their PIN.
 Elapsed time is recomputed from the start timestamp on every tick rather than counted
 up in the browser, so a screen left on overnight shows the truth.
 
-### The lock on the front door
+### Who can see what
 
-`netlify/edge-functions/gate.js` asks for one shared password before anything is
-served, and sets a signed cookie for thirty days. The password is `SITE_PASSWORD` in
-the Netlify environment.
+**The site is open.** No password in front of it. The shop floor has to be able to
+punch in and book hours without one, and a wall between a mechanic and their own
+timecard is a wall between the shop and using this at all.
 
-It runs at the **edge**, before the page exists, and that placement is the whole point:
-the bundle carries the Supabase key, so a password box inside the React app would stop
-nobody — view source, take the key, query the database directly. Gating here means an
-unauthenticated visitor never receives the bundle.
+**Hours and Setup ask for a supervisor.** Tap your name, enter your PIN, and you are
+let through only if your role is `dashboard` or `admin`. It reuses the roster and the
+PINs that already exist rather than adding a second shared secret: nothing new to
+remember, nothing to circulate when somebody leaves, and it records *who* looked rather
+than only that somebody did. It times out after twelve hours, because a supervisor
+screen left open on a shared tablet is the thing this is for.
 
-The cookie is an HMAC of a fixed phrase keyed by the password, so it cannot be forged
-and changing the password invalidates every cookie already issued. Nothing is stored
-server side.
+Everything else — Now, Defects, PM, Timecard, Inventory, Tires, Work orders — is open
+to anyone in the shop.
 
-Two deliberate holes. `/.netlify/functions/*` is excluded, because the sync endpoints
-carry their own token and are called by machines that would choke on a login page. And
-if `SITE_PASSWORD` is unset the gate lets everything through, with an `x-gate` header
-saying so, rather than failing shut — a misconfiguration should not lock the shop out
-of its own tools mid-shift.
+**Be honest about what this is.** The Supabase key is in the page, and it can read
+hours, parts and purchase orders. Somebody who opens the browser console can read that
+data whatever the screen shows them. This keeps people out of screens they have no
+business wandering into; it is a door with a lock, not a vault. If hours or pay ever
+need to be genuinely private, that is real per-person auth — Supabase Auth and RLS by
+role — and it is a real piece of work, not a setting.
 
-This is still not identity. The email box says who you are; the PIN on the timecard tab
-is the only thing that proves it.
+There *was* a site-wide password gate (`netlify/edge-functions/gate.js`, removed in the
+commit that added this section). It worked, and it is in the git history if the posture
+ever changes: it ran at the edge and withheld the bundle itself, which is the only way
+a password in front of a static site means anything. It was the wrong shape here
+because it locked out the people who most need to get in.
 
 ### This is a shop system now, and tires are one section of it
 

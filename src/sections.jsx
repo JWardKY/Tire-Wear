@@ -61,6 +61,7 @@ export const SECTIONS = [
   },
   {
     key: "hours",
+    supervisor: true,
     label: "Hours",
     blurb: "Where the shop's hours went, by mechanic, by unit and by cost code",
     subTabs: [
@@ -104,6 +105,7 @@ export const SECTIONS = [
   },
   {
     key: "setup",
+    supervisor: true,
     label: "Setup",
     blurb: "The roster and the cost codes everything else books against",
     subTabs: [["roster", "Mechanics"], ["codes", "Cost codes"]],
