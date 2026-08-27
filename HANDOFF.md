@@ -179,9 +179,48 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/AllenLogo.jsx` | The company wordmark, drawn as SVG |
 | `src/index.css` | The handful of layout utilities the components use |
 | `scripts/check-anon-access.mjs` | Asserts anon reaches the `tw_` tables and nothing else |
+| `scripts/_testkit.mjs` | Safety rig for the write tests — read this before touching them |
+| `scripts/test-tires.mjs` | Exercises the tire data layer against the real database |
+| `scripts/test-shop.mjs` | Exercises defects and PM against the real database |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
+
+### Testing against the database people are using
+
+There is no staging copy. `scripts/test-tires.mjs` and `scripts/test-shop.mjs`
+write to the same database the shop has open, so they are built to survive
+that. The rules are in `scripts/_testkit.mjs` and are worth reading before
+changing either script:
+
+- Every row a test creates carries a marker, and cleanup deletes by that
+  marker and nothing else.
+- Cleanup runs in a `finally`, and the script cannot exit before it. Fail by
+  throwing; never `process.exit()` mid-test.
+- Anything a test *changes* rather than creates is read first and put back to
+  what it was — never to what the test assumed it was.
+- Tests ask for an idle truck (no tires, no mileage) rather than naming a
+  favourite, and skip the write path entirely rather than write to one the
+  shop is using.
+- If cleanup fails it says so loudly, with the SQL to run by hand.
+
+All five exist because the first version broke them. It exited early on a
+failed assertion and left an out-of-service defect at the top of the shop's
+board, and it restored an axle config to a hardcoded `dump12` — which would
+have quietly corrupted any truck someone had corrected.
+
+Run them:
+
+```
+set -a && . ./.env.local && set +a && node scripts/test-tires.mjs
+set -a && . ./.env.local && set +a && node scripts/test-shop.mjs
+```
+
+**When this stops being good enough:** the moment a test needs to write
+something a person would act on — hours against a real mechanic's name, for
+instance. At that point spin up a Supabase branch per run (about $0.013 an
+hour, so pennies) and point the scripts at its URL and key instead. Nothing in
+them assumes production; only `.env.local` does.
 
 ### Look and feel
 
