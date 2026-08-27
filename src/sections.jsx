@@ -1,18 +1,40 @@
 import TiresSection from "./TireWear.jsx";
+import DefectsSection from "./DefectsSection.jsx";
+import PmSection from "./PmSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
    component — the shell renders the nav, owns which section is showing,
    and keeps each section's sub-tab separate from the others'.
 
-   Order is the order they appear. `blurb` is the line under the logo, so
-   the header says what you are looking at rather than always saying
-   tires.
+   Order is the order they appear, and it is deliberate: what is broken
+   comes before what is due, which comes before what is wearing out.
+   `blurb` is the line under the logo, so the header says what you are
+   looking at rather than always saying tires.
 
-   Sections still to come, per the shop foreman's mockups: Now, Timecard,
-   My jobs, Defects, PM, Inventory, Hours, Setup. Tires is the one that
-   already exists, and it moves in unchanged. */
+   Still to come, per the shop foreman's mockups: Now, Timecard, My jobs,
+   Inventory, Hours, Setup. */
 
 export const SECTIONS = [
+  {
+    key: "defects",
+    label: "Defects",
+    blurb: "What is wrong with the fleet, who has it, and what was done",
+    subTabs: [
+      ["open", "Open"],
+      ["repaired", "Repaired"],
+    ],
+    Component: DefectsSection,
+  },
+  {
+    key: "pm",
+    label: "PM",
+    blurb: "Preventive maintenance due by miles and by months",
+    subTabs: [
+      ["due", "Due"],
+      ["programs", "Programs"],
+    ],
+    Component: PmSection,
+  },
   {
     key: "tires",
     label: "Tires",
