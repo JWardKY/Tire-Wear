@@ -172,9 +172,12 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/PmSection.jsx` | The PM section |
 | `src/TimecardSection.jsx` | The Timecard section — the PIN gate lives here |
 | `src/HoursSection.jsx` | The Hours rollups. Read only |
+| `src/InventorySection.jsx` | The Inventory section, including the CSV import |
 | `src/data.js` | Tire reads and writes. The only tire file that knows SQL exists |
 | `src/shopData.js` | Defect and PM reads and writes |
 | `src/timeData.js` | Mechanics, PINs, cost codes and timecards |
+| `src/partsData.js` | Parts reads and writes |
+| `src/csvImport.js` | Reading a parts export and planning an import. Pure, no database |
 | `src/App.jsx` | Chooses between the name-badge prompt and the shell |
 | `src/Identify.jsx` | The "who is entering data" screen |
 | `src/identity.js` | Allowed email domains, and remembering you on this device |
@@ -187,6 +190,7 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/test-shop.mjs` | Exercises defects and PM against the real database |
 | `scripts/test-pins.mjs` | The PIN security properties — run this after any auth change |
 | `scripts/test-timecards.mjs` | Exercises the timecard data layer |
+| `scripts/test-parts.mjs` | The CSV reader, the import planner, and stock movements |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
@@ -341,6 +345,38 @@ Due dates are worked out against `tw_vehicle_meter`, which is the latest row in
 the same `tw_odometer_log` the tire screens use. One answer to "how far has this
 truck run", so PM and tires can never disagree about it.
 
+### Parts, and why on_hand is never written directly
+
+**This app is the system of record for stock.** The shop exports from
+whatever it used before, imports the CSV here, and everything lives here
+afterwards.
+
+The rule the whole section is built on: **`on_hand` is never written
+directly.** Issuing, receiving, counting the shelf and importing all go in
+as rows in `tw_part_txns`, and a database trigger moves the number. The count
+and the log therefore cannot disagree, and "why is there one left" always has
+an answer. Do not add a screen that updates `on_hand` — add a transaction.
+
+That includes the import. Bringing a CSV in writes an `import` transaction for
+the *difference*, so re-importing a corrected export reads as a correction
+rather than silently rewriting the count. New parts get their opening balance
+the same way, so there is one code path and the log reads the same either way.
+
+**The importer reads column names rather than dictating a template**, because
+the export format is whatever the old system produces. `src/csvImport.js` holds
+that logic and touches nothing — `parseCSV`, `guessMapping` and `planImport`
+are pure, so they can be reasoned about and tested on their own. Matching is
+two passes, every exact match before any fuzzy one: a single greedy pass filed
+"Unit Cost" as the unit of measure, because `uom` hints on "unit".
+
+Nothing is written until somebody has seen the plan: how many parts are new,
+which quantities change and by how much, and which rows were skipped and why.
+A stock import that silently rewrites hundreds of counts is not something to
+run blind.
+
+Issuing more than is available warns but goes through. The shelf is the truth
+and the count should follow it.
+
 ### Timecards, and what the PIN is really worth
 
 Every hour on a timecard carries a **cost code** — that is the whole reason
@@ -482,6 +518,10 @@ See `schema.sql` for the full definition. The shape:
 - **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Other.
 - **`tw_time_entries`** — one row per chunk of work. A cost code is required,
   and so is either a truck or a label.
+- **`tw_parts`** — a part at a shop. The same number at two shops is two lines,
+  because a bearing at Clays Ferry is no use to somebody at Nicholasville.
+- **`tw_part_txns`** — every movement. A trigger applies each one to
+  `tw_parts.on_hand`; nothing else may touch that column.
 
 Two more views:
 
@@ -489,6 +529,8 @@ Two more views:
 - **`tw_pm_due`** — every active truck against every active program, with
   whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
 - **`tw_hours`** — time entries joined to the mechanic, unit and cost code.
+- **`tw_parts_reorder`** — parts with a `stock_state` of out / low / ok /
+  no reorder point / untracked, and a suggested order quantity.
 
 And three functions, which are the only path to a PIN:
 `tw_mechanic_register`, `tw_mechanic_verify_pin`, `tw_mechanic_change_pin`.
