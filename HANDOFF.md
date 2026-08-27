@@ -131,8 +131,8 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Defects and PM are built. Still to come, from the foreman's mockups: Now,
-Timecard, My jobs, Inventory, Hours, Setup.
+Defects, PM, Timecard and Hours are built. Still to come, from the foreman's
+mockups: Now, My jobs, Inventory, Setup.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -170,8 +170,11 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/TireWear.jsx` | The Tires section — fleet list, diagram, dialogs, analysis, settings |
 | `src/DefectsSection.jsx` | The Defects section |
 | `src/PmSection.jsx` | The PM section |
+| `src/TimecardSection.jsx` | The Timecard section — the PIN gate lives here |
+| `src/HoursSection.jsx` | The Hours rollups. Read only |
 | `src/data.js` | Tire reads and writes. The only tire file that knows SQL exists |
 | `src/shopData.js` | Defect and PM reads and writes |
+| `src/timeData.js` | Mechanics, PINs, cost codes and timecards |
 | `src/App.jsx` | Chooses between the name-badge prompt and the shell |
 | `src/Identify.jsx` | The "who is entering data" screen |
 | `src/identity.js` | Allowed email domains, and remembering you on this device |
@@ -182,6 +185,8 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/_testkit.mjs` | Safety rig for the write tests — read this before touching them |
 | `scripts/test-tires.mjs` | Exercises the tire data layer against the real database |
 | `scripts/test-shop.mjs` | Exercises defects and PM against the real database |
+| `scripts/test-pins.mjs` | The PIN security properties — run this after any auth change |
+| `scripts/test-timecards.mjs` | Exercises the timecard data layer |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
@@ -336,6 +341,44 @@ Due dates are worked out against `tw_vehicle_meter`, which is the latest row in
 the same `tw_odometer_log` the tire screens use. One answer to "how far has this
 truck run", so PM and tires can never disagree about it.
 
+### Timecards, and what the PIN is really worth
+
+Every hour on a timecard carries a **cost code** — that is the whole reason
+the timecard exists. Payroll cannot charge hours out without one, so the app
+refuses to save a line without it. Every hour also needs a home: a truck, or
+a label saying what it was instead (plant work, a parts run, a safety
+meeting). The database enforces both.
+
+The fourteen cost codes are Allen's own, grouped Vehicle / Plant / Other.
+
+**There is no roster yet, so the roster builds itself.** The first time
+somebody opens their timecard they enter their name and choose a four digit
+PIN, which creates their `tw_mechanics` row. When the real list arrives it
+can be reconciled against what is there. Once it does, self-registration is
+the thing to turn off.
+
+**What the PIN is:** it stops a colleague opening your timecard on a shared
+shop tablet. That is the thing that actually happens in a shop, and it is
+handled properly — bcrypt, and the browser is never allowed to read the hash.
+`tw_mechanics` is read-only to the app: the grants withhold `pin_hash`, every
+write goes through a `security definer` function, and five wrong guesses locks
+the account for fifteen minutes. `scripts/test-pins.mjs` asserts all of that
+and should be run after any change near it.
+
+**What the PIN is not:** protection against somebody who lifts the anon key
+out of the page and posts to the database directly. Nothing client-side can
+be. Hours are protected exactly as much as everything else here — the site
+password keeps strangers out, the PIN keeps colleagues honest. If hours ever
+need to be *provable* rather than merely attributed, that is real auth, and it
+is a bigger change than a PIN.
+
+The PIN unlocks for one browser tab, in `sessionStorage`. A tablet left on a
+bench re-locks when the tab closes.
+
+**Hours is read only.** It adds up what mechanics entered and never edits it.
+It shows everybody's hours to anybody who is in the site, which is the
+consequence of there being no roles yet; roles arrive with the roster.
+
 ### The wear rate
 
 A tire's history is a series of `(odometer, depth)` points. The mount record supplies
@@ -434,12 +477,21 @@ See `schema.sql` for the full definition. The shape:
   workflow; see Defects above.
 - **`tw_pm_programs`** — the services and their intervals.
 - **`tw_pm_completions`** — one row per service performed. Newest is the baseline.
+- **`tw_mechanics`** — who enters hours. Read-only to the app; `pin_hash` is
+  withheld by column grant and only the PIN functions touch it.
+- **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Other.
+- **`tw_time_entries`** — one row per chunk of work. A cost code is required,
+  and so is either a truck or a label.
 
 Two more views:
 
 - **`tw_vehicle_meter`** — the latest odometer per truck, in one place.
 - **`tw_pm_due`** — every active truck against every active program, with
   whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
+- **`tw_hours`** — time entries joined to the mechanic, unit and cost code.
+
+And three functions, which are the only path to a PIN:
+`tw_mechanic_register`, `tw_mechanic_verify_pin`, `tw_mechanic_change_pin`.
 
 Two views do the arithmetic so it lives in one place and cannot drift between screens:
 

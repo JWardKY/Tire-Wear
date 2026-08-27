@@ -27,6 +27,12 @@ import { createClient } from "@supabase/supabase-js";
 
 export const MARK = "AUTOMATED-TEST-DO-NOT-USE";
 
+/* Mechanics are deliberately not deletable by the app — that is a
+   property the PIN tests check — so any test that needs one leaves a
+   row behind. Both tests use THIS email so there is only ever one to
+   clear, and both print the SQL for it. */
+export const TEST_MECHANIC = "pin-test@invalid";
+
 export function client() {
   const url = process.env.VITE_SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY;
@@ -91,7 +97,13 @@ export async function cleanup(c, steps) {
     try {
       await run();
       const left = verify ? await verify() : 0;
-      if (left) leaks.push({ label, left, manual });
+      /* A verify that cannot answer must not be read as "nothing left".
+         The first version counted with select("*"), which anon is denied
+         on tw_mechanics — the error came back as undefined and got
+         treated as a clean sweep while the row was still sitting there. */
+      if (left === null || left === undefined || Number.isNaN(left)) {
+        leaks.push({ label, left: "unknown — the check itself failed", manual });
+      } else if (left) leaks.push({ label, left, manual });
     } catch (e) {
       leaks.push({ label, left: "?", manual, error: e.message });
     }
