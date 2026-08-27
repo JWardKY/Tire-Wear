@@ -50,7 +50,8 @@ export default async (req) => {
   const out = { write: wants, at: new Date().toISOString() };
   try {
     /* What Motive actually sent, for when it disagrees with the docs. */
-    if (q.get("raw") === "1") return json(200, { raw: await rawSample(ctx) });
+    if (q.get("raw") === "1")
+      return json(200, { raw: await rawSample(ctx, what, q.get("since")) });
     if (what === "odometer" || what === "both")
       out.odometer = await runOdometer(ctx, { write: wants, field: q.get("field") });
     if (what === "defects" || what === "both")

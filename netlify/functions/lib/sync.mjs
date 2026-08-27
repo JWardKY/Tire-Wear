@@ -9,6 +9,7 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   fetchVehicleOdometers, fetchInspectionDefects, fetchRawVehicles,
+  fetchRawInspections,
   planOdometer, planDefects, compareOdometers,
   todayISO, WHICH_ODOMETER,
 } from "./motive.mjs";
@@ -73,8 +74,10 @@ async function latestOdometers(db) {
   return latest;
 }
 
-export async function rawSample({ motiveKey }) {
-  return await fetchRawVehicles(motiveKey, 2);
+export async function rawSample({ motiveKey }, what, since) {
+  return what === "defects"
+    ? await fetchRawInspections(motiveKey, since || daysAgo(14), 2)
+    : await fetchRawVehicles(motiveKey, 2);
 }
 
 export async function runOdometer({ motiveKey, db }, { write, field }) {

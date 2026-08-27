@@ -96,6 +96,12 @@ export async function fetchVehicleOdometers(key) {
   });
 }
 
+export async function fetchRawInspections(key, sinceISO, n = 2) {
+  const d = await motive("/v1/inspection_reports", key,
+    { start_date: sinceISO, status: "with_defects", per_page: n, page_no: 1 });
+  return (d.inspection_reports || []).slice(0, n);
+}
+
 export async function fetchInspectionDefects(key, sinceISO) {
   const rows = await motiveAll(
     "/v1/inspection_reports", key,
