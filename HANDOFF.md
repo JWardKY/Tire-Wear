@@ -44,6 +44,10 @@ What is done:
   ones sorted to the top.
 - **PM** — twelve service programs, a due board by miles and by months, and a
   history per truck.
+- **Timecard and Hours** — mechanics book time against a truck and a cost code,
+  and the hours roll up by mechanic and by unit.
+- **Inventory** — parts stock, a reorder list, and a CSV import from whatever the
+  shop exports today. This app is the system of record for stock now.
 
 What is not:
 
@@ -156,8 +160,8 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Defects, PM, Timecard and Hours are built. Still to come, from the foreman's
-mockups: Now, My jobs, Inventory, Setup.
+Defects, PM, Timecard, Hours and Inventory are built. Still to come, from the
+foreman's mockups: Now, My jobs, Setup.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
