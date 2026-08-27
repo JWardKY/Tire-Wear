@@ -1,3 +1,4 @@
+import NowSection from "./NowSection.jsx";
 import TiresSection from "./TireWear.jsx";
 import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
@@ -19,6 +20,12 @@ import SetupSection from "./SetupSection.jsx";
    And the Motive sync, which is waiting on an API key. */
 
 export const SECTIONS = [
+  {
+    key: "now",
+    label: "Now",
+    blurb: "Who is on the clock, and the shop at a glance",
+    Component: NowSection,
+  },
   {
     key: "defects",
     label: "Defects",

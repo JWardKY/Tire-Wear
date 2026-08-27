@@ -169,6 +169,26 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### The clock is not the timecard
+
+`tw_shifts` says a mechanic is in the shop. `tw_time_entries` says what the work was
+and what it charges to. They are deliberately separate: the Now board has to show
+somebody from the moment they punch in, not once they have filled a form in, and the
+two answer genuinely different questions.
+
+One open shift per mechanic, enforced by a partial unique index rather than by the
+app, because pressing the button twice is exactly what happens when a shop tablet is
+slow. The second press comes back as "Already on the clock" instead of a database
+error on a wall-mounted screen.
+
+A shift still open from a previous day is flagged **stale** and can be closed from the
+board. A nineteen hour timer is a missed punch-out, not a long day, and showing it as
+though it were real would make the whole board untrustworthy. Closing one books no
+hours — those are entered on the timecard, by the mechanic, behind their PIN.
+
+Elapsed time is recomputed from the start timestamp on every tick rather than counted
+up in the browser, so a screen left on overnight shows the truth.
+
 ### The lock on the front door
 
 `netlify/edge-functions/gate.js` asks for one shared password before anything is
@@ -199,10 +219,9 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Defects, PM, Timecard, Hours, Inventory and Setup are built. Still to come, from
-the foreman's mockup: **Now** (who is on the clock, plus the KPI row — needs a punch
-clock, which does not exist yet), **Inventory purchasing** (vendors, ordering,
-requests, issued), and **work history / work orders**.
+Now, Defects, PM, Timecard, Hours, Inventory, Tires and Setup are built. Still to
+come, from the foreman's mockup: **Inventory purchasing** (vendors, ordering,
+requests, issued) and **work history / work orders**.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -257,6 +276,9 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/check-anon-access.mjs` | Every relation in `public`: what anon may reach, what must stay shut, and `pin_hash` |
 | `scripts/test-all.mjs` | Runs every suite and believes the exit code |
 | `scripts/test-setup.mjs` | The roster admin and the cost-code paste reader |
+| `scripts/test-now.mjs` | The punch clock and the board numbers |
+| `src/NowSection.jsx` | Who is on the clock, and the shop at a glance |
+| `src/nowData.js` | Shifts and the board numbers |
 | `netlify/edge-functions/gate.js` | The site password, checked before anything is served |
 | `src/SetupSection.jsx` | The roster and the cost codes |
 | `src/setupData.js` | Roster and cost-code I/O |

@@ -28,13 +28,13 @@ const OPEN_BY_DESIGN = [
   "tw_vehicles", "tw_tires", "tw_tread_readings", "tw_odometer_log",
   "tw_settings", "tw_tire_brands", "tw_defects", "tw_pm_programs",
   "tw_pm_completions", "tw_cost_codes", "tw_time_entries",
-  "tw_parts", "tw_part_txns",
+  "tw_parts", "tw_part_txns", "tw_shifts",
   /* Not select(*): pin_hash is not granted to anon, so asking for every
      column is refused outright and reads as a broken table. Probe the
      columns the app actually asks for. */
   ["tw_mechanics", "id, name, email, active, pin_set"],
   "tw_active_tires", "tw_tire_wear", "tw_vehicle_meter", "tw_pm_due",
-  "tw_hours", "tw_parts_reorder",
+  "tw_hours", "tw_parts_reorder", "tw_on_clock",
 ];
 
 /* Open to anon, but not by us and not ours to close. Reported every run
