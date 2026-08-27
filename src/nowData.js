@@ -129,3 +129,108 @@ export function fmtHMS(sec) {
   const s = sec % 60;
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/* ── The shift card on a mechanic's own timecard ──────────────────
+   More than a punch. Both times are editable and there is a lunch
+   deduction, because a clock a mechanic cannot correct is one they stop
+   using the first morning they forget to punch in. */
+
+export async function shiftForDay(mechanicId, dateISO) {
+  const { data, error } = await supabase
+    .from("tw_shift_days").select("*")
+    .eq("mechanic_id", mechanicId).eq("work_date", dateISO)
+    .order("started_at", { ascending: false });
+  if (error) throw error;
+  if (!data?.length) return null;
+  /* Somebody can punch more than once in a day — in after lunch, or
+     after a shift was closed for them. The one that matters is the one
+     still running; failing that, the most recent. Taking the first of
+     the day would hand back a shift that finished hours ago. */
+  const row = data.find((r) => r.ended_at === null) || data[0];
+  const data_ = row;
+  return {
+    id: data_.id, date: data_.work_date,
+    startedAt: data_.started_at, endedAt: data_.ended_at,
+    lunch: Number(data_.lunch_minutes),
+    clockHours: Number(data_.clock_hours),
+    open: !!data_.open,
+  };
+}
+
+/* The one you just edited, by id. Re-reading by day would be wrong
+   straight after a correction: back-dating a shift can put an earlier
+   punch ahead of it in the day's order. */
+export async function shiftById(id) {
+  const { data, error } = await supabase
+    .from("tw_shift_days").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: data.id, date: data.work_date,
+    startedAt: data.started_at, endedAt: data.ended_at,
+    lunch: Number(data.lunch_minutes),
+    clockHours: Number(data.clock_hours),
+    open: !!data.open,
+  };
+}
+
+/* Times come in as "HH:MM" against the shift's own date, which is how
+   somebody types a correction. */
+export async function editShift(shiftId, dateISO, { start, stop, lunch }) {
+  const at = (hm) => (hm ? new Date(`${dateISO}T${hm}:00`).toISOString() : null);
+  const cols = {};
+  if (start !== undefined) cols.started_at = at(start);
+  if (stop !== undefined) cols.ended_at = at(stop);
+  if (lunch !== undefined) cols.lunch_minutes = Number(lunch) || 0;
+
+  /* A stop before the start means it ran past midnight, so the stop
+     belongs to the next day. Storing it as typed would give a negative
+     shift, and the check constraint would refuse the row anyway. */
+  if (cols.started_at && cols.ended_at && cols.ended_at < cols.started_at) {
+    const d = new Date(cols.ended_at);
+    d.setUTCDate(d.getUTCDate() + 1);
+    cols.ended_at = d.toISOString();
+  }
+  const { error } = await supabase.from("tw_shifts").update(cols).eq("id", shiftId);
+  if (error) throw error;
+}
+
+/* Hours on the clock against hours booked to a truck and a code. The
+   gap is the point: it catches somebody who clocked nine and booked
+   six, on their own screen, while they can still remember why. */
+export function accountedFor(clockHours, entries) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const booked = r2(entries.reduce((a, e) => a + (Number(e.hours) || 0), 0));
+  const total = r2(clockHours || 0);
+  const diff = r2(total - booked);
+
+  const kindOf = (e) =>
+    e.where === "road" ? "call" : e.where === "plant" ? "idle" : "shop";
+
+  const scale = Math.max(total, booked) || 1;
+  const segments = entries
+    .filter((e) => Number(e.hours) > 0)
+    .map((e) => ({
+      label: e.unit || "—",
+      hours: Number(e.hours),
+      kind: kindOf(e),
+      pct: (Number(e.hours) / scale) * 100,
+    }));
+
+  let note, tone;
+  if (!total) { note = "Enter a start and stop time to begin."; tone = "muted"; }
+  else if (diff > 0.01) {
+    note = `${diff.toFixed(2)} hrs still need a unit or a shop code.`; tone = "warn";
+  } else if (diff < -0.01) {
+    note = `${Math.abs(diff).toFixed(2)} hrs more than the clock shows. Check your hours.`;
+    tone = "warn";
+  } else { note = "Every hour is accounted for."; tone = "ok"; }
+
+  return { total, booked, diff, segments, note, tone };
+}
+
+export const hm = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};

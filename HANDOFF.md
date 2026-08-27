@@ -219,6 +219,29 @@ spec allows and says nothing about it. Past 1,800 characters the screen refuses 
 mail link and offers the text to copy instead — a silently cut-off purchase order is
 worse than no purchase order.
 
+### The mechanic's own side of it
+
+Three things a mechanic needs that the office views do not give them.
+
+**The shift card** is more than a punch. Both times are editable and there is a lunch
+deduction, because the mockup says "the clock fills these in, type over them if you
+forgot to punch" — and a clock nobody can correct is one they stop using the first
+morning they forget it. A stop earlier than the start means the shift ran past
+midnight, so the stop moves to the next day rather than going negative.
+
+Under it, **time accounted for** reconciles the two numbers that matter: hours on the
+clock against hours booked to a truck and a code. The gap is the whole point — it
+catches somebody who clocked nine and booked six, on their own screen, while they can
+still remember why. Over-booking is flagged just as loudly as under-booking.
+
+**My jobs** is the same data as Defects and PM, scoped to one person. A mechanic
+standing at a truck wants their own three jobs, not the shop's sixty; the Defects tab
+is the right view for a foreman and the wrong one for whoever is holding the wrench.
+
+**My history** is the shop-wide history narrowed to one name, plus their closed
+shifts. The line about permanence is the mockup's and it stays: entries are added,
+never edited or removed. A record you can quietly rewrite is not a record.
+
 ### Signing in on the shop floor
 
 A mechanic taps their name on the roster and types four digits on a **number pad**,
@@ -355,6 +378,7 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `src/PurchasingScreens.jsx` | Order, Vendors, Requests, Issued |
 | `src/purchasingData.js` | Vendors, orders and requests I/O |
 | `src/NowSection.jsx` | Who is on the clock, and the shop at a glance |
+| `src/MyJobsSection.jsx` | One mechanic's worklist: assigned, defects, PM due |
 | `src/nowData.js` | Shifts and the board numbers |
 | `netlify/edge-functions/gate.js` | The site password, checked before anything is served |
 | `src/SetupSection.jsx` | The roster and the cost codes |

@@ -292,3 +292,54 @@ export async function workHistory({ from, to, kind, unit, who } = {}) {
     id: r.source_id,
   }));
 }
+
+/* ── One mechanic's own worklist ───────────────────────────────── */
+
+export async function myWork(mechanicId) {
+  const { data, error } = await supabase
+    .from("tw_work_orders").select("*")
+    .eq("assigned_to", mechanicId).neq("state", "done")
+    .order("priority").order("wo_number", { ascending: false });
+  if (error) throw error;
+  return data.map((w) => ({
+    id: w.id, wo: w.wo_number, kind: w.kind, unit: w.unit_number || "",
+    title: w.title, detail: w.detail || "", priority: w.priority,
+    state: w.state, vehId: w.vehicle_id, at: w.created_at,
+  }));
+}
+
+export async function startWork(id) {
+  const { error } = await supabase.from("tw_work_orders")
+    .update({ started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/* One person's own history. Same view as the shop-wide one, narrowed
+   to them — a mechanic wants what they touched, not the fleet's day. */
+export async function myHistory(who, { from, to } = {}) {
+  let q = supabase.from("tw_work_history").select("*")
+    .eq("who", who).order("at", { ascending: false }).limit(500);
+  if (from) q = q.gte("at", `${from}T00:00:00Z`);
+  if (to) q = q.lte("at", `${to}T23:59:59Z`);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map((r) => ({
+    at: r.at, kind: r.kind, what: r.what, unit: r.unit || "",
+    summary: r.summary || "", workOrder: r.work_order || "",
+    hours: r.hours == null ? null : Number(r.hours), id: r.source_id,
+  }));
+}
+
+/* Shifts somebody has closed — "my saved timecards". */
+export async function myShifts(mechanicId, limit = 60) {
+  const { data, error } = await supabase
+    .from("tw_shift_days").select("*")
+    .eq("mechanic_id", mechanicId).not("ended_at", "is", null)
+    .order("started_at", { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data.map((r) => ({
+    id: r.id, date: r.work_date, startedAt: r.started_at, endedAt: r.ended_at,
+    lunch: Number(r.lunch_minutes), hours: Number(r.clock_hours),
+  }));
+}

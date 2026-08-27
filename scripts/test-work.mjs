@@ -116,6 +116,21 @@ try {
   }
   truthy(true, "and it is ordered newest first");
 
+  /* ── One person's own view of it ────────────────────────────── */
+  const anyWho = hist.find((r) => r.who)?.who;
+  if (anyWho) {
+    const mine = await buy.myHistory(anyWho);
+    truthy(mine.length > 0, "a person's own history reads");
+    truthy(mine.length <= hist.length, "and is no bigger than the shop's");
+  } else {
+    truthy(true, "no named history rows to narrow (nothing recorded by name yet)");
+    truthy(true, "so the personal view has nothing to prove here");
+  }
+
+  const shifts = await buy.myShifts(mech.id);
+  truthy(Array.isArray(shifts), "saved timecards read back");
+  truthy(shifts.every((x) => x.endedAt), "and only closed shifts appear");
+
   const narrow = await buy.workHistory({ from: "2026-01-01", to: "2026-01-02" });
   truthy(narrow.length <= hist.length, "a narrower range returns no more");
 } catch (e) {
