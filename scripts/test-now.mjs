@@ -85,7 +85,7 @@ try {
   cleanupOk = await cleanup(c, [
     {
       label: "test shifts and mechanic (shifts cascade)",
-      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL }); },
+      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL, p_name: null }); },
       verify: async () => {
         const { count, error } = await c.from("tw_mechanics")
           .select("id", { count: "exact", head: true }).eq("email", EMAIL);

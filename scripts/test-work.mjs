@@ -157,7 +157,7 @@ try {
     },
     {
       label: "test mechanic",
-      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: "work-test@invalid" }); },
+      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: "work-test@invalid", p_name: null }); },
       verify: async () => {
         const { count, error } = await c.from("tw_mechanics")
           .select("id", { count: "exact", head: true }).eq("email", "work-test@invalid");

@@ -6,6 +6,7 @@ import {
 } from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as clock from "./nowData.js";
+import * as setup from "./setupData.js";
 import * as shop from "./shopData.js";
 
 /* ── The Timecard section ─────────────────────────────────────────
@@ -103,7 +104,7 @@ export default function TimecardSection({ who, tab, onBusy }) {
   if (tab === "pin") {
     return (
       <Body err={err}>
-        <PinSettings who={who} mechanic={mechanic} unlocked={unlocked}
+        <PinSettings who={who} unlocked={unlocked}
           onChanged={() => setChangingPin(false)}
           onLock={() => { clearUnlock(); setUnlocked(null); }} />
       </Body>
@@ -113,9 +114,8 @@ export default function TimecardSection({ who, tab, onBusy }) {
   if (!unlocked) {
     return (
       <Body err={err}>
-        <Gate who={who} mechanic={mechanic}
-          onIn={(u) => { writeUnlock(u); setUnlocked(u); }}
-          onRegistered={async () => setMechanic(await time.findMechanic(who))} />
+        <Gate who={who}
+          onIn={(u) => { writeUnlock(u); setUnlocked(u); }} />
       </Body>
     );
   }
@@ -233,92 +233,218 @@ function Body({ err, children }) {
   );
 }
 
-/* ── The PIN gate ─────────────────────────────────────────────── */
+/* ── The PIN gate ─────────────────────────────────────────────────
+   Built to match the timecard mockup: tap your name, then four digits
+   on a number pad with pips rather than a text field.
 
-function Gate({ who, mechanic, onIn, onRegistered }) {
-  const first = !mechanic;
-  const [name, setName] = useState("");
-  const [pin, setPin] = useState("");
-  const [pin2, setPin2] = useState("");
+   The pad is not decoration. This is used on a shared tablet in a shop,
+   often with gloves on, and a phone keyboard over a password box is the
+   wrong control for that — big targets, no keyboard sliding up over the
+   thing you are looking at, and the pips show progress without ever
+   showing the PIN.
+
+   No email anywhere in this flow. Most of the shop does not have one,
+   and one of them is on the roster as "D. Bradley". */
+
+const PAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"];
+
+function Gate({ who, onIn }) {
+  const [roster, setRoster] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [buf, setBuf] = useState("");
+  const [firstPin, setFirstPin] = useState("");
+  const [mode, setMode] = useState("verify"); // verify | create | confirm
+  const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const [working, setWorking] = useState(false);
-  const pinRef = useRef(null);
 
-  useEffect(() => { pinRef.current?.focus(); }, [first]);
+  const load = useCallback(() => {
+    setup.listRoster()
+      .then((r) => setRoster(r.filter((m) => m.active)))
+      .catch((e) => { setRoster([]); setMsg(e.message || String(e)); });
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  async function submit(e) {
-    e.preventDefault();
-    setMsg("");
-    setWorking(true);
-    try {
-      if (first) {
-        if (pin !== pin2) { setMsg("The two PINs are different."); return; }
-        const r = await time.registerMechanic(who, name, pin);
-        if (!r.ok) { setMsg(r.error); return; }
-        await onRegistered();
-        onIn({ email: who, id: r.id, name: name.trim() });
-      } else {
-        const r = await time.verifyPin(who, pin);
-        if (!r.ok) { setMsg(r.error); setPin(""); return; }
-        onIn({ email: who, id: r.id, name: r.name });
+  const shown = useMemo(() => {
+    if (!roster) return [];
+    const s = q.trim().toLowerCase();
+    const list = s ? roster.filter((m) => m.name.toLowerCase().includes(s)) : roster;
+    /* Whoever is signed in by email first, so the office is not hunting
+       for itself in a list of mechanics. */
+    return [...list].sort((x, y) =>
+      (y.email && y.email === who ? 1 : 0) - (x.email && x.email === who ? 1 : 0) ||
+      x.name.localeCompare(y.name));
+  }, [roster, q, who]);
+
+  const pick = (m) => {
+    setPicked(m); setBuf(""); setFirstPin(""); setMsg("");
+    setMode(m.pinSet ? "verify" : "create");
+  };
+
+  const back = () => { setPicked(null); setBuf(""); setFirstPin(""); setMsg(""); };
+
+  /* Four digits is the whole input, so it submits itself rather than
+     making somebody find a button after the last tap. */
+  useEffect(() => {
+    if (!picked || buf.length !== 4 || working) return;
+    let live = true;
+    (async () => {
+      setWorking(true);
+      try {
+        if (mode === "create") {
+          setFirstPin(buf); setBuf(""); setMode("confirm"); setMsg("");
+          return;
+        }
+        if (mode === "confirm") {
+          if (buf !== firstPin) {
+            setMsg("Those did not match. Start again.");
+            setBuf(""); setFirstPin(""); setMode("create");
+            return;
+          }
+          const r = await setup.setPin(picked.id, buf);
+          if (!r.ok) { setMsg(r.error); setBuf(""); setMode("create"); return; }
+        }
+        const v = await setup.checkPin(picked.id, mode === "confirm" ? firstPin : buf);
+        if (!live) return;
+        if (!v.ok) {
+          setMsg(v.error); setBuf("");
+          if (v.needs_pin) setMode("create");
+          return;
+        }
+        onIn({ id: picked.id, name: v.name || picked.name,
+               email: picked.email || who, role: v.role || picked.role });
+      } catch (e) {
+        if (live) { setMsg(e.message || String(e)); setBuf(""); }
+      } finally {
+        if (live) setWorking(false);
       }
-    } catch (e2) {
-      setMsg(e2.message || String(e2));
-    } finally {
-      setWorking(false);
-    }
+    })();
+    return () => { live = false; };
+  }, [buf, mode, picked, firstPin, working, onIn, who]);
+
+  const tap = (k) => {
+    setMsg("");
+    if (k === "clr") return setBuf("");
+    if (k === "del") return setBuf((b) => b.slice(0, -1));
+    setBuf((b) => (b.length >= 4 ? b : b + k));
+  };
+
+  if (roster === null) {
+    return <div style={{ padding: 30, color: C.muted }}>Reading the roster…</div>;
   }
 
+  if (!roster.length) {
+    return (
+      <div style={{ maxWidth: 460 }}>
+        <Card title="Nobody on the roster yet"
+          note="Mechanics are added under Setup. Once somebody is on the roster they tap their name here and choose a PIN." >
+          <div />
+        </Card>
+      </div>
+    );
+  }
+
+  if (!picked) {
+    return (
+      <div style={{ maxWidth: 640 }}>
+        <Card title="Who's on the clock?"
+          note="Tap your name, then your four-digit PIN.">
+          {roster.length > 8 && (
+            <input value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Start typing a name"
+              style={{ ...inp, marginBottom: 10 }} />
+          )}
+          <div style={{ display: "grid", gap: 7,
+                        gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,185px),1fr))" }}>
+            {shown.map((m) => (
+              <button key={m.id} type="button" onClick={() => pick(m)}
+                style={{
+                  textAlign: "left", padding: "12px 14px", borderRadius: 6,
+                  border: `1px solid ${m.pinSet ? C.line : C.watch}`,
+                  background: "#fff", cursor: "pointer",
+                  fontFamily: FD, fontSize: 15.5, fontWeight: 600, color: C.ink,
+                }}>
+                {m.name}
+                <div style={{ fontSize: 11, fontWeight: 400,
+                              color: m.locked ? C.pull : m.pinSet ? C.muted : C.watch,
+                              textTransform: "uppercase", letterSpacing: "0.05em",
+                              marginTop: 2 }}>
+                  {m.locked ? "Locked out"
+                    : m.pinSet ? (m.empNo ? `#${m.empNo}` : "Sign in")
+                    : "Set PIN"}
+                </div>
+              </button>
+            ))}
+            {!shown.length && (
+              <div style={{ color: C.muted, fontSize: 13 }}>Nobody by that name.</div>
+            )}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const prompt = mode === "create" ? "Pick a 4-digit PIN"
+    : mode === "confirm" ? "Enter it once more"
+    : "Enter your PIN";
+
   return (
-    <div style={{ maxWidth: 460 }}>
-      <Card
-        title={first ? "Set up your timecard" : "Enter your PIN"}
-        note={first
-          ? "There is no roster loaded yet, so you set yourself up. Your name goes on the hours you enter, and the PIN keeps anyone else out of them."
-          : `Signed in as ${who}. The PIN stops somebody else opening your hours on a shared tablet.`}>
-        <form onSubmit={submit}>
-          {first && (
-            <Field label="Your name">
-              <input value={name} onChange={(e) => setName(e.target.value)}
-                placeholder="As it should read on the timecard" style={inp} />
-            </Field>
-          )}
-          <div style={{ marginTop: first ? 12 : 0 }}>
-            <Field label={first ? "Choose a 4-digit PIN" : "PIN"}>
-              <input ref={pinRef} type="password" inputMode="numeric" autoComplete="off"
-                maxLength={4} value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                style={{ ...inp, fontFamily: FM, fontSize: 22, letterSpacing: "0.5em", width: 160 }} />
-            </Field>
-          </div>
-          {first && (
-            <div style={{ marginTop: 12 }}>
-              <Field label="Type it again">
-                <input type="password" inputMode="numeric" autoComplete="off" maxLength={4}
-                  value={pin2} onChange={(e) => setPin2(e.target.value.replace(/\D/g, ""))}
-                  style={{ ...inp, fontFamily: FM, fontSize: 22, letterSpacing: "0.5em", width: 160 }} />
-              </Field>
-            </div>
-          )}
-          {msg && (
-            <div style={{ fontSize: 13, color: C.pull, marginTop: 10, fontWeight: 600 }}>{msg}</div>
-          )}
-          <div className="flex mt-4" style={{ gap: 8 }}>
-            <Btn disabled={working || pin.length !== 4 || (first && (!name.trim() || pin2.length !== 4))}>
-              {first ? "Set up and open" : "Open my timecard"}
-            </Btn>
-          </div>
-          <p style={{ fontSize: 12, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
-            Five wrong tries locks it for fifteen minutes. The PIN is stored hashed and
-            nobody — including this page — can read it back.
-          </p>
-        </form>
+    <div style={{ maxWidth: 340 }}>
+      <Card title={picked.name} note={prompt}>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center",
+                      margin: "6px 0 18px" }}>
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} style={{
+              width: 14, height: 14, borderRadius: "50%",
+              border: `2px solid ${C.green700}`,
+              background: i < buf.length ? C.green700 : "transparent",
+            }} />
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gap: 8,
+                      gridTemplateColumns: "repeat(3, 1fr)" }}>
+          {PAD.map((k) => (
+            <button key={k} type="button" disabled={working}
+              onClick={() => tap(k)}
+              style={{
+                padding: "16px 0", fontFamily: FD,
+                fontSize: k === "clr" || k === "del" ? 13 : 24,
+                fontWeight: 600,
+                color: k === "clr" || k === "del" ? C.muted : C.ink,
+                background: "#fff", border: `1px solid ${C.line}`,
+                borderRadius: 8, cursor: working ? "wait" : "pointer",
+                textTransform: "uppercase", letterSpacing: k.length > 1 ? "0.05em" : 0,
+              }}>
+              {k === "clr" ? "Clear" : k === "del" ? "Delete" : k}
+            </button>
+          ))}
+        </div>
+
+        {msg && (
+          <div style={{ fontSize: 13, color: C.pull, marginTop: 12,
+                        fontWeight: 600, textAlign: "center" }}>{msg}</div>
+        )}
+
+        <div style={{ textAlign: "center", marginTop: 14 }}>
+          <button type="button" onClick={back}
+            style={{ background: "none", border: 0, color: C.muted,
+                     fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+            Not me
+          </button>
+        </div>
+
+        <p style={{ fontSize: 11.5, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>
+          Five wrong tries locks it for fifteen minutes. The PIN is stored hashed —
+          nobody, including this page, can read it back. Forgotten ones are reset
+          under Setup.
+        </p>
       </Card>
     </div>
   );
 }
 
-function PinSettings({ who, mechanic, unlocked, onLock }) {
+function PinSettings({ who, unlocked, onLock }) {
   const [f, setF] = useState({ old: "", next: "", again: "" });
   const [msg, setMsg] = useState("");
   const [good, setGood] = useState("");
@@ -329,7 +455,7 @@ function PinSettings({ who, mechanic, unlocked, onLock }) {
     setMsg(""); setGood("");
     if (f.next !== f.again) { setMsg("The two new PINs are different."); return; }
     try {
-      const r = await time.changePin(who, f.old, f.next);
+      const r = await setup.changePinById(unlocked.id, f.old, f.next);
       if (!r.ok) { setMsg(r.error); return; }
       setGood("PIN changed.");
       setF({ old: "", next: "", again: "" });
@@ -338,11 +464,13 @@ function PinSettings({ who, mechanic, unlocked, onLock }) {
     }
   }
 
-  if (!mechanic) {
+  /* Keyed on the signed-in person, not on an email — most of the shop
+     does not have one. */
+  if (!unlocked) {
     return (
       <div style={{ maxWidth: 560 }}>
-        <Card title="No timecard yet"
-          note="Open the Today tab and set yourself up first — then you can change your PIN here." />
+        <Card title="Not signed in"
+          note="Open the Today tab and tap your name first — then you can change your PIN here." />
       </div>
     );
   }
@@ -351,8 +479,10 @@ function PinSettings({ who, mechanic, unlocked, onLock }) {
     <div className="grid gap-4" style={{ maxWidth: 560, gridTemplateColumns: "minmax(0,1fr)" }}>
       <Card title="Your record" note="This is what goes on the hours you enter.">
         <div style={{ fontSize: 14, lineHeight: 1.9 }}>
-          <div><strong>{mechanic.name}</strong></div>
-          <div style={{ fontFamily: FM, fontSize: 12.5, color: C.muted }}>{mechanic.email}</div>
+          <div><strong>{unlocked.name}</strong></div>
+          {unlocked.email && (
+            <div style={{ fontFamily: FM, fontSize: 12.5, color: C.muted }}>{unlocked.email}</div>
+          )}
         </div>
         {unlocked && (
           <div style={{ marginTop: 14 }}>

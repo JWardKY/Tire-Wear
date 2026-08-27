@@ -20,23 +20,41 @@ const rpc = async (fn, args) => {
 
 export async function listRoster() {
   const rows = await fetchAll(
-    "tw_mechanics", "id,email,name,pin_set,active,locked_until", "name");
+    "tw_mechanics", "id,email,name,role,emp_no,pin_set,active,locked_until", "name");
   return rows.map((r) => ({
-    id: r.id, email: r.email, name: r.name,
+    id: r.id, email: r.email || "", name: r.name, role: r.role || "mechanic",
+    empNo: r.emp_no || "",
     pinSet: !!r.pin_set, active: !!r.active,
     lockedUntil: r.locked_until,
     locked: !!r.locked_until && new Date(r.locked_until) > new Date(),
   }));
 }
 
-export const addMechanic = (email, name) =>
-  rpc("tw_mechanic_add", { p_email: email, p_name: name });
+/* Email is optional now. Not everyone in the shop has a company
+   address, and one of them is on the roster as "D. Bradley" — there is
+   no email to be had there, and inventing one would mean a person who
+   cannot sign in. They tap their name instead. */
+export const addMechanic = (name, role, email, empNo) =>
+  rpc("tw_mechanic_add_named", {
+    p_name: name, p_role: role || "mechanic",
+    p_email: email || null, p_emp_no: empNo || null });
 
-export const resetPin = (email) =>
-  rpc("tw_mechanic_reset_pin", { p_email: email });
+export const resetPin = (id) => rpc("tw_mechanic_reset_pin_by_id", { p_id: id });
 
-export const setMechanicActive = (email, active) =>
-  rpc("tw_mechanic_set_active", { p_email: email, p_active: active });
+export const setMechanicActive = (id, active) =>
+  rpc("tw_mechanic_set_active_by_id", { p_id: id, p_active: active });
+
+export const setRole = (id, role) =>
+  rpc("tw_mechanic_set_role", { p_id: id, p_role: role });
+
+/* ── Signing in on the shop tablet ─────────────────────────────── */
+
+export const setPin = (id, pin) => rpc("tw_mechanic_set_pin", { p_id: id, p_pin: pin });
+
+export const checkPin = (id, pin) => rpc("tw_mechanic_check_pin", { p_id: id, p_pin: pin });
+
+export const changePinById = (id, oldPin, newPin) =>
+  rpc("tw_mechanic_change_pin_by_id", { p_id: id, p_old: oldPin, p_new: newPin });
 
 /* ── Cost codes ────────────────────────────────────────────────── */
 

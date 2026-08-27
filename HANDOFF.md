@@ -219,6 +219,29 @@ spec allows and says nothing about it. Past 1,800 characters the screen refuses 
 mail link and offers the text to copy instead — a silently cut-off purchase order is
 worse than no purchase order.
 
+### Signing in on the shop floor
+
+A mechanic taps their name on the roster and types four digits on a **number pad**,
+with pips rather than a text field. That is the mockup's design and it is the right
+one: this runs on a shared tablet, often with gloves on, and a phone keyboard sliding
+up over a password box is the wrong control. The pips show progress without ever
+showing the PIN, and four digits submits itself rather than making somebody hunt for a
+button.
+
+**Email is optional and most of the shop has none.** The roster arrived with one person
+listed as "D. Bradley" — there is no email to be had there, and inventing one would
+mean a person who cannot sign in. So the PIN hangs off the row id, not the address.
+The email-keyed functions still exist untouched, because the office uses them and
+Jason Ward already had a PIN against his.
+
+Roles are recorded — `mechanic`, `dashboard`, `admin` — and **gate nothing yet**. That
+was the call: everyone sees everything for now, and the roles are there so the list is
+not lost and so gating later is a UI change rather than another migration.
+
+Five wrong tries locks an account for fifteen minutes. Long enough to stop somebody
+thumbing 0000 to 9999 on a tablet, short enough that a fat-fingered mechanic is not
+stuck for the shift. A reset under Setup clears it.
+
 ### The clock is not the timecard
 
 `tw_shifts` says a mechanic is in the shop. `tw_time_entries` says what the work was

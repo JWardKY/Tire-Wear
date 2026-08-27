@@ -57,9 +57,9 @@ try {
          "and never retires one that IS in the paste");
 
   /* ── The roster, for real ───────────────────────────────────── */
-  const add = await setup.addMechanic(EMAIL, `${MARK} Fitter`);
+  const add = await setup.addMechanic(`${MARK} Fitter`, "mechanic", EMAIL);
   truthy(add.ok, "a mechanic can be added");
-  is(add.reactivated, false, "as a new row");
+  is(add.existing, false, "as a new row");
 
   let roster = await setup.listRoster();
   const m = roster.find((x) => x.email === EMAIL);
@@ -67,16 +67,18 @@ try {
   is(m.pinSet, false, "with no PIN — they choose their own");
   is(m.active, true, "and on the roster");
 
-  const again = await setup.addMechanic(EMAIL, `${MARK} Fitter`);
-  is(again.reactivated, true, "adding the same email again reactivates rather than duplicating");
+  const again = await setup.addMechanic(`${MARK} Fitter`, "mechanic", EMAIL);
+  is(again.existing, true, "adding the same email again matches rather than duplicating");
 
-  const bad = await setup.addMechanic("not-an-email", "X");
-  is(bad.ok, false, "a string with no @ in it is refused");
+  const bad = await setup.addMechanic("Someone", "mechanic", "not-an-email");
+  is(bad.ok, false, "an email with no @ in it is refused");
+  const noName = await setup.addMechanic("  ", "mechanic");
+  is(noName.ok, false, "and a blank name is refused");
 
-  await setup.setMechanicActive(EMAIL, false);
+  await setup.setMechanicActive(m.id, false);
   roster = await setup.listRoster();
   is(roster.find((x) => x.email === EMAIL).active, false, "taking somebody off the roster works");
-  await setup.setMechanicActive(EMAIL, true);
+  await setup.setMechanicActive(m.id, true);
 
   /* The part that matters most about Setup: somebody added to the
      roster has no PIN, and MUST be able to set one. Registering used to
@@ -88,7 +90,7 @@ try {
   is(reg.data?.existing, true, "against the row that was already there, not a duplicate");
   roster = await setup.listRoster();
   is(roster.find((x) => x.email === EMAIL).pinSet, true, "a PIN can be set");
-  const r = await setup.resetPin(EMAIL);
+  const r = await setup.resetPin(m.id);
   truthy(r.ok, "and reset");
   roster = await setup.listRoster();
   is(roster.find((x) => x.email === EMAIL).pinSet, false, "which clears it");
@@ -107,7 +109,55 @@ try {
   const ok = await c.rpc("tw_mechanic_verify_pin", { p_email: EMAIL, p_pin: "5150" });
   truthy(ok.data?.ok, "the PIN set after a reset actually works");
 
-  const missing = await setup.resetPin("nobody@invalid");
+  /* ── Signing in by name, which is how the shop does it ─────── */
+  const named = await setup.addMechanic(`${MARK} No Email`, "mechanic");
+  truthy(named.ok, "somebody with no email at all can be added");
+  const nid = named.id;
+
+  let roster2 = await setup.listRoster();
+  const ne = roster2.find((x) => x.id === nid);
+  is(ne.email, "", "and has no email");
+  is(ne.role, "mechanic", "with a role");
+  is(ne.pinSet, false, "and no PIN yet");
+
+  const badPin = await setup.setPin(nid, "12");
+  is(badPin.ok, false, "a two digit PIN is refused");
+
+  truthy((await setup.setPin(nid, "7391")).ok, "they set a four digit PIN");
+  is((await setup.setPin(nid, "1111")).ok, false,
+     "and cannot quietly overwrite it without the old one");
+
+  const v = await setup.checkPin(nid, "7391");
+  truthy(v.ok, "the PIN verifies");
+  is(v.name, `${MARK} No Email`, "and hands back who it is");
+  is(v.role, "mechanic", "and their role");
+
+  is((await setup.checkPin(nid, "0000")).ok, false, "a wrong PIN is refused");
+
+  /* The lockout is what actually protects somebody's hours on a shared
+     tablet, so it is worth proving rather than assuming. */
+  for (let i = 0; i < 4; i++) await setup.checkPin(nid, "0000");
+  const locked = await setup.checkPin(nid, "7391");
+  is(locked.ok, false, "five wrong tries locks it even against the right PIN");
+  truthy(/lock/i.test(locked.error), "and says it is locked");
+
+  truthy((await setup.resetPin(nid)).ok, "a reset clears the lock");
+  truthy((await setup.setPin(nid, "4242")).ok, "and lets them choose again");
+  truthy((await setup.checkPin(nid, "4242")).ok, "which then works");
+
+  const ch = await setup.changePinById(nid, "4242", "9988");
+  truthy(ch.ok, "they can change it with the old one");
+  is((await setup.changePinById(nid, "0000", "1212")).ok, false,
+     "but not with the wrong old one");
+  truthy((await setup.checkPin(nid, "9988")).ok, "the new one works");
+
+  truthy((await setup.setRole(nid, "dashboard")).ok, "a role can be changed");
+  is((await setup.setRole(nid, "wizard")).ok, false, "to a real one only");
+
+  const dupe = await setup.addMechanic(`${MARK} No Email`, "mechanic");
+  is(dupe.existing, true, "adding the same name again matches rather than duplicating");
+
+  const missing = await setup.resetPin("00000000-0000-0000-0000-000000000000");
   is(missing.ok, false, "resetting somebody who does not exist says so");
 } catch (e) {
   state.failed.push(`threw: ${e.message}`);
@@ -116,13 +166,27 @@ try {
   cleanupOk = await cleanup(c, [
     {
       label: "test mechanic",
-      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL }); },
+      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL, p_name: null }); },
       verify: async () => {
         const { count, error } = await c.from("tw_mechanics")
           .select("id", { count: "exact", head: true }).eq("email", EMAIL);
         return error ? null : (count || 0);
       },
       manual: `delete from tw_mechanics where email='${EMAIL}';`,
+    },
+    {
+      label: "test mechanic with no email",
+      /* anon cannot delete a mechanic, by design. The purge function
+         takes a marked name as well as an @invalid address now. */
+      run: async () => {
+        await c.rpc("tw_purge_test_mechanic", { p_email: null, p_name: `${MARK} No Email` });
+      },
+      verify: async () => {
+        const { count, error } = await c.from("tw_mechanics")
+          .select("id", { count: "exact", head: true }).eq("name", `${MARK} No Email`);
+        return error ? null : (count || 0);
+      },
+      manual: `delete from tw_mechanics where name='${MARK} No Email';`,
     },
   ]);
 }
