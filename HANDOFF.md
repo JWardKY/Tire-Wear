@@ -232,8 +232,8 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/test-all.mjs` | Runs every suite and believes the exit code |
 | `scripts/test-motive.mjs` | The Motive sync logic, on fixtures. No key needed |
 | `scripts/check-motive.mjs` | Asks a deployed sync endpoint what it would do |
-| `netlify/functions/_motive.mjs` | Talks to Motive and decides what should change |
-| `netlify/functions/_sync.mjs` | Reads our side, runs the plan, writes it |
+| `netlify/functions/lib/motive.mjs` | Talks to Motive and decides what should change |
+| `netlify/functions/lib/sync.mjs` | Reads our side, runs the plan, writes it |
 | `netlify/functions/motive-sync.mjs` | On demand over HTTP, dry run by default |
 | `netlify/functions/motive-nightly.mjs` | The same on a schedule, 05:00 UTC |
 | `scripts/_testkit.mjs` | Safety rig for the write tests — read this before touching them |
@@ -624,10 +624,16 @@ Two Netlify Functions, both in `netlify/functions/`:
 
 | File | What it is |
 |---|---|
-| `_motive.mjs` | Talks to Motive, and decides what should change. No database. |
-| `_sync.mjs` | Reads our side, runs the plan, writes it. |
+| `lib/motive.mjs` | Talks to Motive, and decides what should change. No database. |
+| `lib/sync.mjs` | Reads our side, runs the plan, writes it. |
 | `motive-sync.mjs` | On demand over HTTP. Dry run unless told otherwise. |
 | `motive-nightly.mjs` | The same thing on a schedule, 05:00 UTC. |
+
+Shared code lives in `lib/` deliberately. Netlify turns **every top-level file** in the
+functions directory into a deployed, publicly reachable function — so helpers named
+`_motive.mjs` and `_sync.mjs` sitting next to the real ones became two extra endpoints
+that answered `502 Runtime.HandlerNotFound` and printed an internal stack trace. A
+subdirectory is not auto-discovered, so `lib/` is the fix. Anything shared goes there.
 
 Two environment variables, set in the Netlify UI, **not** prefixed `VITE_` because
 they must never reach the browser:

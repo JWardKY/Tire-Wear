@@ -16,7 +16,7 @@
      since=YYYY-MM-DD                 (defects: how far back, default 14d)
      write=1                          (with the token: actually write)
 */
-import { env, runOdometer, runDefects } from "./_sync.mjs";
+import { env, runOdometer, runDefects } from "./lib/sync.mjs";
 
 /* Compare without leaking the answer in how long it takes. */
 function timingSafeEqual(a, b) {

@@ -7,7 +7,7 @@
 
    Run:  node scripts/test-motive.mjs
 */
-import { planOdometer, planDefects, compareOdometers } from "../netlify/functions/_motive.mjs";
+import { planOdometer, planDefects, compareOdometers } from "../netlify/functions/lib/motive.mjs";
 import { makeChecks, report } from "./_testkit.mjs";
 
 const { state, is, truthy } = makeChecks();
@@ -195,7 +195,7 @@ const d = (o) => ({
 /* ── Talking to Motive, with fetch stubbed ────────────────────── */
 
 const { fetchVehicleOdometers, fetchInspectionDefects } =
-  await import("../netlify/functions/_motive.mjs");
+  await import("../netlify/functions/lib/motive.mjs");
 
 const stub = (handler) => { globalThis.fetch = async (u) => handler(new URL(u)); };
 const ok = (body) => new Response(JSON.stringify(body), { status: 200 });

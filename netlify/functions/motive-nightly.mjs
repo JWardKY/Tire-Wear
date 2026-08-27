@@ -5,7 +5,7 @@
    Same code path as the on-demand endpoint, always in write mode. If it
    throws, Netlify records a failed run; the next night picks up whatever
    was missed, because every write here is idempotent. */
-import { env, runOdometer, runDefects } from "./_sync.mjs";
+import { env, runOdometer, runDefects } from "./lib/sync.mjs";
 
 export default async () => {
   const ctx = env();
