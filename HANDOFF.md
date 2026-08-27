@@ -169,6 +169,36 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### Purchasing
+
+Vendors, ordering, receiving, requests and what went out. Two rules from the stock
+work carry straight over, and both live in the database rather than in the browser,
+because a rule enforced in the app is a rule until somebody opens the console.
+
+**`on_hand` is still never written directly.** Receiving against an order writes a
+`tw_part_txns` row and the trigger moves the number, so the count and the log still
+cannot disagree — the movement log explains stock that arrived on a PO exactly the way
+it explains stock somebody counted.
+
+**`on_order` moves only inside the same statement as the line or receipt that
+justifies it**, in `tw_commit_order` and `tw_receive_po_line`. An order that half
+commits — lines written but `on_order` not moved, or the reverse — has the shop
+ordering a second time for parts already on their way.
+
+**Orders route by category.** The inventory export has no vendor column, so a part
+follows whoever covers its category unless it names a vendor of its own. That is the
+foreman's design and it matches how the shop already talks about suppliers.
+`tw_part_vendor` resolves the override.
+
+**A draft splits into one order per vendor**, because that is how it is sent: one email
+each, not one listing four suppliers' parts. PO numbers are `HD-YYYY-NNNN`, taken
+inside the insert so two people ordering at once cannot both take 0007.
+
+**Long orders are not emailed.** Outlook truncates a `mailto` well before the 2048 the
+spec allows and says nothing about it. Past 1,800 characters the screen refuses the
+mail link and offers the text to copy instead — a silently cut-off purchase order is
+worse than no purchase order.
+
 ### The clock is not the timecard
 
 `tw_shifts` says a mechanic is in the shop. `tw_time_entries` says what the work was
@@ -219,9 +249,9 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Now, Defects, PM, Timecard, Hours, Inventory, Tires and Setup are built. Still to
-come, from the foreman's mockup: **Inventory purchasing** (vendors, ordering,
-requests, issued) and **work history / work orders**.
+Now, Defects, PM, Timecard, Hours, Inventory, Tires and Setup are built, and
+Inventory carries the whole purchasing side. Still to come, from the foreman's
+mockup: **work history** (the audit view under Timecards) and **work orders**.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -277,6 +307,9 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/test-all.mjs` | Runs every suite and believes the exit code |
 | `scripts/test-setup.mjs` | The roster admin and the cost-code paste reader |
 | `scripts/test-now.mjs` | The punch clock and the board numbers |
+| `scripts/test-purchasing.mjs` | Vendors, ordering, receiving, requests |
+| `src/PurchasingScreens.jsx` | Order, Vendors, Requests, Issued |
+| `src/purchasingData.js` | Vendors, orders and requests I/O |
 | `src/NowSection.jsx` | Who is on the clock, and the shop at a glance |
 | `src/nowData.js` | Shifts and the board numbers |
 | `netlify/edge-functions/gate.js` | The site password, checked before anything is served |

@@ -71,8 +71,12 @@ export const SECTIONS = [
     label: "Inventory",
     blurb: "Parts on the shelf, what needs ordering, and where it all went",
     subTabs: [
-      ["stock", "Stock"],
       ["reorder", "Reorder"],
+      ["order", "Order parts"],
+      ["stock", "All parts"],
+      ["requests", "Requests"],
+      ["issued", "Issued"],
+      ["vendors", "Vendors"],
       ["import", "Import"],
     ],
     Component: InventorySection,

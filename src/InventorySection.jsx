@@ -5,6 +5,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as parts from "./partsData.js";
+import { OrderScreen, VendorScreen, RequestScreen, IssuedScreen } from "./PurchasingScreens.jsx";
 import { parseCSV, guessMapping, planImport } from "./csvImport.js";
 import * as shop from "./shopData.js";
 
@@ -102,6 +103,19 @@ export default function InventorySection({ who, tab, onBusy }) {
   const lowCount = rows.filter((r) => r.state === "low").length;
 
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading parts…</div>;
+
+  if (tab === "order" || tab === "vendors" || tab === "requests" || tab === "issued") {
+    return (
+      <Body err={err}>
+        {tab === "order" && (
+          <OrderScreen rows={rows} who={who} run={run} busy={busy} />)}
+        {tab === "vendors" && <VendorScreen rows={rows} run={run} />}
+        {tab === "requests" && (
+          <RequestScreen rows={rows} vehicles={vehicles} who={who} run={run} />)}
+        {tab === "issued" && <IssuedScreen rows={rows} vehicles={vehicles} />}
+      </Body>
+    );
+  }
 
   if (tab === "import") {
     return (

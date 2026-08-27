@@ -20,6 +20,7 @@ const SUITES = [
   ["test-parts", "stock, movements, CSV import"],
   ["test-setup", "the roster and the cost-code paste"],
   ["test-now", "the punch clock and the Now board"],
+  ["test-purchasing", "vendors, ordering, receiving, requests"],
   ["check-anon-access", "what the anon key can reach"],
 ];
 
