@@ -1,6 +1,8 @@
 import TiresSection from "./TireWear.jsx";
 import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
+import TimecardSection from "./TimecardSection.jsx";
+import HoursSection from "./HoursSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
    component — the shell renders the nav, owns which section is showing,
@@ -11,8 +13,8 @@ import PmSection from "./PmSection.jsx";
    `blurb` is the line under the logo, so the header says what you are
    looking at rather than always saying tires.
 
-   Still to come, per the shop foreman's mockups: Now, Timecard, My jobs,
-   Inventory, Hours, Setup. */
+   Still to come, per the shop foreman's mockups: Now, My jobs, Inventory,
+   Setup. */
 
 export const SECTIONS = [
   {
@@ -34,6 +36,26 @@ export const SECTIONS = [
       ["programs", "Programs"],
     ],
     Component: PmSection,
+  },
+  {
+    key: "timecard",
+    label: "Timecard",
+    blurb: "Your own hours for the day — behind a PIN, because these are pay records",
+    subTabs: [
+      ["today", "Today"],
+      ["pin", "My PIN"],
+    ],
+    Component: TimecardSection,
+  },
+  {
+    key: "hours",
+    label: "Hours",
+    blurb: "Where the shop's hours went, by mechanic, by unit and by cost code",
+    subTabs: [
+      ["rollup", "Totals"],
+      ["detail", "Every entry"],
+    ],
+    Component: HoursSection,
   },
   {
     key: "tires",
