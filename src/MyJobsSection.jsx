@@ -25,8 +25,10 @@ const DEFECT_FILTERS = [
 const PRIO_LABEL = { now: "Now", today: "Today", normal: "Normal" };
 const PRIO_COLOUR = (p) => (p === "now" ? "pull" : p === "today" ? "watch" : "muted");
 
-export default function MyJobsSection({ who, tab, onBusy }) {
-  const [me, setMe] = useState(null);
+/* Handed the signed-in mechanic rather than sniffing it out of
+   localStorage: this lives inside the timecard now, behind the PIN,
+   which is where somebody's own work belongs. */
+export default function MyJobsSection({ me, onBusy }) {
   const [jobs, setJobs] = useState([]);
   const [defects, setDefects] = useState([]);
   const [pm, setPm] = useState([]);
@@ -34,15 +36,6 @@ export default function MyJobsSection({ who, tab, onBusy }) {
   const [pmOverdueOnly, setPmOverdueOnly] = useState(false);
   const [err, setErr] = useState("");
   const [ready, setReady] = useState(false);
-
-  /* Who is at the screen. The timecard remembers it behind the PIN;
-     this reads the same thing so the two agree. */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("tirewear:timecard-unlocked");
-      if (raw) setMe(JSON.parse(raw));
-    } catch { /* private window */ }
-  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -85,15 +78,6 @@ export default function MyJobsSection({ who, tab, onBusy }) {
     <div>
       {err && <div style={{ background: C.pull, color: "#fff", padding: "8px 12px",
                             borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
-
-      {!me && (
-        <div style={{ background: C.card, border: `1px solid ${C.watch}`,
-                      borderRadius: 6, padding: "14px 16px", marginBottom: 18,
-                      fontSize: 13.5 }}>
-          Open the <b>Timecard</b> tab and tap your name first. Until then this
-          shows the shop's work rather than yours.
-        </div>
-      )}
 
       {/* ── Assigned to me ── */}
       <SectionLabel>Assigned to me{me ? ` · ${jobs.length}` : ""}</SectionLabel>

@@ -234,12 +234,20 @@ clock against hours booked to a truck and a code. The gap is the whole point —
 catches somebody who clocked nine and booked six, on their own screen, while they can
 still remember why. Over-booking is flagged just as loudly as under-booking.
 
-**My jobs** is the same data as Defects and PM, scoped to one person. A mechanic
+**My jobs** lives under Timecard, behind the PIN, because it is one person's own
+work and should not be readable by whoever happens to be standing at the tablet. It is
+the same data as Defects and PM, scoped to them. A mechanic
 standing at a truck wants their own three jobs, not the shop's sixty; the Defects tab
 is the right view for a foreman and the wrong one for whoever is holding the wrench.
 
 **My history** is the shop-wide history narrowed to one name, plus their closed
-shifts. The line about permanence is the mockup's and it stays: entries are added,
+shifts.
+
+One thing worth remembering about the PIN pad. Its submit effect must not depend on
+the state it sets. It did once — setting `working` re-ran the effect, whose cleanup
+marked the running attempt stale, so the code clearing it never ran and the pad stayed
+disabled after four digits. Nobody could sign in, and no unit test could see it. The
+guard is a ref now. The line about permanence is the mockup's and it stays: entries are added,
 never edited or removed. A record you can quietly rewrite is not a record.
 
 ### Signing in on the shop floor
