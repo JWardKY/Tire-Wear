@@ -16,7 +16,7 @@
      since=YYYY-MM-DD                 (defects: how far back, default 14d)
      write=1                          (with the token: actually write)
 */
-import { env, runOdometer, runDefects } from "./lib/sync.mjs";
+import { env, runOdometer, runDefects, rawSample } from "./lib/sync.mjs";
 
 /* Compare without leaking the answer in how long it takes. */
 function timingSafeEqual(a, b) {
@@ -49,6 +49,8 @@ export default async (req) => {
 
   const out = { write: wants, at: new Date().toISOString() };
   try {
+    /* What Motive actually sent, for when it disagrees with the docs. */
+    if (q.get("raw") === "1") return json(200, { raw: await rawSample(ctx) });
     if (what === "odometer" || what === "both")
       out.odometer = await runOdometer(ctx, { write: wants, field: q.get("field") });
     if (what === "defects" || what === "both")

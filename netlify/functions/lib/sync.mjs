@@ -8,7 +8,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import {
-  fetchVehicleOdometers, fetchInspectionDefects,
+  fetchVehicleOdometers, fetchInspectionDefects, fetchRawVehicles,
   planOdometer, planDefects, compareOdometers,
   todayISO, WHICH_ODOMETER,
 } from "./motive.mjs";
@@ -71,6 +71,10 @@ async function latestOdometers(db) {
     keep(r.vehicle_id, r.removed_odometer);
   }
   return latest;
+}
+
+export async function rawSample({ motiveKey }) {
+  return await fetchRawVehicles(motiveKey, 2);
 }
 
 export async function runOdometer({ motiveKey, db }, { write, field }) {

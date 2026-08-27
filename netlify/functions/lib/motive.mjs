@@ -66,6 +66,15 @@ async function motiveAll(path, key, params, pluck) {
   throw new MotiveError(`${path} did not stop paging — refusing to loop forever`);
 }
 
+/* Motive's documented shape and Motive's actual shape have already
+   disagreed once here, so this can hand back what actually arrived
+   rather than what we hoped for. Dry run only, behind the token. */
+export async function fetchRawVehicles(key, n = 2) {
+  const d = await motive("/v2/vehicle_locations", key,
+                         { vehicle_status: "active", per_page: n, page_no: 1 });
+  return (d.vehicles || []).slice(0, n);
+}
+
 export async function fetchVehicleOdometers(key) {
   const rows = await motiveAll(
     "/v2/vehicle_locations", key, { vehicle_status: "active" },
@@ -73,12 +82,16 @@ export async function fetchVehicleOdometers(key) {
   );
   return rows.map((w) => {
     const v = w.vehicle || w;
+    /* Documented at vehicle.odometer, but Motive has also been seen
+       putting it inside current_location. Take whichever is actually
+       there rather than trusting one spelling. */
+    const loc = v.current_location || {};
     return {
       motiveId: v.id,
       number: v.number,
-      odometer: num(v.odometer),
-      trueOdometer: num(v.true_odometer),
-      at: v.current_location?.located_at || null,
+      odometer: num(v.odometer ?? loc.odometer),
+      trueOdometer: num(v.true_odometer ?? loc.true_odometer),
+      at: loc.located_at || null,
     };
   });
 }
