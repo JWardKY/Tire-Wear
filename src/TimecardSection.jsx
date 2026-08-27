@@ -5,6 +5,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as time from "./timeData.js";
+import * as clock from "./nowData.js";
 import * as shop from "./shopData.js";
 
 /* ── The Timecard section ─────────────────────────────────────────
@@ -139,6 +140,8 @@ export default function TimecardSection({ who, tab, onBusy }) {
           <Btn onClick={() => setEditing({})}>Add hours</Btn>
         </div>
       </div>
+
+      <Punch mechanicId={unlocked.id} onBusy={onBusy} onErr={setErr} />
 
       {entries.length === 0 ? (
         <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
@@ -480,5 +483,65 @@ function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
         </Btn>
       </div>
     </Modal>
+  );
+}
+
+/* ── Punching in and out ──────────────────────────────────────────
+   The clock is not the timecard. This says a mechanic is in the shop;
+   the entries below say what the work was and what it charges to. They
+   are deliberately separate, because the Now board has to show somebody
+   the moment they arrive, not once they have filled a form in. */
+
+function Punch({ mechanicId, onBusy, onErr }) {
+  const [open, setOpen] = React.useState(null);
+  const [, tick] = React.useState(0);
+
+  const load = React.useCallback(async () => {
+    try { setOpen(await clock.openShift(mechanicId)); }
+    catch (e) { onErr?.(e.message || String(e)); }
+  }, [mechanicId, onErr]);
+
+  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const go = async (fn) => {
+    onBusy?.(true);
+    try {
+      const r = await fn();
+      if (r && r.ok === false) onErr?.(r.error);
+      await load();
+    } catch (e) { onErr?.(e.message || String(e)); }
+    finally { onBusy?.(false); }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3"
+      style={{ background: open ? C.green700 : C.card,
+        color: open ? "#fff" : C.ink,
+        border: `1px solid ${open ? C.green700 : C.line}`,
+        borderRadius: 8, padding: "10px 16px", marginBottom: 16 }}>
+      <div>
+        <div style={{ fontFamily: FD, fontSize: 18, fontWeight: 700, lineHeight: 1.15 }}>
+          {open
+            ? `On the clock · ${clock.fmtHMS(clock.elapsedSec(open.started_at))}`
+            : "Not on the clock"}
+        </div>
+        <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>
+          {open
+            ? `In at ${new Date(open.started_at).toLocaleTimeString([], {
+                hour: "numeric", minute: "2-digit" })}`
+            : "Punching in shows you on the shop board. It does not book hours."}
+        </div>
+      </div>
+      <Btn tone={open ? "ghost" : "solid"}
+        onClick={() => go(() => open
+          ? clock.punchOut(mechanicId)
+          : clock.punchIn(mechanicId))}>
+        {open ? "Punch out" : "Punch in"}
+      </Btn>
+    </div>
   );
 }

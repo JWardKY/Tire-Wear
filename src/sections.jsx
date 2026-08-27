@@ -1,9 +1,11 @@
+import NowSection from "./NowSection.jsx";
 import TiresSection from "./TireWear.jsx";
 import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
 import TimecardSection from "./TimecardSection.jsx";
 import HoursSection from "./HoursSection.jsx";
 import InventorySection from "./InventorySection.jsx";
+import WorkSection from "./WorkSection.jsx";
 import SetupSection from "./SetupSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
@@ -19,6 +21,12 @@ import SetupSection from "./SetupSection.jsx";
    And the Motive sync, which is waiting on an API key. */
 
 export const SECTIONS = [
+  {
+    key: "now",
+    label: "Now",
+    blurb: "Who is on the clock, and the shop at a glance",
+    Component: NowSection,
+  },
   {
     key: "defects",
     label: "Defects",
@@ -64,8 +72,12 @@ export const SECTIONS = [
     label: "Inventory",
     blurb: "Parts on the shelf, what needs ordering, and where it all went",
     subTabs: [
-      ["stock", "Stock"],
       ["reorder", "Reorder"],
+      ["order", "Order parts"],
+      ["stock", "All parts"],
+      ["requests", "Requests"],
+      ["issued", "Issued"],
+      ["vendors", "Vendors"],
       ["import", "Import"],
     ],
     Component: InventorySection,
@@ -80,6 +92,13 @@ export const SECTIONS = [
       ["settings", "Settings"],
     ],
     Component: TiresSection,
+  },
+  {
+    key: "work",
+    label: "Work orders",
+    blurb: "Numbered jobs, who is on them, and everything that has happened",
+    subTabs: [["orders", "Work orders"], ["history", "Work history"]],
+    Component: WorkSection,
   },
   {
     key: "setup",

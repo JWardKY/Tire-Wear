@@ -169,6 +169,76 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### Work orders, and the history
+
+A work order is keyed on `(kind, source_key)` and opened **idempotently**. That is the
+property that matters: the board asks for a number for every open defect on every
+load, so asking twice has to hand back the same number. A truck with four numbers for
+one fault is paperwork that has stopped meaning anything.
+
+`tw_sync_defect_work_orders` gives every unrepaired defect a number and writes it back
+onto the defect, so the two screens agree. Priority follows the defect — unsafe is
+`now`, major is `today`.
+
+Closing a work order does **not** mark the defect repaired. Those are different acts by
+different people: the work order is the shop's paperwork, the repair is the mechanic's
+statement that the truck is fixed.
+
+**Work history is a view, not an audit table.** It unions the real rows from defects,
+hours, parts, services, tread readings and orders. An audit log that has to be written
+to by hand drifts the first time a code path forgets it, and then it is worse than
+nothing, because people trust it. This one cannot drift: it *is* the rows.
+
+### Purchasing
+
+Vendors, ordering, receiving, requests and what went out. Two rules from the stock
+work carry straight over, and both live in the database rather than in the browser,
+because a rule enforced in the app is a rule until somebody opens the console.
+
+**`on_hand` is still never written directly.** Receiving against an order writes a
+`tw_part_txns` row and the trigger moves the number, so the count and the log still
+cannot disagree — the movement log explains stock that arrived on a PO exactly the way
+it explains stock somebody counted.
+
+**`on_order` moves only inside the same statement as the line or receipt that
+justifies it**, in `tw_commit_order` and `tw_receive_po_line`. An order that half
+commits — lines written but `on_order` not moved, or the reverse — has the shop
+ordering a second time for parts already on their way.
+
+**Orders route by category.** The inventory export has no vendor column, so a part
+follows whoever covers its category unless it names a vendor of its own. That is the
+foreman's design and it matches how the shop already talks about suppliers.
+`tw_part_vendor` resolves the override.
+
+**A draft splits into one order per vendor**, because that is how it is sent: one email
+each, not one listing four suppliers' parts. PO numbers are `HD-YYYY-NNNN`, taken
+inside the insert so two people ordering at once cannot both take 0007.
+
+**Long orders are not emailed.** Outlook truncates a `mailto` well before the 2048 the
+spec allows and says nothing about it. Past 1,800 characters the screen refuses the
+mail link and offers the text to copy instead — a silently cut-off purchase order is
+worse than no purchase order.
+
+### The clock is not the timecard
+
+`tw_shifts` says a mechanic is in the shop. `tw_time_entries` says what the work was
+and what it charges to. They are deliberately separate: the Now board has to show
+somebody from the moment they punch in, not once they have filled a form in, and the
+two answer genuinely different questions.
+
+One open shift per mechanic, enforced by a partial unique index rather than by the
+app, because pressing the button twice is exactly what happens when a shop tablet is
+slow. The second press comes back as "Already on the clock" instead of a database
+error on a wall-mounted screen.
+
+A shift still open from a previous day is flagged **stale** and can be closed from the
+board. A nineteen hour timer is a missed punch-out, not a long day, and showing it as
+though it were real would make the whole board untrustworthy. Closing one books no
+hours — those are entered on the timecard, by the mechanic, behind their PIN.
+
+Elapsed time is recomputed from the start timestamp on every tick rather than counted
+up in the browser, so a screen left on overnight shows the truth.
+
 ### The lock on the front door
 
 `netlify/edge-functions/gate.js` asks for one shared password before anything is
@@ -199,10 +269,8 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Defects, PM, Timecard, Hours, Inventory and Setup are built. Still to come, from
-the foreman's mockup: **Now** (who is on the clock, plus the KPI row — needs a punch
-clock, which does not exist yet), **Inventory purchasing** (vendors, ordering,
-requests, issued), and **work history / work orders**.
+**Everything in the foreman's mockup is built.** Now, Defects, PM, Timecard, Hours,
+Inventory (with the whole purchasing side), Tires, Work orders and Setup.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -257,6 +325,14 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/check-anon-access.mjs` | Every relation in `public`: what anon may reach, what must stay shut, and `pin_hash` |
 | `scripts/test-all.mjs` | Runs every suite and believes the exit code |
 | `scripts/test-setup.mjs` | The roster admin and the cost-code paste reader |
+| `scripts/test-now.mjs` | The punch clock and the board numbers |
+| `scripts/test-purchasing.mjs` | Vendors, ordering, receiving, requests |
+| `scripts/test-work.mjs` | Work orders and the history view |
+| `src/WorkSection.jsx` | Work orders and work history |
+| `src/PurchasingScreens.jsx` | Order, Vendors, Requests, Issued |
+| `src/purchasingData.js` | Vendors, orders and requests I/O |
+| `src/NowSection.jsx` | Who is on the clock, and the shop at a glance |
+| `src/nowData.js` | Shifts and the board numbers |
 | `netlify/edge-functions/gate.js` | The site password, checked before anything is served |
 | `src/SetupSection.jsx` | The roster and the cost codes |
 | `src/setupData.js` | Roster and cost-code I/O |
