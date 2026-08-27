@@ -5,6 +5,7 @@ import PmSection from "./PmSection.jsx";
 import TimecardSection from "./TimecardSection.jsx";
 import HoursSection from "./HoursSection.jsx";
 import InventorySection from "./InventorySection.jsx";
+import WorkSection from "./WorkSection.jsx";
 import SetupSection from "./SetupSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
@@ -91,6 +92,13 @@ export const SECTIONS = [
       ["settings", "Settings"],
     ],
     Component: TiresSection,
+  },
+  {
+    key: "work",
+    label: "Work orders",
+    blurb: "Numbered jobs, who is on them, and everything that has happened",
+    subTabs: [["orders", "Work orders"], ["history", "Work history"]],
+    Component: WorkSection,
   },
   {
     key: "setup",

@@ -169,6 +169,26 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### Work orders, and the history
+
+A work order is keyed on `(kind, source_key)` and opened **idempotently**. That is the
+property that matters: the board asks for a number for every open defect on every
+load, so asking twice has to hand back the same number. A truck with four numbers for
+one fault is paperwork that has stopped meaning anything.
+
+`tw_sync_defect_work_orders` gives every unrepaired defect a number and writes it back
+onto the defect, so the two screens agree. Priority follows the defect — unsafe is
+`now`, major is `today`.
+
+Closing a work order does **not** mark the defect repaired. Those are different acts by
+different people: the work order is the shop's paperwork, the repair is the mechanic's
+statement that the truck is fixed.
+
+**Work history is a view, not an audit table.** It unions the real rows from defects,
+hours, parts, services, tread readings and orders. An audit log that has to be written
+to by hand drifts the first time a code path forgets it, and then it is worse than
+nothing, because people trust it. This one cannot drift: it *is* the rows.
+
 ### Purchasing
 
 Vendors, ordering, receiving, requests and what went out. Two rules from the stock
@@ -249,9 +269,8 @@ The Haul Division shop foreman asked for the site to carry the rest of the
 shop's paperwork, not just tires. So the app is a **shell with sections**, and
 Tire Wear is the first of them — unchanged, just no longer the whole site.
 
-Now, Defects, PM, Timecard, Hours, Inventory, Tires and Setup are built, and
-Inventory carries the whole purchasing side. Still to come, from the foreman's
-mockup: **work history** (the audit view under Timecards) and **work orders**.
+**Everything in the foreman's mockup is built.** Now, Defects, PM, Timecard, Hours,
+Inventory (with the whole purchasing side), Tires, Work orders and Setup.
 
 **To add a section:** write a component, add a row to `SECTIONS` in
 `src/sections.jsx`. The shell picks up the nav, the header blurb, and the
@@ -308,6 +327,8 @@ needs to record tread, it calls this section's code, not a copy of it.
 | `scripts/test-setup.mjs` | The roster admin and the cost-code paste reader |
 | `scripts/test-now.mjs` | The punch clock and the board numbers |
 | `scripts/test-purchasing.mjs` | Vendors, ordering, receiving, requests |
+| `scripts/test-work.mjs` | Work orders and the history view |
+| `src/WorkSection.jsx` | Work orders and work history |
 | `src/PurchasingScreens.jsx` | Order, Vendors, Requests, Issued |
 | `src/purchasingData.js` | Vendors, orders and requests I/O |
 | `src/NowSection.jsx` | Who is on the clock, and the shop at a glance |

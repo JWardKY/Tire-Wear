@@ -221,3 +221,74 @@ export async function recentlyIssued(limit = 200) {
     note: t.note || "", who: t.who || "", at: t.created_at,
   }));
 }
+
+/* ── Work orders ───────────────────────────────────────────────── */
+
+/* Opening one is idempotent on (kind, key). The board calls it for
+   every open defect on every load, so it has to hand back the same
+   number rather than a new one — a truck with four numbers for one
+   fault is paperwork that has stopped meaning anything. */
+export const openWorkOrder = (kind, key, info, who) =>
+  rpc("tw_open_work_order", {
+    p_kind: kind, p_key: key, p_unit: info.unit || null,
+    p_title: info.title || "Untitled", p_detail: info.detail || null,
+    p_priority: info.priority || "normal",
+    p_vehicle_id: info.vehId || null, p_who: who || null,
+  });
+
+export const syncDefectWorkOrders = (who) =>
+  rpc("tw_sync_defect_work_orders", { p_who: who || null });
+
+export async function listWorkOrders(states) {
+  let q = supabase.from("tw_work_orders").select("*")
+    .order("priority").order("wo_number", { ascending: false }).limit(500);
+  if (states?.length) q = q.in("state", states);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map((w) => ({
+    id: w.id, wo: w.wo_number, kind: w.kind, key: w.source_key,
+    vehId: w.vehicle_id, unit: w.unit_number || "", title: w.title,
+    detail: w.detail || "", priority: w.priority, state: w.state,
+    assignedTo: w.assigned_to, assignedName: w.assigned_name || "",
+    completedAt: w.completed_at, completionNote: w.completion_note || "",
+    at: w.created_at,
+  }));
+}
+
+export async function assignWorkOrder(id, mechanic) {
+  check(await supabase.from("tw_work_orders").update({
+    assigned_to: mechanic ? mechanic.id : null,
+    assigned_name: mechanic ? mechanic.name : null,
+    assigned_at: mechanic ? new Date().toISOString() : null,
+    state: mechanic ? "in progress" : "open",
+    updated_at: new Date().toISOString(),
+  }).eq("id", id));
+}
+
+export async function closeWorkOrder(id, note, who) {
+  check(await supabase.from("tw_work_orders").update({
+    state: "done", completed_at: new Date().toISOString(),
+    completed_by: who, completion_note: note || null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", id));
+}
+
+/* ── Work history ──────────────────────────────────────────────── */
+
+export async function workHistory({ from, to, kind, unit, who } = {}) {
+  let q = supabase.from("tw_work_history").select("*")
+    .order("at", { ascending: false }).limit(1000);
+  if (from) q = q.gte("at", `${from}T00:00:00Z`);
+  if (to) q = q.lte("at", `${to}T23:59:59Z`);
+  if (kind && kind !== "all") q = q.eq("kind", kind);
+  if (unit && unit !== "all") q = q.eq("unit", unit);
+  if (who && who !== "all") q = q.eq("who", who);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map((r) => ({
+    at: r.at, kind: r.kind, what: r.what, unit: r.unit || "",
+    summary: r.summary || "", who: r.who || "", workOrder: r.work_order || "",
+    hours: r.hours == null ? null : Number(r.hours),
+    id: r.source_id,
+  }));
+}
