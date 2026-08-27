@@ -120,13 +120,50 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### This is a shop system now, and tires are one section of it
+
+The Haul Division shop foreman asked for the site to carry the rest of the
+shop's paperwork, not just tires. So the app is a **shell with sections**, and
+Tire Wear is the first of them — unchanged, just no longer the whole site.
+
+Still to come, from the foreman's mockups: Now, Timecard, My jobs, Defects, PM,
+Inventory, Hours, Setup.
+
+**To add a section:** write a component, add a row to `SECTIONS` in
+`src/sections.jsx`. The shell picks up the nav, the header blurb, and the
+sub-tabs from that row. Nothing else needs touching.
+
+```js
+{ key: "defects", label: "Defects",
+  blurb: "Open DVIR defects and what has been done about them",
+  subTabs: [["open", "Open"], ["closed", "Closed"]],
+  Component: DefectsSection }
+```
+
+A section component is handed `{ who, tab, onBusy }` and renders its own body.
+`tab` is whichever sub-tab is showing; call `onBusy(true|false)` while writing
+so the Saving… chip in the header knows.
+
+The section row hides itself while there is only one section — a lone tab that
+does nothing reads as a bug. It appears as soon as a second one is registered,
+and the sub-tabs step down to an underline so the two rows are not peers.
+
+**The one rule that matters:** there is exactly one copy of the tire logic, and
+it is `src/TireWear.jsx`. The foreman's mockups each carried their own copy,
+already drifted — one wrote `type:"New"` where the database only accepts
+`virgin` or `retread`, and opened tires with `brand:"Unknown"`, which quietly
+poisons the brand comparison the tool exists to produce. If a mechanic screen
+needs to record tread, it calls this section's code, not a copy of it.
+
 ### Layout of the code
 
 | File | What it is |
 |---|---|
-| `src/TireWear.jsx` | The whole UI — fleet list, diagram, dialogs, analysis, settings |
+| `src/AppShell.jsx` | The frame: logo, who you are, section nav, sub-tabs |
+| `src/sections.jsx` | The section registry — add a section here |
+| `src/TireWear.jsx` | The Tires section — fleet list, diagram, dialogs, analysis, settings |
 | `src/data.js` | Every database read and write. The only file that knows SQL exists |
-| `src/App.jsx` | Chooses between the name-badge prompt and the app |
+| `src/App.jsx` | Chooses between the name-badge prompt and the shell |
 | `src/Identify.jsx` | The "who is entering data" screen |
 | `src/identity.js` | Allowed email domains, and remembering you on this device |
 | `src/theme.js` | Palette and type stacks — the only place colours are written down |
