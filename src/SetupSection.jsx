@@ -59,10 +59,12 @@ function Roster({ roster, run }) {
   const [name, setName] = useState("");
   const [confirm, setConfirm] = useState(null);
 
+  const [role, setRole] = useState("mechanic");
+
   const add = async () => {
-    const r = await setup.addMechanic(email, name);
+    const r = await setup.addMechanic(name, role, email);
     if (!r?.ok) throw new Error(r?.error || "Could not add that mechanic.");
-    setAdding(false); setEmail(""); setName("");
+    setAdding(false); setEmail(""); setName(""); setRole("mechanic");
   };
 
   return (
@@ -76,15 +78,29 @@ function Roster({ roster, run }) {
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead><tr>
-            <th style={th}>Name</th><th style={th}>Email</th>
+            <th style={th}>Name</th><th style={th}>Role</th>
             <th style={th}>PIN</th><th style={th}>On the roster</th>
             <th style={th}></th>
           </tr></thead>
           <tbody>
             {roster.map((m) => (
               <tr key={m.id}>
-                <td style={td}>{m.name}</td>
-                <td style={{ ...td, color: C.muted }}>{m.email}</td>
+                <td style={td}>
+                  {m.name}
+                  {m.email && (
+                    <div style={{ fontSize: 11, color: C.muted }}>{m.email}</div>
+                  )}
+                </td>
+                <td style={td}>
+                  <select style={{ ...inp, maxWidth: 150 }} value={m.role}
+                    onChange={(e) => run(
+                      () => setup.setRole(m.id, e.target.value),
+                      `${m.name} is now ${e.target.value}.`)}>
+                    <option value="mechanic">Mechanic</option>
+                    <option value="dashboard">Dashboard</option>
+                    <option value="admin">Admin/Dashboard</option>
+                  </select>
+                </td>
                 <td style={td}>
                   {m.locked
                     ? <span style={{ color: C.pull }}>locked out</span>
@@ -98,7 +114,7 @@ function Roster({ roster, run }) {
                     <Btn tone="ghost" onClick={() => setConfirm(m)}>RESET PIN</Btn>
                   )}{" "}
                   <Btn tone="ghost" onClick={() => run(
-                    () => setup.setMechanicActive(m.email, !m.active),
+                    () => setup.setMechanicActive(m.id, !m.active),
                     m.active ? `${m.name} taken off the roster.`
                              : `${m.name} back on the roster.`)}>
                     {m.active ? "REMOVE" : "RESTORE"}
@@ -108,8 +124,8 @@ function Roster({ roster, run }) {
             ))}
             {!roster.length && (
               <tr><td style={{ ...td, color: C.muted }} colSpan={5}>
-                Nobody on the roster yet. Add a mechanic and they set their own
-                PIN the first time they open the timecard tab.
+                Nobody on the roster yet. Add somebody and they set their own PIN
+                the first time they tap their name on the timecard tab.
               </td></tr>
             )}
           </tbody>
@@ -128,16 +144,25 @@ function Roster({ roster, run }) {
             <input style={inp} value={name} autoFocus
                    onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Email">
+          <Field label="Role">
+            <select style={inp} value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="mechanic">Mechanic</option>
+              <option value="dashboard">Dashboard</option>
+              <option value="admin">Admin/Dashboard</option>
+            </select>
+          </Field>
+          <Field label="Company email, if they have one">
             <input style={inp} value={email} type="email"
+                   placeholder="leave blank if not"
                    onChange={(e) => setEmail(e.target.value)} />
           </Field>
           <p style={{ color: C.muted, fontSize: 12 }}>
-            They pick their own PIN the first time they open the timecard tab.
+            Email is optional — most of the shop signs in by tapping their name on
+            the timecard tab. They pick their own PIN the first time they do.
           </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <Btn tone="ghost" onClick={() => setAdding(false)}>CANCEL</Btn>
-            <Btn disabled={!name.trim() || !email.trim()}
+            <Btn disabled={!name.trim()}
                  onClick={() => run(add, "Added.")}>ADD</Btn>
           </div>
         </Modal>
@@ -153,7 +178,7 @@ function Roster({ roster, run }) {
             <Btn tone="ghost" onClick={() => setConfirm(null)}>CANCEL</Btn>
             <Btn onClick={() => { const m = confirm; setConfirm(null);
               run(async () => {
-                const r = await setup.resetPin(m.email);
+                const r = await setup.resetPin(m.id);
                 if (!r?.ok) throw new Error(r?.error || "Could not reset it.");
               }, `${m.name} can set a new PIN now.`); }}>
               RESET IT

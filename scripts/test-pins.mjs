@@ -99,7 +99,7 @@ try {
          properties tested above. tw_purge_test_mechanic is the narrow
          exception: it refuses any address that is not @invalid, so the
          suite can tidy up without a real mechanic becoming deletable. */
-      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL }); },
+      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL, p_name: null }); },
       verify: async () => {
         /* id is granted; "*" is not, and would error into a false all-clear */
         const { count, error } = await c.from("tw_mechanics")
