@@ -3,6 +3,7 @@ import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
 import TimecardSection from "./TimecardSection.jsx";
 import HoursSection from "./HoursSection.jsx";
+import InventorySection from "./InventorySection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
    component — the shell renders the nav, owns which section is showing,
@@ -13,8 +14,8 @@ import HoursSection from "./HoursSection.jsx";
    `blurb` is the line under the logo, so the header says what you are
    looking at rather than always saying tires.
 
-   Still to come, per the shop foreman's mockups: Now, My jobs, Inventory,
-   Setup. */
+   Still to come, per the shop foreman's mockups: Now, My jobs, Setup.
+   And the Motive sync, which is waiting on an API key. */
 
 export const SECTIONS = [
   {
@@ -56,6 +57,17 @@ export const SECTIONS = [
       ["detail", "Every entry"],
     ],
     Component: HoursSection,
+  },
+  {
+    key: "inventory",
+    label: "Inventory",
+    blurb: "Parts on the shelf, what needs ordering, and where it all went",
+    subTabs: [
+      ["stock", "Stock"],
+      ["reorder", "Reorder"],
+      ["import", "Import"],
+    ],
+    Component: InventorySection,
   },
   {
     key: "tires",
