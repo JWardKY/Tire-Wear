@@ -8,6 +8,7 @@ import * as time from "./timeData.js";
 import * as clock from "./nowData.js";
 import * as setup from "./setupData.js";
 import * as buy from "./purchasingData.js";
+import MyJobs from "./MyJobsSection.jsx";
 import * as shop from "./shopData.js";
 
 /* ── The Timecard section ─────────────────────────────────────────
@@ -101,6 +102,24 @@ export default function TimecardSection({ who, tab, onBusy }) {
     () => entries.reduce((a, e) => a + e.hours, 0), [entries]);
 
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading your timecard…</div>;
+
+  /* My jobs sits behind the PIN with the rest of the personal tabs. It
+     is one mechanic's own work, so it should not be readable by whoever
+     happens to be standing at the tablet. */
+  if (tab === "myjobs") {
+    if (!unlocked) {
+      return (
+        <Body err={err}>
+          <Gate who={who} onIn={(u) => { writeUnlock(u); setUnlocked(u); }} />
+        </Body>
+      );
+    }
+    return (
+      <Body err={err}>
+        <MyJobs me={unlocked} onBusy={onBusy} />
+      </Body>
+    );
+  }
 
   if (tab === "history") {
     return (
@@ -294,10 +313,19 @@ function Gate({ who, onIn }) {
   const back = () => { setPicked(null); setBuf(""); setFirstPin(""); setMsg(""); };
 
   /* Four digits is the whole input, so it submits itself rather than
-     making somebody find a button after the last tap. */
+     making somebody find a button after the last tap.
+
+     The in-flight guard is a ref, not state, and `working` is NOT a
+     dependency. It was both, once: setting it re-ran this effect, whose
+     cleanup marked the running attempt stale, so the code that clears
+     it never ran and the pad stayed disabled for good. Nobody could
+     sign in. State that the effect both sets and depends on is a loop
+     waiting to happen. */
+  const busy = useRef(false);
   useEffect(() => {
-    if (!picked || buf.length !== 4 || working) return;
+    if (!picked || buf.length !== 4 || busy.current) return;
     let live = true;
+    busy.current = true;
     (async () => {
       setWorking(true);
       try {
@@ -326,11 +354,12 @@ function Gate({ who, onIn }) {
       } catch (e) {
         if (live) { setMsg(e.message || String(e)); setBuf(""); }
       } finally {
-        if (live) setWorking(false);
+        busy.current = false;
+        setWorking(false);
       }
     })();
     return () => { live = false; };
-  }, [buf, mode, picked, firstPin, working, onIn, who]);
+  }, [buf, mode, picked, firstPin, onIn, who]);
 
   const tap = (k) => {
     setMsg("");

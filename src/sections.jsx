@@ -1,5 +1,4 @@
 import NowSection from "./NowSection.jsx";
-import MyJobsSection from "./MyJobsSection.jsx";
 import TiresSection from "./TireWear.jsx";
 import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
@@ -29,12 +28,6 @@ export const SECTIONS = [
     Component: NowSection,
   },
   {
-    key: "myjobs",
-    label: "My jobs",
-    blurb: "What is on you: assigned work, open defects, PM coming due",
-    Component: MyJobsSection,
-  },
-  {
     key: "defects",
     label: "Defects",
     blurb: "What is wrong with the fleet, who has it, and what was done",
@@ -60,6 +53,7 @@ export const SECTIONS = [
     blurb: "Your own hours for the day — behind a PIN, because these are pay records",
     subTabs: [
       ["today", "Today"],
+      ["myjobs", "My jobs"],
       ["history", "My history"],
       ["pin", "My PIN"],
     ],
