@@ -202,8 +202,28 @@ export async function deleteEntry(id) {
 export async function saveCard(card, mechanicId) {
   const id = await addEntry({ ...card, mechanicId });
 
+  /* Every part the mechanic put on the line is recorded, typed or not.
+     Only the ones that matched the catalog also move stock — that is the
+     whole of rule 10 as far as this function is concerned: nobody is
+     blocked because a part is not in the system. */
+  const lines = mergeParts(card.parts || []);
   const failed = [];
-  for (const p of card.parts || []) {
+
+  if (lines.length) {
+    const { error } = await supabase.from("tw_time_entry_parts").insert(
+      lines.map((p) => ({
+        time_entry_id: id,
+        part_id: p.partId || null,
+        part_number: p.number,
+        description: p.name || null,
+        qty: p.qty,
+      }))
+    );
+    if (error) failed.push(`the parts did not save — ${error.message}`);
+  }
+
+  for (const p of lines) {
+    if (!p.partId) continue;   // typed by hand: nothing to draw down
     try {
       await parts.move(p.partId, "issue", p.qty, {
         vehId: card.vehId || null,
@@ -215,6 +235,7 @@ export async function saveCard(card, mechanicId) {
       failed.push(`${p.number} — ${e.message || e}`);
     }
   }
+
   /* The log is a record of what happened, so it is written after the
      work, and a log failure never undoes hours a mechanic just saved. */
   const { log } = await import("./logData.js");
@@ -231,16 +252,59 @@ export async function saveCard(card, mechanicId) {
       hours: card.hours, unit_seconds: card.unitSeconds,
       stints: card.stints?.length || 0, work_order: card.workOrder || null,
       work_types: card.workTypes || [], work_performed: card.workPerformed || null,
-      parts: (card.parts || []).map((p) => `${p.qty}x ${p.number}`),
+      parts: lines.map((p) => `${p.qty}x ${p.number}`),
     },
   });
 
   if (failed.length) {
     throw new Error(
-      `The hours saved, but these parts did not come off the shelf: ${failed.join("; ")}`
+      `The hours saved, but not everything else did: ${failed.join("; ")}`
     );
   }
   return id;
+}
+
+/* Jason's rule: typing the same number twice adds the quantities rather
+   than making a second line. Matching is on the trimmed, case-folded
+   number, so "AF-1140" and "af-1140 " are the same part. The database
+   has a unique index saying the same thing, so a bug here surfaces as a
+   failed save rather than as two lines for one part. */
+export function mergeParts(list) {
+  const out = [];
+  const at = new Map();
+  for (const p of list) {
+    const number = String(p.number || "").trim();
+    if (!number) continue;
+    const qty = Number(p.qty);
+    if (!(qty > 0)) continue;
+    const key = number.toLowerCase();
+    const seen = at.get(key);
+    if (seen != null) {
+      out[seen].qty = Math.round((out[seen].qty + qty) * 100) / 100;
+      /* A catalog match wins over a typed one for the same number: it is
+         the same part, and knowing its id means the stock can move. */
+      if (!out[seen].partId && p.partId) {
+        out[seen].partId = p.partId;
+        out[seen].name = p.name || out[seen].name;
+      }
+      continue;
+    }
+    at.set(key, out.length);
+    out.push({ partId: p.partId || null, number, name: p.name || "", qty });
+  }
+  return out;
+}
+
+/* What was put on one entry, for showing a saved line back. */
+export async function partsForEntry(entryId) {
+  const { data, error } = await supabase
+    .from("tw_time_entry_parts").select("*").eq("time_entry_id", entryId)
+    .order("part_number");
+  if (error) throw error;
+  return data.map((r) => ({
+    id: r.id, partId: r.part_id, number: r.part_number,
+    name: r.description || "", qty: Number(r.qty),
+  }));
 }
 
 /* ── Payroll ───────────────────────────────────────────────────────

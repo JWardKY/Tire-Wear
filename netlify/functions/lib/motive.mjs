@@ -115,10 +115,16 @@ export async function fetchRawInspections(key, sinceISO, n = 2) {
    All of that was found by looking at a real response. */
 const REAL_DEFECT = new Set(["minor", "major"]);
 
-export async function fetchInspectionDefects(key, sinceISO) {
+/* `status` is the one thing that differs between the two feeds we read.
+   "with_defects" is every report that had a fault on it, which is what
+   the queue is built from. "open" is Motive's own view of which of those
+   are still outstanding, and it is the only signal we have that a DVIR
+   was closed — see planClosures, and read its warning before trusting
+   an empty answer from it. */
+export async function fetchInspectionDefects(key, sinceISO, status = "with_defects") {
   const rows = await motiveAll(
     "/v1/inspection_reports", key,
-    { start_date: sinceISO, status: "with_defects" },
+    { start_date: sinceISO, status },
     (d) => d.inspection_reports || []
   );
   const out = [];
@@ -245,10 +251,13 @@ export function planDefects(fromMotive, vehicles, existing) {
   const byNumber = new Map(vehicles.map((v) => [norm(v.number), v]));
 
   const seenKeys = new Set(existing.map((d) => d.defect_key));
-  /* Only open and claimed ones are candidates to be "the same fault". */
+  /* Only open and claimed ones are candidates to be "the same fault".
+     A repaired or closed one is finished business: a fresh report of the
+     same fault is a NEW defect, not a reason to reopen the old row and
+     lose who fixed it and what they wrote. */
   const openIdx = new Map();
   for (const d of existing) {
-    if (d.state === "repaired") continue;
+    if (d.state === "repaired" || d.state === "closed") continue;
     openIdx.set(faultOf(d.unit_number, d.category, d.note), d);
   }
 
@@ -331,5 +340,79 @@ export function planDefects(fromMotive, vehicles, existing) {
 const norm = (x) => (x || "").trim().toLowerCase().replace(/\s+/g, " ");
 const faultOf = (unit, category, note) =>
   `${norm(unit)}|${norm(category)}|${norm(note)}`;
+
+
+/* ── Closing a defect ─────────────────────────────────────────────
+   Jason's rule 1, and the most dangerous thing in this file.
+
+   Nothing here closes a DVIR. Motive is the DOT record; a mechanic
+   marking a defect repaired takes it off their queue and does not touch
+   Motive. The only evidence we have that Motive considers a fault dealt
+   with is that it stops coming back in the `status=open` feed.
+
+   Absence is weak evidence, so it is fenced three ways:
+
+   1. **Only inside the window.** The feed is date-bounded. A defect last
+      reported before `since` would not appear even if it were still wide
+      open, so it is never a candidate. Widening the lookback widens what
+      can be closed, deliberately.
+
+   2. **Only Motive's own.** A hand-logged defect has no business being
+      closed by something Motive did or did not say.
+
+   3. **An empty or collapsed feed closes nothing.** If the feed comes
+      back empty while we hold open defects in the window, the
+      overwhelmingly likely explanation is a bad key, a changed
+      parameter, or an outage — not that the whole fleet was fixed at
+      once. Same for a run that would close most of what we hold. Both
+      refuse and say why, because the failure mode is marking real
+      out-of-service faults as resolved.
+
+   Closing never touches repaired_by or repair_note. Who fixed it and
+   what they wrote is the record; closing only says Motive agrees. */
+
+export const CLOSE_GUARD = { maxRatio: 0.8, minToApplyRatio: 4 };
+
+export function planClosures(openFromMotive, existing, { since, guard = CLOSE_GUARD } = {}) {
+  const stillOpen = new Set(openFromMotive.map((d) => d.key));
+
+  /* Candidates: ours, from Motive, not already closed, and last heard of
+     inside the window this feed actually covers. */
+  const candidates = existing.filter((d) =>
+    d.source === "motive"
+    && d.state !== "closed"
+    && (!since || String(d.last_reported || "") >= since));
+
+  const close = candidates.filter((d) => !stillOpen.has(d.defect_key));
+  const ratio = candidates.length ? close.length / candidates.length : 0;
+
+  const refuse =
+    openFromMotive.length === 0 && candidates.length > 0
+      ? `The open feed came back empty while ${candidates.length} defect(s) are `
+        + `open in the window. That is a broken feed far more often than a fixed `
+        + `fleet, so nothing was closed.`
+    : close.length >= guard.minToApplyRatio && ratio > guard.maxRatio
+      ? `This would close ${close.length} of ${candidates.length} defects `
+        + `(${Math.round(ratio * 100)}%), over the ${Math.round(guard.maxRatio * 100)}% `
+        + `guard. That looks like a feed problem rather than a week's repairs, `
+        + `so nothing was closed.`
+    : null;
+
+  return {
+    close: refuse ? [] : close.map((d) => ({
+      id: d.id,
+      defect_key: d.defect_key,
+      unit_number: d.unit_number,
+      category: d.category,
+      /* Reported separately because they mean different things: a
+         repaired one closing is the loop finishing, an open one closing
+         means somebody dealt with it outside this system. */
+      wasRepaired: d.state === "repaired",
+    })),
+    candidates: candidates.length,
+    stillOpen: close.length ? candidates.length - close.length : candidates.length,
+    refused: refuse,
+  };
+}
 
 export { MotiveError, WHICH_ODOMETER };

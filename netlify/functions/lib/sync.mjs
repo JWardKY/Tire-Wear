@@ -10,7 +10,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   fetchVehicleOdometers, fetchInspectionDefects, fetchRawVehicles,
   fetchRawInspections,
-  planOdometer, planDefects, compareOdometers,
+  planOdometer, planDefects, planClosures, compareOdometers,
   todayISO, WHICH_ODOMETER,
 } from "./motive.mjs";
 
@@ -133,11 +133,19 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
        category is "Other", where the note is the only thing that says
        which fault it actually is. */
     all(db, "tw_defects",
-        "id,defect_key,unit_number,category,note,state,report_count,first_reported,last_reported",
+        "id,defect_key,unit_number,category,note,state,source,report_count," +
+        "first_reported,last_reported",
         "defect_key"),
   ]);
 
+  /* A second read of the same endpoint, asking Motive which of those
+     reports it still considers outstanding. This is the only signal we
+     have that a DVIR was closed — see planClosures for why absence from
+     it is treated so carefully. */
+  const stillOpenInMotive = await fetchInspectionDefects(motiveKey, start, "open");
+
   const plan = planDefects(fromMotive, vehicles, existing);
+  const closing = planClosures(stillOpenInMotive, existing, { since: start });
   const out = {
     since: start,
     motiveReturned: fromMotive.length,
@@ -150,6 +158,17 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
     alreadyHave: plan.already.length,
     sample: plan.create.slice(0, 5).map((r) => ({
       unit: r.unit_number, category: r.category, safety: r.safety, on: r.first_reported,
+    })),
+    stillOpenInMotive: stillOpenInMotive.length,
+    wouldClose: closing.close.length,
+    wouldCloseRepaired: closing.close.filter((c) => c.wasRepaired).length,
+    closeCandidates: closing.candidates,
+    /* Non-null means the guard tripped and nothing will be closed. It is
+       reported on a dry run too, which is the point: you see the refusal
+       before you ever pass write=1. */
+    closeRefused: closing.refused,
+    closeSample: closing.close.slice(0, 5).map((c) => ({
+      unit: c.unit_number, category: c.category, wasRepaired: c.wasRepaired,
     })),
   };
   if (!write) return { dryRun: true, ...out };
@@ -169,7 +188,37 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
       .update({ ...cols, updated_at: new Date().toISOString() }).eq("id", id);
     if (error) throw error;
   }
-  return { dryRun: false, ...out, created, bumped: plan.bump.length };
+  /* Closing last, so a failure here cannot stop new defects landing.
+     Only state and closed_at are written: repaired_by and repair_note
+     are the record of who fixed it, and closing does not get to touch
+     them. */
+  let closed = 0;
+  const closedAt = new Date().toISOString();
+  for (const c of closing.close) {
+    const { error } = await db.from("tw_defects")
+      .update({ state: "closed", closed_at: closedAt, updated_at: closedAt })
+      .eq("id", c.id)
+      /* Guards the race where a mechanic marks it repaired between the
+         read and this write — that is still fine to close — but refuses
+         to re-close something already closed. */
+      .neq("state", "closed");
+    if (error) throw error;
+    closed += 1;
+
+    const { error: logErr } = await db.from("tw_work_log").insert({
+      event_type: "defect_closed",
+      actor_name: "Motive sync",
+      unit_number: c.unit_number,
+      summary: `${c.unit_number} — ${c.category || "defect"} closed in Motive`
+        + (c.wasRepaired ? ", after being repaired here" : ", without being repaired here"),
+      detail: { defect_key: c.defect_key, was_repaired: c.wasRepaired, since: start },
+    });
+    /* The log is a record, not a gate: a defect really is closed in
+       Motive whether or not we managed to note it. */
+    if (logErr) console.warn("work log write failed:", logErr.message);
+  }
+
+  return { dryRun: false, ...out, created, bumped: plan.bump.length, closed };
 }
 
 function daysAgo(n) {

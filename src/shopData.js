@@ -48,6 +48,7 @@ const toDefect = (r) => ({
   repairedAt: r.repaired_at,
   repairNote: r.repair_note || "",
   repairHours: r.repair_hours == null ? null : Number(r.repair_hours),
+  closedAt: r.closed_at,
 });
 
 export async function listDefects() {
@@ -114,6 +115,10 @@ export async function repairDefect(id, r, who) {
 
 /* Back to open, and the repair details go with it — leaving a repaired_by
    on a defect that is not repaired would be a lie in the record. */
+/* Reopening a closed defect is deliberately not offered. Motive is the
+   DOT record: if a fault is back, it comes back through a sync as a new
+   defect with its own key, which is the honest thing for an auditor to
+   read. This only puts a repaired one back on the queue. */
 export async function reopenDefect(id) {
   check(
     await supabase.from("tw_defects")
@@ -124,6 +129,8 @@ export async function reopenDefect(id) {
         updated_at: nowISO(),
       })
       .eq("id", id)
+      /* Never a closed one — see above. */
+      .neq("state", "closed")
   );
 }
 

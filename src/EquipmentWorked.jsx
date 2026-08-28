@@ -376,10 +376,44 @@ function PartsPulled({ parts, picked, onChange }) {
       .slice(0, 8);
   }, [q, parts, picked]);
 
-  const add = (p) => {
-    onChange([...picked, { partId: p.id, num: p.num, name: p.name, uom: p.uom, qty: 1 }]);
+  /* Typing the same number twice adds to the line that is already
+     there rather than making a second one — Jason's rule, and the
+     database has a unique index saying the same thing. */
+  const put = (line) => {
+    const key = line.num.trim().toLowerCase();
+    const at = picked.findIndex((x) => x.num.trim().toLowerCase() === key);
+    if (at >= 0) {
+      const next = picked.slice();
+      next[at] = {
+        ...next[at],
+        qty: Math.round((next[at].qty + line.qty) * 100) / 100,
+        partId: next[at].partId || line.partId,
+        name: next[at].name || line.name,
+      };
+      onChange(next);
+    } else {
+      onChange([...picked, line]);
+    }
     setQ("");
     box.current?.focus();
+  };
+
+  const add = (p) =>
+    put({ partId: p.id, num: p.num, name: p.name, uom: p.uom, qty: 1 });
+
+  /* Offered whenever there are two characters and no catalog row is an
+     exact match for them — a near match is still worth typing past. */
+  const typed = q.trim();
+  const canType = typed.length >= 2
+    && !parts.some((p) => p.num.toLowerCase() === typed.toLowerCase());
+
+  /* A part nobody has put in the catalog is still a part that came off
+     the shelf. It is recorded as typed and moves no stock, which is
+     better than a mechanic having nowhere to write it down. */
+  const addTyped = () => {
+    const num = q.trim();
+    if (!num) return;
+    put({ partId: null, num, name: "", uom: "", qty: 1 });
   };
 
   const setQty = (partId, qty) =>
@@ -400,7 +434,16 @@ function PartsPulled({ parts, picked, onChange }) {
             <div key={p.partId} className="flex flex-wrap items-center"
               style={{ gap: 8, padding: "6px 0", borderTop: `1px solid ${C.lineSoft}` }}>
               <span style={{ fontFamily: FM, fontSize: 13, fontWeight: 600 }}>{p.num}</span>
-              <span style={{ fontSize: 13, color: C.muted, flex: 1, minWidth: 120 }}>{p.name}</span>
+              <span style={{ fontSize: 13, color: C.muted, flex: 1, minWidth: 120 }}>
+                {p.name}
+                {!p.partId && (
+                  <span style={{ fontFamily: FD, fontSize: 11, letterSpacing: "0.06em",
+                                 textTransform: "uppercase", color: C.watch,
+                                 marginLeft: p.name ? 8 : 0 }}>
+                    typed — no stock
+                  </span>
+                )}
+              </span>
               <input type="number" min="1" step="1" value={p.qty}
                 onChange={(e) => setQty(p.partId, Math.max(1, Number(e.target.value) || 1))}
                 style={{ ...inp, fontFamily: FM, width: 78 }} />
@@ -414,8 +457,14 @@ function PartsPulled({ parts, picked, onChange }) {
 
       <div style={{ position: "relative" }}>
         <input ref={box} value={q} onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            if (hits.length) add(hits[0]);
+            else if (canType) addTyped();
+          }}
           placeholder="Part number or name…" style={inp} />
-        {hits.length > 0 && (
+        {(hits.length > 0 || canType) && (
           <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%",
                         background: "#fff", border: `1px solid ${C.line}`, borderRadius: 5,
                         marginTop: 3, boxShadow: "0 10px 26px rgba(0,0,0,0.14)",
@@ -432,11 +481,25 @@ function PartsPulled({ parts, picked, onChange }) {
                 </span>
               </button>
             ))}
+            {canType && (
+              <button onClick={addTyped}
+                style={{ display: "block", width: "100%", textAlign: "left", border: "none",
+                         background: hits.length ? C.paper : "none", cursor: "pointer",
+                         padding: "8px 10px" }}>
+                <span style={{ fontSize: 13, color: C.ink }}>
+                  Use <b style={{ fontFamily: FM }}>{q.trim()}</b> as typed
+                </span>
+                <span style={{ fontSize: 12, color: C.muted, marginLeft: 8 }}>
+                  not in the catalog — no stock moves
+                </span>
+              </button>
+            )}
           </div>
         )}
       </div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
-        Type at least two characters. {nf(parts.length)} parts in the catalog.
+        Type at least two characters. {nf(parts.length)} parts in the catalog —
+        anything not in it can still be typed in.
       </div>
     </div>
   );

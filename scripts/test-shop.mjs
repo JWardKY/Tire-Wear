@@ -68,6 +68,39 @@ try {
   truthy(!d.repairedBy && d.repairHours == null,
          "and clears the repair, so the record cannot lie");
 
+  /* ── Closing: Jason's rule 1 ──────────────────────────────────
+     Nothing in the app closes a DVIR. The only route to `closed` is a
+     Motive sync, so the checks here are about the door being shut. */
+  {
+    const noTime = await c.from("tw_defects")
+      .update({ state: "closed" }).eq("id", d.id);
+    truthy(noTime.error, "a defect cannot be closed without saying when");
+
+    const closedAt = new Date().toISOString();
+    const ok1 = await c.from("tw_defects")
+      .update({ state: "closed", closed_at: closedAt }).eq("id", d.id);
+    truthy(!ok1.error, "closing with a time is what the sync does");
+
+    let cd = (await shop.listDefects()).find((x) => x.id === d.id);
+    is(cd.state, "closed", "and it sticks");
+    truthy(cd.closedAt, "with the time it happened");
+
+    /* The app must not be able to undo it. */
+    await shop.reopenDefect(d.id);
+    cd = (await shop.listDefects()).find((x) => x.id === d.id);
+    is(cd.state, "closed", "reopening refuses to touch a closed defect");
+
+    const stray = await c.from("tw_defects")
+      .update({ closed_at: null }).eq("id", d.id);
+    truthy(stray.error, "and a closed defect cannot have its closing time removed");
+
+    /* Put it back so the rest of the suite has an open defect. */
+    await c.from("tw_defects")
+      .update({ state: "open", closed_at: null }).eq("id", d.id);
+    is((await shop.listDefects()).find((x) => x.id === d.id).state, "open",
+       "the test defect is open again for the checks below");
+  }
+
   const halfWritten = await c.from("tw_defects").update({ state: "repaired" }).eq("id", d.id);
   truthy(halfWritten.error, "database refuses 'repaired' with no repairer");
 

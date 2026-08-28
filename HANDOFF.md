@@ -219,30 +219,38 @@ spec allows and says nothing about it. Past 1,800 characters the screen refuses 
 mail link and offers the text to copy instead — a silently cut-off purchase order is
 worse than no purchase order.
 
-### Jason's spec says no parts inventory, and we built one
+### Parts: a catalog and free text, both
 
-**This is an open disagreement, not a settled decision.** It needs to go back to
-Jason before anybody acts on it either way.
+Jason's rule 10 says a mechanic types a part number or a plain description plus a
+quantity, and that no stock system should stand in the way of that. We also have a
+real catalog, which he did not want. **Both are now true at once**, and
+`tw_time_entry_parts` is how.
 
-`HANDOFF-SHOP.md` rule 10 is explicit: parts are free text, a mechanic types a part
-number or a plain description plus a quantity, and *"do not reintroduce a stock
-system, a reorder board, or vendor purchasing unless Jason asks — that was a
-considered decision, not an omission."* His new dashboard drops the Inventory tab
-that his old one had, which is the same call made twice.
+That table records what the mechanic actually put on the job, always. When the text
+matched the catalog, `part_id` points at it and a `tw_part_txns` issue draws the
+stock down as well; when it did not, the line stands on its own as typed and moves
+no stock. Nobody is ever blocked because a part is not in the system, and stock
+still moves when it can. The card marks a typed line **TYPED — NO STOCK** so nobody
+thinks the shelf went down.
 
-We have all of it: an Inventory section with stock, vendors, ordering, receiving,
-requests and a CSV import, and a catalog search on the equipment card. Jacob asked
-for it and, asked directly, chose to keep it as built for now and raise it with
-Jason rather than have it removed on a document's say-so.
+Two details that matter:
 
-So: **do not remove Inventory, and do not "fix" the equipment card to free text,
-without Jacob and Jason agreeing.** Either way it is a small change — the card
-would take a typed string instead of a catalog id, and the section would come off
-the nav. The database would keep the tables regardless; nothing needs dropping.
+- **The payroll export reads `tw_time_entry_parts`, not `tw_part_txns`.** A typed
+  part moves no stock at all, so reading the movements would have silently dropped
+  it from payroll — exactly the case rule 10 is about.
+- **Typing the same number twice adds the quantities** rather than making a second
+  line, matched on the trimmed and case-folded number. `mergeParts` does it in the
+  app and a unique index says the same thing in the database, so a bug in the former
+  surfaces as a failed save rather than as two lines for one part.
 
-The middle option, if it helps: let the card accept a typed part that is not in the
-catalog, so a mechanic never hits a wall, while a match still draws stock down.
-That is what was recommended and not taken.
+`part_number` is kept as text even when `part_id` is set, so the line still reads
+correctly if the catalog row is later renamed or removed.
+
+**What is still open:** whether the Inventory section — stock, vendors, ordering,
+receiving, requests — should exist at all. Jason's new dashboard drops the tab his
+old one had, and rule 10 says not to reintroduce it. Jacob chose to keep it. That
+conversation is still owed; nothing about the above depends on how it lands, because
+a mechanic can now record a part either way.
 
 ### The mechanic's own side of it
 
@@ -632,37 +640,71 @@ dropdown on the vehicle screen is there for exactly this.
 ### Defects, and the state Motive owns
 
 Jason's rule 1: **nothing in this system closes a DVIR.** A mechanic marking a
-defect repaired takes it off their queue and does not close the record — only
-Motive does that, and nothing here writes back to Motive. The Defects tab says
-so on the screen, and the repaired list is sorted oldest-wait-first with the
-count and the longest wait stated plainly, because left alone these sit forever.
+defect repaired takes it off their queue and does not touch Motive. Only a Motive
+sync may close one, and that is enforced rather than merely intended:
 
-**Not yet implemented, and it is a real gap.** His schema has three states —
-`open`, `repaired`, `closed` — where `closed` is set only when a Motive sync
-stops reporting the defect. Ours has `open`, `claimed`, `repaired` and no
-`closed`, and `planDefects` only ever creates and bumps: it never reconciles a
-disappearance. So a repaired defect stays on the waiting list forever, and a
-defect that vanished from Motive stays open forever.
+- `state` is `open | claimed | repaired | closed`, and a check constraint ties
+  `state = 'closed'` to `closed_at` being set, both directions.
+- `reopenDefect` carries `.neq("state", "closed")`, so no screen can undo a
+  closure. If a fault comes back it arrives through a sync as a **new defect with
+  its own key**, which is what an auditor should read — the first repair's record
+  stays intact.
+- `planDefects` skips repaired *and* closed rows when matching a repeat report, so
+  a later report of the same fault can never drag a finished one back and lose
+  `repaired_by` / `repair_note`.
 
-Closing that gap means the sync marking a defect `closed` when Motive stops
-reporting it, and it carries the one requirement Jason flags hardest: **a sync
-must not resurrect a repaired defect onto a mechanic's list, and must preserve
-`repaired_by` and `repair_note` when it closes one.** Getting it wrong corrupts a
-DOT record, which is why it was left alone rather than done quickly.
+`scripts/test-shop.mjs` holds all of that against the live database.
+
+**How closure is decided, and why it is fenced.** The only evidence we have is that
+a defect stops coming back from `/v1/inspection_reports?status=open`. Absence is
+weak evidence, so `planClosures` fences it three ways:
+
+1. **Only inside the window.** The feed is date-bounded. A defect last reported
+   before `since` would not appear even if it were wide open, so it is never a
+   candidate. Widening the lookback widens what can be closed, deliberately.
+2. **Only Motive's own.** A hand-logged defect is never closed by Motive's silence.
+3. **An empty or collapsed feed closes nothing.** If the feed returns empty while
+   we hold open defects in the window, that is a bad key or an outage far more
+   often than a fixed fleet. Same if a run would close more than 80% of candidates
+   (above a floor of 4, so a genuinely small clear-out is not blocked). Both refuse
+   and say why, on dry runs too — you see the refusal before you ever pass
+   `write=1`.
+
+Every closure writes a `defect_closed` row to the work log saying whether it had
+been repaired here first. A repaired one closing is the loop finishing; an open one
+closing means somebody dealt with it outside this system, and those are counted
+separately in the sync's output.
+
+**Still to verify, and the reason to run a dry run first.** Our defect feed uses
+`status=with_defects`; the closure feed uses `status=open`. That second value comes
+from Jason's own `dvir-open.mjs` and his README ("gone from Motive → dropped"), not
+from a response anybody has looked at in this build — and Motive's documentation
+has already been wrong three times in this project (see below). So **the first live
+run must be a dry run**, and somebody must read `wouldClose`, `closeCandidates` and
+`closeRefused` before `write=1` is used:
+
+    curl -H "X-Sync-Token: $SYNC_TOKEN" \
+      "https://allenhaul.netlify.app/api/motive-sync?what=defects&since=2026-06-01"
+
+If `stillOpenInMotive` comes back as 0, or `wouldClose` is most of
+`closeCandidates`, the parameter is not doing what we think and the guard has
+already stopped it. The planning logic itself is pure and covered by 21 checks in
+`scripts/test-motive.mjs`, which need no key.
 
 ### Defects
 
-A defect is something wrong with a truck. Today they are typed in; once the
-Motive sync exists they will mostly arrive on their own, because **a defect is a
-mirror of an open DVIR item plus the shop's workflow on top**.
+A defect is something wrong with a truck. They can be typed in, but most arrive on
+their own from the sync, because **a defect is a mirror of an open DVIR item plus
+the shop's workflow on top**.
 
 That split is the thing to hold onto. The Motive columns — category, note,
 driver, how many times it has been reported — are refreshed on every sync.
 The workflow columns — claimed, repaired, hours, work order — belong to the shop
-and survive a refresh. `defect_key` is how a Motive item is recognised across
-syncs, and **gone from Motive means fixed, so it closes.** A defect the shop
-finds itself is `source = 'manual'` with a key no sync will ever produce, so
-reconciling against Motive can never close it by accident.
+and survive a refresh, closure included. `defect_key` is how a Motive item is
+recognised across syncs, and gone from Motive means closed — but only under the
+three fences described above, because absence from a date-bounded feed is weak
+evidence. A defect the shop finds itself is `source = 'manual'` with a key no sync
+will ever produce, so reconciling against Motive can never close it by accident.
 
 The Open list sorts out of service first, then major, then oldest. A truck that
 cannot legally roll outranks a truck with a broken mirror, however long the
@@ -883,6 +925,8 @@ Two more views:
 - **`tw_vehicle_meter`** — the latest odometer per truck, in one place.
 - **`tw_pm_due`** — every active truck against every active program, with
   whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
+- **`tw_time_entry_parts`** — what a mechanic put on a timecard line, typed or
+  from the catalog. The payroll export reads this, not the stock movements.
 - **`tw_work_log`** — append only. See the section above before touching it.
 - **`tw_payroll_lines`** — the seventeen-column payroll export.
 - **`tw_timecard_days`** — one row per mechanic per day, clocked against booked.

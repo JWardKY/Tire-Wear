@@ -7,7 +7,9 @@
 
    Run:  node scripts/test-motive.mjs
 */
-import { planOdometer, planDefects, compareOdometers } from "../netlify/functions/lib/motive.mjs";
+import { planOdometer, planDefects, planClosures, CLOSE_GUARD }
+  from "../netlify/functions/lib/motive.mjs";
+import { compareOdometers } from "../netlify/functions/lib/motive.mjs";
 import { makeChecks, report } from "./_testkit.mjs";
 
 const { state, is, truthy } = makeChecks();
@@ -346,5 +348,112 @@ const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
   is(p.create[0].report_count, 2, "reported twice");
 }
 
-report(state, true);
+
+/* ── Closing a defect when Motive stops reporting it ──────────────
+   Jason's rule 1. The whole risk here is closing something that is
+   actually still open on a truck, so most of these are about refusing
+   to act rather than acting. */
+{
+  const SINCE = "2026-08-01";
+  const base = (over = {}) => ({
+    id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
+    category: "Brakes", note: "grinding", state: "open", source: "motive",
+    first_reported: "2026-08-10", last_reported: "2026-08-10", ...over,
+  });
+
+  /* Still in the feed: nothing happens. */
+  {
+    const p = planClosures([{ key: "motive:1:1" }], [base()], { since: SINCE });
+    is(p.close.length, 0, "a defect Motive still reports open is left alone");
+    is(p.candidates, 1, "but it was considered");
+  }
+
+  /* Gone from the feed, with something else still there so the guard
+     does not trip. */
+  {
+    const rows = [base(), base({ id: "d2", defect_key: "motive:2:2" })];
+    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
+    is(p.close.length, 1, "a defect Motive no longer reports is closed");
+    is(p.close[0].id, "d1", "the right one");
+    is(p.close[0].wasRepaired, false, "and it says it was not repaired here");
+    is(p.refused, null, "with no refusal");
+  }
+
+  /* A repaired one closing is the loop finishing, and is called out. */
+  {
+    const rows = [base({ state: "repaired" }), base({ id: "d2", defect_key: "motive:2:2" })];
+    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
+    is(p.close.length, 1, "a repaired defect closes when Motive drops it");
+    is(p.close[0].wasRepaired, true, "and is reported as the repair loop finishing");
+  }
+
+  /* The three fences. */
+  {
+    const rows = [base({ source: "manual", defect_key: "manual:DT-882:1" }),
+                  base({ id: "d2", defect_key: "motive:2:2" })];
+    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
+    is(p.close.length, 0, "a hand-logged defect is never closed by Motive's silence");
+  }
+  {
+    const rows = [base({ last_reported: "2026-07-02" }),
+                  base({ id: "d2", defect_key: "motive:2:2" })];
+    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
+    is(p.close.length, 0,
+       "a defect last reported before the window is not a candidate — the feed " +
+       "would not show it even if it were wide open");
+  }
+  {
+    const rows = [base({ state: "closed" }), base({ id: "d2", defect_key: "motive:2:2" })];
+    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
+    is(p.close.length, 0, "an already-closed defect is not closed twice");
+  }
+
+  /* The guards. An empty feed is a broken feed, not a fixed fleet. */
+  {
+    const p = planClosures([], [base()], { since: SINCE });
+    is(p.close.length, 0, "an empty open feed closes nothing");
+    truthy(/came back empty/.test(p.refused || ""), "and says why in words");
+  }
+  {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      base({ id: `d${i}`, defect_key: `motive:${i}:${i}` }));
+    const p = planClosures([{ key: "motive:0:0" }], many, { since: SINCE });
+    is(p.close.length, 0, "closing nearly everything at once is refused");
+    truthy(/guard/.test(p.refused || ""), "and named as the guard tripping");
+  }
+  {
+    /* Below the ratio: a normal week's repairs go through. */
+    const many = Array.from({ length: 10 }, (_, i) =>
+      base({ id: `d${i}`, defect_key: `motive:${i}:${i}` }));
+    const feed = many.slice(3).map((d) => ({ key: d.defect_key }));
+    const p = planClosures(feed, many, { since: SINCE });
+    is(p.close.length, 3, "three of ten closing is a normal week and goes through");
+    is(p.refused, null, "no refusal");
+  }
+  {
+    /* A small run is not held to the ratio: two of two is fine when
+       two is all there was. */
+    const rows = [base(), base({ id: "d2", defect_key: "motive:2:2" })];
+    const p = planClosures([{ key: "motive:9:9" }], rows, { since: SINCE });
+    is(p.close.length, 2, "a tiny fleet-wide clear-out is not blocked by the ratio");
+    truthy(CLOSE_GUARD.minToApplyRatio > 2, "because the ratio only applies above a floor");
+  }
+}
+
+/* A closed defect must not be dragged back by a later report of the
+   same fault — that would lose who fixed it and what they wrote. */
+{
+  const existing = [{ id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
+                      category: "Brakes", note: "grinding", state: "closed",
+                      source: "motive", report_count: 1,
+                      first_reported: "2026-08-01", last_reported: "2026-08-01" }];
+  const p = planDefects(
+    [{ key: "motive:9:9", unit: "DT-882", category: "Brakes", note: "grinding",
+       date: "2026-08-20", unsafe: false }],
+    [{ id: "v1", number: "DT-882", motive_vehicle_id: null, active: true }],
+    existing);
+  is(p.bump.length, 0, "a new report of a closed fault does not reopen the closed row");
+  is(p.create.length, 1, "it is a new defect instead");
+}
+
 report(state, true);
