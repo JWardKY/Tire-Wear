@@ -1,0 +1,429 @@
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { C, FD, FM } from "./theme.js";
+import { nf, Btn, Field, SectionLabel, inp, linkBtn } from "./ui.jsx";
+import * as time from "./timeData.js";
+
+/* ── Equipment worked ─────────────────────────────────────────────
+   A mechanic's day, one unit at a time. This is the shape the shop
+   asked for: pick the truck, run a clock on it, say what kind of work
+   it was and what you found, and pull the parts against it.
+
+   Two things here are not decoration.
+
+   The sub-clock is per unit and it keeps its stints. A mechanic starts
+   on a truck, gets pulled to a road call, comes back. One elapsed
+   number would lie about that; the stints say when the time actually
+   happened, and the hours field is what gets charged. The clock fills
+   the hours in, and a mechanic can type over them — same rule as the
+   shift card, for the same reason.
+
+   The parts pulled here are issued against the time entry, not just
+   the truck. That is what makes "what did this job cost" answerable
+   later: the labour and the parts share an id. */
+
+const WHERE = [
+  ["shop", "In the shop"],
+  ["road", "Outside service call"],
+];
+
+const blank = () => ({
+  key: Math.random().toString(36).slice(2),
+  vehId: "",
+  where: "shop",
+  hours: "",
+  hoursTyped: false,
+  costCode: "",
+  workOrder: "",
+  workTypes: [],
+  workPerformed: "",
+  parts: [],
+  seconds: 0,
+  stints: [],
+  runningAt: null,
+});
+
+const hms = (sec) => {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/* Quarter hours, because that is the unit payroll charges in. */
+const toQuarters = (sec) => Math.round((sec / 3600) * 4) / 4;
+
+const liveSeconds = (c, now) =>
+  c.seconds + (c.runningAt ? Math.max(0, (now - new Date(c.runningAt).getTime()) / 1000) : 0);
+
+export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts, onSaved, onErr }) {
+  const [cards, setCards] = useState(() => [blank()]);
+  const [saving, setSaving] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const anyRunning = cards.some((c) => c.runningAt);
+  useEffect(() => {
+    if (!anyRunning) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [anyRunning]);
+
+  /* A clock left running when the tab closes is a mechanic's pay, so
+     warn before the browser throws it away. */
+  useEffect(() => {
+    if (!anyRunning) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [anyRunning]);
+
+  const patch = useCallback((key, fields) => {
+    setCards((cs) => cs.map((c) => (c.key === key ? { ...c, ...fields } : c)));
+  }, []);
+
+  const toggleClock = useCallback((key) => {
+    setCards((cs) => cs.map((c) => {
+      if (c.key !== key) return c;
+      if (!c.runningAt) return { ...c, runningAt: new Date().toISOString() };
+      const stop = new Date().toISOString();
+      const secs = c.seconds
+        + Math.max(0, (new Date(stop).getTime() - new Date(c.runningAt).getTime()) / 1000);
+      const q = toQuarters(secs);
+      return {
+        ...c,
+        runningAt: null,
+        seconds: secs,
+        stints: [...c.stints, { start: c.runningAt, stop }],
+        hours: c.hoursTyped ? c.hours : (q > 0 ? String(q) : c.hours),
+      };
+    }));
+  }, []);
+
+  const codeGroups = useMemo(() => {
+    const g = {};
+    codes.forEach((c) => { (g[c.group] ||= []).push(c); });
+    return g;
+  }, [codes]);
+
+  const ready = (c) => c.vehId && c.costCode && Number(c.hours) > 0 && Number(c.hours) <= 24;
+  const filled = (c) =>
+    c.vehId || c.costCode || c.hours || c.workPerformed || c.workTypes.length
+      || c.parts.length || c.seconds || c.runningAt;
+
+  const live = cards.filter(filled);
+  const canSave = live.length > 0 && live.every(ready) && !cards.some((c) => c.runningAt);
+  const totalHours = live.reduce((a, c) => a + (Number(c.hours) || 0), 0);
+
+  const save = async () => {
+    setSaving(true);
+    const failed = [];
+    let saved = 0;
+    for (const c of live) {
+      try {
+        await time.saveCard({
+          date,
+          vehId: c.vehId,
+          where: c.where,
+          hours: Number(c.hours),
+          costCode: c.costCode,
+          workOrder: c.workOrder.trim() || null,
+          note: c.workPerformed.trim().slice(0, 200) || null,
+          workTypes: c.workTypes,
+          unitSeconds: Math.round(c.seconds),
+          stints: c.stints,
+          workPerformed: c.workPerformed.trim() || null,
+          parts: c.parts.map((p) => ({ partId: p.partId, number: p.num, qty: p.qty })),
+          who: mechanic.name,
+        }, mechanic.id);
+        saved += 1;
+      } catch (e) {
+        failed.push(e.message || String(e));
+      }
+    }
+    setSaving(false);
+    if (saved) setCards([blank()]);
+    if (failed.length) onErr?.(failed.join(" "));
+    else onErr?.(null);
+    await onSaved?.();
+  };
+
+  const clear = () => {
+    if (!live.length) return;
+    if (!window.confirm("Clear everything on this form? Nothing has been saved yet.")) return;
+    setCards([blank()]);
+  };
+
+  return (
+    <div id="equipment-worked" style={{ marginBottom: 16 }}>
+      <div className="flex flex-wrap items-baseline justify-between"
+        style={{ gap: 8, marginBottom: 9 }}>
+        <SectionLabel noMargin>Equipment worked</SectionLabel>
+        <span style={{ fontSize: 12.5, color: C.muted }}>
+          {live.length ? `${nf(totalHours, 2)} hr across ${live.length} unit${live.length === 1 ? "" : "s"}` : "Nothing on the form yet"}
+        </span>
+      </div>
+
+      {cards.map((c, i) => (
+        <UnitCard key={c.key} card={c} index={i} count={cards.length}
+          now={now} vehicles={vehicles} codeGroups={codeGroups} parts={parts}
+          onPatch={(f) => patch(c.key, f)}
+          onClock={() => toggleClock(c.key)}
+          onRemove={() => setCards((cs) => (cs.length === 1 ? [blank()] : cs.filter((x) => x.key !== c.key)))} />
+      ))}
+
+      <button onClick={() => setCards((cs) => [...cs, blank()])}
+        className="no-print"
+        style={{ ...linkBtn, fontFamily: FD, fontSize: 14, letterSpacing: "0.05em",
+                 textTransform: "uppercase", textDecoration: "none",
+                 border: `1px dashed ${C.line}`, borderRadius: 8, padding: "11px 16px",
+                 width: "100%", background: C.card, marginTop: 4 }}>
+        + Add another unit
+      </button>
+
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "12px 0 0", lineHeight: 1.55 }}>
+        Shop time, cleanup, a parts run, a safety meeting — anything not against a
+        unit — goes on the day with <strong>Add hours</strong> instead.
+      </p>
+
+      <div className="flex flex-wrap items-center justify-end no-print"
+        style={{ gap: 8, marginTop: 12 }}>
+        {cards.some((c) => c.runningAt) && (
+          <span style={{ fontSize: 12.5, color: C.watch, fontWeight: 600, marginRight: "auto" }}>
+            A clock is still running. Stop it before you save.
+          </span>
+        )}
+        <Btn tone="ghost" onClick={clear} disabled={saving || !live.length}>Clear form</Btn>
+        <Btn tone="ghost" onClick={() => window.print()}>Print</Btn>
+        <Btn onClick={save} disabled={saving || !canSave}>
+          {saving ? "Saving…" : "Save timecard"}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+/* ── One unit ─────────────────────────────────────────────────── */
+
+function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onPatch, onClock, onRemove }) {
+  const secs = liveSeconds(c, now);
+  const running = !!c.runningAt;
+
+  const toggleType = (t) => onPatch({
+    workTypes: c.workTypes.includes(t)
+      ? c.workTypes.filter((x) => x !== t)
+      : [...c.workTypes, t],
+  });
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${running ? C.green700 : C.line}`,
+                  borderRadius: 8, padding: "14px 16px 16px", marginBottom: 10 }}>
+      <div className="flex flex-wrap items-center justify-between" style={{ gap: 10 }}>
+        <div>
+          <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.1em",
+                        textTransform: "uppercase", color: C.muted }}>
+            Time on this unit
+          </div>
+          <div style={{ fontFamily: FM, fontSize: 26, fontWeight: 600, lineHeight: 1.1,
+                        color: running ? C.green700 : C.green900 }}>
+            {hms(secs)}
+            <span style={{ fontFamily: FD, fontSize: 13, color: C.muted, fontWeight: 400,
+                           marginLeft: 8, letterSpacing: "0.04em" }}>
+              {c.stints.length + (running ? 1 : 0)} stint{c.stints.length + (running ? 1 : 0) === 1 ? "" : "s"}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <Btn tone={running ? "ghost" : "solid"} onClick={onClock}>
+            {running ? "Stop" : "Start"}
+          </Btn>
+          {count > 1 && (
+            <button onClick={onRemove} disabled={running}
+              style={{ ...linkBtn, fontSize: 12.5, color: running ? C.muted : C.pull,
+                       cursor: running ? "not-allowed" : "pointer" }}>
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Two rows rather than one five-across grid: the where-the-work
+          -happened toggle needs room to set its two labels on one line. */}
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                                           marginTop: 14 }}>
+        <Field label="Equipment">
+          <select value={c.vehId} onChange={(e) => onPatch({ vehId: e.target.value })} style={inp}>
+            <option value="">Pick the unit…</option>
+            {vehicles.map((v) => (
+              <option key={v.id} value={v.id}>{v.num} — {v.make} {v.model}</option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Where the work happened">
+          <div className="flex" style={{ gap: 6 }}>
+            {WHERE.map(([k, l]) => (
+              <button key={k} onClick={() => onPatch({ where: k })}
+                style={{ flex: 1, fontFamily: FD, fontSize: 13, fontWeight: 600,
+                         letterSpacing: "0.04em", textTransform: "uppercase",
+                         padding: "8px 6px", borderRadius: 5, cursor: "pointer",
+                         whiteSpace: "nowrap",
+                         border: `1px solid ${c.where === k ? C.green700 : C.line}`,
+                         background: c.where === k ? C.green700 : "#fff",
+                         color: c.where === k ? "#fff" : C.muted }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </Field>
+      </div>
+
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                                           marginTop: 12, alignItems: "start" }}>
+        <Field label="Hours on this unit">
+          <input type="number" step="0.25" min="0.25" max="24" value={c.hours}
+            onChange={(e) => onPatch({ hours: e.target.value, hoursTyped: true })}
+            placeholder={secs ? String(toQuarters(secs)) : "0.00"}
+            style={{ ...inp, fontFamily: FM }} />
+        </Field>
+
+        <Field label="Charge the time to">
+          <select value={c.costCode} onChange={(e) => onPatch({ costCode: e.target.value })}
+            style={{ ...inp, borderColor: c.costCode ? C.line : C.pull }}>
+            <option value="">Choose a cost code…</option>
+            {Object.entries(codeGroups).map(([group, list]) => (
+              <optgroup key={group} label={group}>
+                {list.map((cc) => (
+                  <option key={cc.code} value={cc.code}>{cc.code} — {cc.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {!c.costCode && (
+            <div style={{ fontSize: 12, color: C.pull, fontWeight: 600, marginTop: 4 }}>
+              Payroll needs this to charge the hours out.
+            </div>
+          )}
+        </Field>
+
+        <Field label="Work order">
+          <input value={c.workOrder} onChange={(e) => onPatch({ workOrder: e.target.value })}
+            placeholder="optional" style={{ ...inp, fontFamily: FM }} />
+        </Field>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
+                      textTransform: "uppercase", color: C.muted, marginBottom: 5 }}>
+          Type of work
+        </div>
+        <div className="flex flex-wrap" style={{ gap: 6 }}>
+          {time.WORK_TYPES.map((t) => {
+            const on = c.workTypes.includes(t);
+            return (
+              <button key={t} onClick={() => toggleType(t)}
+                style={{ fontFamily: FD, fontSize: 13, fontWeight: 600, letterSpacing: "0.04em",
+                         textTransform: "uppercase", padding: "6px 12px", borderRadius: 999,
+                         cursor: "pointer",
+                         border: `1px solid ${on ? C.green700 : C.line}`,
+                         background: on ? C.green700 : "#fff",
+                         color: on ? "#fff" : C.muted }}>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <Field label="Work performed">
+          <textarea value={c.workPerformed} rows={3}
+            onChange={(e) => onPatch({ workPerformed: e.target.value })}
+            placeholder="What you found and what you did"
+            style={{ ...inp, resize: "vertical", lineHeight: 1.5 }} />
+        </Field>
+      </div>
+
+      <PartsPulled parts={parts} picked={c.parts}
+        onChange={(next) => onPatch({ parts: next })} />
+    </div>
+  );
+}
+
+/* ── Parts pulled on this unit ────────────────────────────────── */
+
+function PartsPulled({ parts, picked, onChange }) {
+  const [q, setQ] = useState("");
+  const box = useRef(null);
+
+  const hits = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (s.length < 2) return [];
+    const taken = new Set(picked.map((p) => p.partId));
+    return parts
+      .filter((p) => !taken.has(p.id)
+        && (p.num.toLowerCase().includes(s) || p.name.toLowerCase().includes(s)))
+      .slice(0, 8);
+  }, [q, parts, picked]);
+
+  const add = (p) => {
+    onChange([...picked, { partId: p.id, num: p.num, name: p.name, uom: p.uom, qty: 1 }]);
+    setQ("");
+    box.current?.focus();
+  };
+
+  const setQty = (partId, qty) =>
+    onChange(picked.map((p) => (p.partId === partId ? { ...p, qty } : p)));
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.lineSoft}` }}>
+      <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
+                    textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
+        Parts used on this unit
+      </div>
+
+      {picked.length === 0 ? (
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>Nothing pulled yet.</div>
+      ) : (
+        <div style={{ marginBottom: 8 }}>
+          {picked.map((p) => (
+            <div key={p.partId} className="flex flex-wrap items-center"
+              style={{ gap: 8, padding: "6px 0", borderTop: `1px solid ${C.lineSoft}` }}>
+              <span style={{ fontFamily: FM, fontSize: 13, fontWeight: 600 }}>{p.num}</span>
+              <span style={{ fontSize: 13, color: C.muted, flex: 1, minWidth: 120 }}>{p.name}</span>
+              <input type="number" min="1" step="1" value={p.qty}
+                onChange={(e) => setQty(p.partId, Math.max(1, Number(e.target.value) || 1))}
+                style={{ ...inp, fontFamily: FM, width: 78 }} />
+              <span style={{ fontSize: 12, color: C.muted, width: 34 }}>{p.uom}</span>
+              <button onClick={() => onChange(picked.filter((x) => x.partId !== p.partId))}
+                style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ position: "relative" }}>
+        <input ref={box} value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="Part number or name…" style={inp} />
+        {hits.length > 0 && (
+          <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%",
+                        background: "#fff", border: `1px solid ${C.line}`, borderRadius: 5,
+                        marginTop: 3, boxShadow: "0 10px 26px rgba(0,0,0,0.14)",
+                        maxHeight: 260, overflowY: "auto" }}>
+            {hits.map((p) => (
+              <button key={p.id} onClick={() => add(p)}
+                style={{ display: "block", width: "100%", textAlign: "left", border: "none",
+                         background: "none", cursor: "pointer", padding: "8px 10px",
+                         borderBottom: `1px solid ${C.lineSoft}` }}>
+                <span style={{ fontFamily: FM, fontSize: 13, fontWeight: 600 }}>{p.num}</span>
+                <span style={{ fontSize: 13, color: C.ink, marginLeft: 8 }}>{p.name}</span>
+                <span style={{ fontSize: 12, color: p.onHand > 0 ? C.muted : C.pull, marginLeft: 8 }}>
+                  {p.onHand > 0 ? `${nf(p.onHand)} on hand` : "none on hand"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+        Type at least two characters. {nf(parts.length)} parts in the catalog.
+      </div>
+    </div>
+  );
+}

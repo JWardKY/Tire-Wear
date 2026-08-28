@@ -4,6 +4,7 @@
      set -a && . ./.env.local && set +a && node scripts/test-now.mjs
 */
 import * as now from "../src/nowData.js";
+import { todayISO } from "../src/day.js";
 import { client, MARK, makeChecks, cleanup, report } from "./_testkit.mjs";
 
 const c = client();
@@ -73,7 +74,7 @@ try {
   truthy(bad.error, "the database refuses a shift that ends before it starts");
 
   /* ── The shift card: lunch, corrections, and the reconciliation ── */
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();   // the shop's day, Eastern, same as the view stamps
   await now.punchIn(mechId, MARK);
   let sd = await now.shiftForDay(mechId, today);
   truthy(sd, "the day's shift reads back");

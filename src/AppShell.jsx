@@ -64,7 +64,8 @@ export default function AppShell({ who, onSwitchUser }) {
 
   return (
     <div style={{ fontFamily: FB, background: C.paper, minHeight: "100vh", color: C.ink }}>
-      <div style={{ background: C.green900, borderBottom: `3px solid ${C.yellow}` }}>
+      {/* The chrome drops out when a mechanic prints their timecard. */}
+      <div className="no-print" style={{ background: C.green900, borderBottom: `3px solid ${C.yellow}` }}>
         <div className="mx-auto w-full flex flex-wrap items-end justify-between gap-3"
           style={{ maxWidth: 1400, padding: "16px 16px 0" }}>
           <div>

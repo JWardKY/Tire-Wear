@@ -7,6 +7,7 @@
    one. It uses the same TEST_MECHANIC row, cleans up every time entry
    it makes, and prints the SQL for the mechanic. */
 import * as time from "../src/timeData.js";
+import * as parts from "../src/partsData.js";
 import { client, MARK, TEST_MECHANIC, makeChecks, findIdleVehicle, cleanup, report }
   from "./_testkit.mjs";
 
@@ -14,7 +15,9 @@ const c = client();
 const { state, ok, is, truthy } = makeChecks();
 
 const PIN = "4271";
+const WHO = "test@invalid";
 const DATE = "2019-01-02";  // far from anything real, so a leak is obvious
+const SHOP = `${MARK} Shop`;   // a shop nobody real will ever have
 let mechanicId = null;
 let cleanupOk = false;
 
@@ -96,11 +99,83 @@ try {
   /* Removing. */
   await time.deleteEntry(day[0].id);
   is((await time.listDay(mechanicId, DATE)).length, 1, "an entry can be removed");
+
+  /* ── The equipment card ────────────────────────────────────── */
+
+  /* A part of our own to pull, so a real shelf is never touched. */
+  const { data: testPart, error: partErr } = await c.from("tw_parts")
+    .insert({ part_number: `${MARK}-TC1`, name: "Test filter", shop: SHOP,
+              uom: "ea", min_qty: 0 })
+    .select("id").single();
+  truthy(!partErr, "a test part can be made");
+  await parts.move(testPart.id, "receive", 10, { note: MARK }, WHO);
+
+  const STINTS = [
+    { start: "2019-01-02T13:00:00.000Z", stop: "2019-01-02T14:30:00.000Z" },
+    { start: "2019-01-02T18:00:00.000Z", stop: "2019-01-02T18:45:00.000Z" },
+  ];
+  const cardId = await time.saveCard({
+    date: DATE,
+    vehId: truck ? truck.id : null,
+    unitLabel: truck ? null : "Shop bench",
+    where: "road",
+    hours: 2.25,
+    costCode: CODE,
+    workOrder: "WO-CARD",
+    note: MARK,
+    workTypes: ["PM service", "Tires"],
+    unitSeconds: 8100,
+    stints: STINTS,
+    workPerformed: `${MARK} found a leaking seal, replaced it`,
+    parts: [{ partId: testPart.id, number: `${MARK}-TC1`, qty: 3 }],
+    who: WHO,
+  }, mechanicId);
+  truthy(cardId, "the equipment card saves and hands back an id");
+
+  const withCard = (await time.listDay(mechanicId, DATE)).find((e) => e.id === cardId);
+  truthy(withCard, "the card's entry is on the day");
+  is(withCard.workTypes.join("|"), "PM service|Tires", "the type-of-work chips come back");
+  is(withCard.unitSeconds, 8100, "the sub-clock total comes back");
+  is(withCard.stints.length, 2, "and both stints come back");
+  is(withCard.stints[0].start, STINTS[0].start, "with the times they happened");
+  truthy(withCard.workPerformed.includes("leaking seal"), "and what was performed");
+
+  /* The parts pulled hang off the entry, not just the truck. */
+  const { data: txns, error: txnErr } = await c.from("tw_part_txns")
+    .select("qty_delta,time_entry_id,work_order").eq("time_entry_id", cardId);
+  truthy(!txnErr, "the part movements read back");
+  is(txns.length, 1, "one part came off the shelf for this job");
+  is(Number(txns[0].qty_delta), -3, "three of them, as an issue");
+  is(txns[0].work_order, "WO-CARD", "carrying the job's work order");
+
+  const shelf = (await parts.listParts()).find((x) => x.id === testPart.id);
+  is(shelf.onHand, 7, "and the shelf count moved with it");
+
+  /* An edit from the Add hours dialog must not wipe the card's fields. */
+  await time.updateEntry(cardId, {
+    date: DATE, vehId: withCard.vehId, unitLabel: withCard.unit,
+    where: "shop", hours: 2.5, costCode: CODE, workOrder: "WO-CARD", note: MARK,
+  });
+  const after = (await time.listDay(mechanicId, DATE)).find((e) => e.id === cardId);
+  is(after.hours, 2.5, "the dialog can still correct the hours");
+  is(after.workTypes.length, 2, "without dropping the type of work");
+  is(after.stints.length, 2, "or the stints");
 } catch (e) {
   state.failed.push(`threw: ${e.message}`);
   console.log("  !!  threw: " + e.message);
 } finally {
   cleanupOk = await cleanup(c, [
+    {
+      /* Parts first: their movements point at the time entries. */
+      label: "test parts (movements cascade)",
+      run: async () => { await c.from("tw_parts").delete().eq("shop", SHOP); },
+      verify: async () => {
+        const { count, error } = await c.from("tw_parts")
+          .select("id", { count: "exact", head: true }).eq("shop", SHOP);
+        return error ? null : (count || 0);
+      },
+      manual: `delete from tw_parts where shop='${SHOP}';`,
+    },
     {
       label: "time entries",
       run: async () => {
