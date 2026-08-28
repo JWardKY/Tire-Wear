@@ -137,7 +137,10 @@ export default function AppShell({ who, onSwitchUser }) {
         <SupervisorGate what={section.label}
           onIn={(u) => setSupervisor(u)} />
       ) : (
-        <Body who={who} tab={tab} onBusy={setBusy} />
+        /* A supervisor-gated section is told who unlocked it, so a
+           deletion is attributed to the person who authorised it and
+           not to whichever badge the tablet happens to carry. */
+        <Body who={who} tab={tab} onBusy={setBusy} supervisor={supervisor} />
       )}
     </div>
   );

@@ -102,7 +102,9 @@ export default function DefectsSection({ who, tab, onBusy }) {
       .filter((d) => (d.state === "repaired") === wantRepaired)
       .filter((d) => !s || `${d.unit} ${d.category} ${d.note} ${d.driver}`.toLowerCase().includes(s))
       .sort(wantRepaired
-        ? (a, b) => String(b.repairedAt || "").localeCompare(String(a.repairedAt || ""))
+        /* Oldest repair first, not newest: the one that has sat longest
+           waiting for somebody to close it in Motive is the problem. */
+        ? (a, b) => String(a.repairedAt || "").localeCompare(String(b.repairedAt || ""))
         : byUrgency);
   }, [defects, tab, q]);
 
@@ -126,12 +128,12 @@ export default function DefectsSection({ who, tab, onBusy }) {
             <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900,
               lineHeight: 1.1 }}>
               {tab === "repaired"
-                ? `${shown.length} repaired`
+                ? `${shown.length} repaired — waiting to be closed in Motive`
                 : `${openCount} open defect${openCount === 1 ? "" : "s"}`}
             </div>
             <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
               {tab === "repaired"
-                ? "Most recently repaired first."
+                ? "Longest wait first. Nothing here closes a DVIR."
                 : unsafeCount
                   ? `${unsafeCount} of them put a truck out of service.`
                   : "Out of service first, then major, then oldest."}
@@ -144,6 +146,8 @@ export default function DefectsSection({ who, tab, onBusy }) {
             <Btn onClick={() => setAdding(true)}>Log a defect</Btn>
           </div>
         </div>
+
+        {tab === "repaired" && shown.length > 0 && <AwaitingClose rows={shown} />}
 
         {shown.length === 0 ? (
           <Empty tab={tab} q={q} />
@@ -243,6 +247,14 @@ function DefectRow({ d, who, busy, onClaim, onRelease, onRepair, onReopen, onPri
             {repaired ? (
               <>
                 repaired {fmtDate(String(d.repairedAt || "").slice(0, 10))} by {d.repairedBy}
+                {daysWaiting(d) != null && (
+                  <span style={{ color: daysWaiting(d) >= 7 ? C.pull : C.muted,
+                                 fontWeight: daysWaiting(d) >= 7 ? 700 : 400 }}>
+                    {" · "}
+                    {daysWaiting(d) === 0 ? "today"
+                      : `${daysWaiting(d)} day${daysWaiting(d) === 1 ? "" : "s"} waiting on Motive`}
+                  </span>
+                )}
                 {d.repairHours != null ? ` · ${nf(d.repairHours, 1)} h` : ""}
                 {d.workOrder ? ` · ${d.workOrder}` : ""}
               </>
@@ -399,5 +411,59 @@ function RepairDialog({ d, busy, onClose, onSave }) {
         <Btn disabled={busy} onClick={() => onSave(f)}>Mark repaired</Btn>
       </div>
     </Modal>
+  );
+}
+
+/* ── Repaired, waiting to be closed in Motive ─────────────────────
+   Jason's rule 1, and the one place this system deliberately does not
+   act. Motive is the DOT record. A mechanic marking a defect repaired
+   takes it off his queue and does not close the DVIR — only Motive can
+   do that, and nothing here writes back to Motive.
+
+   So these rows are not finished work, they are a list of things
+   somebody still has to close in Motive. Left alone they sit forever,
+   which is why the count and the oldest wait are stated plainly rather
+   than left for somebody to notice. */
+
+export function daysWaiting(d) {
+  if (!d.repairedAt) return null;
+  const then = new Date(d.repairedAt);
+  if (isNaN(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then.getTime()) / 86400000));
+}
+
+function AwaitingClose({ rows }) {
+  const waits = rows.map(daysWaiting).filter((n) => n != null);
+  const oldest = waits.length ? Math.max(...waits) : 0;
+  const stale = waits.filter((n) => n >= 7).length;
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${stale ? C.watch : C.line}`,
+      borderLeft: `4px solid ${stale ? C.watch : C.line}`,
+      borderRadius: 8, padding: "12px 16px", marginBottom: 12 }}>
+      <div className="flex flex-wrap items-baseline" style={{ gap: 14 }}>
+        <span style={{ fontFamily: FD, fontSize: 15, fontWeight: 700, color: C.green900 }}>
+          {rows.length} repaired, still open in Motive
+        </span>
+        {oldest > 0 && (
+          <span style={{ fontFamily: FM, fontSize: 13,
+            color: oldest >= 7 ? C.pull : C.muted, fontWeight: oldest >= 7 ? 700 : 400 }}>
+            oldest {oldest} day{oldest === 1 ? "" : "s"}
+          </span>
+        )}
+        {stale > 0 && (
+          <span style={{ fontSize: 13, color: C.pull, fontWeight: 600 }}>
+            {stale} over a week
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", maxWidth: 760,
+        lineHeight: 1.55 }}>
+        Marking a defect repaired takes it off the mechanic's list. It does not close
+        the DVIR — Motive is the DOT record and nothing here writes back to it. These
+        drop off the list once a sync stops seeing them, so somebody has to close them
+        in Motive.
+      </p>
+    </div>
   );
 }

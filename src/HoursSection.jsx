@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { C, FD, FM } from "./theme.js";
-import { fmtDate, nf, toCSV, Btn, Field, SectionLabel, inp, th, td, tdNum } from "./ui.jsx";
+import { fmtDate, nf, toCSV, Btn, Field, SectionLabel, inp, th, td, tdNum, linkBtn, Modal }
+  from "./ui.jsx";
 import * as time from "./timeData.js";
+import * as wlog from "./logData.js";
 
 /* ── The Hours section ────────────────────────────────────────────
    Where the hours went, for the office. Read only: hours are entered
@@ -41,7 +43,7 @@ function rangeFor(key) {
   return [today.slice(0, 8) + "01", today];
 }
 
-export default function HoursSection({ who, tab, onBusy }) {
+export default function HoursSection({ who, tab, onBusy, supervisor }) {
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
   const [rangeKey, setRangeKey] = useState("week");
@@ -89,17 +91,28 @@ export default function HoursSection({ who, tab, onBusy }) {
   const byCode = useMemo(
     () => group((r) => r.costCode, (r) => `${r.costCode} — ${r.costCodeName}`), [group]);
 
-  function exportCsv() {
-    const head = ["date", "mechanic", "unit", "where", "cost_code", "cost_code_name",
-      "work_order", "hours", "note"];
-    const body = shown.map((r) => [r.date, r.mechanic, r.unit, r.where, r.costCode,
-      r.costCodeName, r.workOrder, r.hours, r.note]);
-    const blob = new Blob([toCSV([head, ...body])], { type: "text/csv" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `allen-hours-${from}-to-${to}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  /* The payroll export is Jason's seventeen columns, read straight from
+     tw_payroll_lines rather than rebuilt out of what happens to be on
+     this screen. The search box narrows the tables; payroll gets the
+     whole range, because a filtered payroll run is a wrong one. */
+  const [exporting, setExporting] = useState(false);
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const lines = await time.payrollLines(from, to);
+      const rows = [time.PAYROLL_COLUMNS, ...lines.map(time.payrollRow)];
+      const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `allen-payroll-${from}-to-${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setErr(null);
+    } catch (e) {
+      setErr(`Could not build the payroll export — ${e.message || e}`);
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading hours…</div>;
@@ -130,11 +143,17 @@ export default function HoursSection({ who, tab, onBusy }) {
             </select>
             <input value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="Find a name, truck or code" style={{ ...inp, width: 220 }} />
-            <Btn tone="ghost" onClick={exportCsv} disabled={!shown.length}>Export CSV</Btn>
+            <Btn tone="ghost" onClick={exportCsv} disabled={exporting || !rows.length}>
+              {exporting ? "Building…" : "Payroll CSV"}
+            </Btn>
           </div>
         </div>
 
-        {rows.length === 0 ? (
+        {tab === "cards" ? (
+          <Cards from={from} to={to} who={supervisor?.name || who} onErr={setErr} />
+        ) : tab === "log" ? (
+          <WorkLog from={from} to={to} onErr={setErr} />
+        ) : rows.length === 0 ? (
           <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
             <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
               No hours in this range
@@ -147,12 +166,15 @@ export default function HoursSection({ who, tab, onBusy }) {
         ) : tab === "detail" ? (
           <Detail rows={shown} />
         ) : (
-          <div className="grid gap-4"
-            style={{ gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))" }}>
-            <Rollup title="By mechanic" rows={byMechanic} total={total} />
-            <Rollup title="By unit" rows={byUnit} total={total} />
-            <Rollup title="By cost code" rows={byCode} total={total} wide />
-          </div>
+          <>
+            <div className="grid gap-4"
+              style={{ gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))" }}>
+              <Rollup title="Hours by mechanic" rows={byMechanic} total={total} />
+              <Rollup title="Wrench hours by unit" rows={byUnit} total={total} />
+              <Rollup title="By cost code" rows={byCode} total={total} wide />
+            </div>
+            <WhereTheTimeWent rows={shown} />
+          </>
         )}
       </div>
     </>
@@ -229,6 +251,378 @@ function Detail({ rows }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Where the time went ──────────────────────────────────────────
+   Shop against outside service calls against indirect time, as one
+   bar. Jason's dashboard reads it at a glance and so should this: the
+   question is not how many hours, it is what shape the week was.
+
+   Field and plant fold into the two ends they belong to — field work
+   is a call, plant work is indirect — so the bar has three parts and
+   not five. A five-colour bar answers nothing faster than a table. */
+
+const SPLIT = [
+  ["shop", "Shop", C.green700, ["shop"]],
+  ["call", "Outside service call", C.watch, ["road", "field"]],
+  ["indirect", "Shop & indirect", C.muted, ["plant"]],
+];
+
+function WhereTheTimeWent({ rows }) {
+  const parts = useMemo(() => {
+    const total = rows.reduce((a, r) => a + r.hours, 0);
+    return {
+      total,
+      bands: SPLIT.map(([key, label, colour, wheres]) => {
+        const hours = rows
+          .filter((r) => wheres.includes(r.where))
+          .reduce((a, r) => a + r.hours, 0);
+        return { key, label, colour, hours, pct: total ? (hours / total) * 100 : 0 };
+      }),
+    };
+  }, [rows]);
+
+  if (!parts.total) return null;
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+      overflow: "hidden", marginTop: 16 }}>
+      <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+        <SectionLabel noMargin>Where the time went</SectionLabel>
+      </div>
+      <div style={{ padding: "14px 16px 16px" }}>
+        <div style={{ display: "flex", height: 20, borderRadius: 4, overflow: "hidden",
+          background: C.paper, border: `1px solid ${C.line}` }}>
+          {parts.bands.filter((b) => b.hours > 0).map((b) => (
+            <div key={b.key} title={`${b.label} — ${nf(b.hours, 2)} hr`}
+              style={{ width: `${b.pct}%`, background: b.colour }} />
+          ))}
+        </div>
+        <div className="flex flex-wrap" style={{ gap: 18, marginTop: 11 }}>
+          {parts.bands.map((b) => (
+            <div key={b.key} className="flex items-center" style={{ gap: 7 }}>
+              <span style={{ width: 11, height: 11, borderRadius: 2, background: b.colour,
+                display: "inline-block" }} />
+              <span style={{ fontSize: 13 }}>{b.label}</span>
+              <span style={{ fontFamily: FM, fontSize: 13, fontWeight: 600 }}>
+                {nf(b.hours, 2)}
+              </span>
+              <span style={{ fontSize: 12, color: C.muted }}>
+                {parts.total ? Math.round(b.pct) : 0}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Timecards ────────────────────────────────────────────────────
+   One row per mechanic per day: hours on the clock against hours
+   booked to a unit and a code. Jason's rule 5 says those two numbers
+   will not always agree and both must be kept, so the gap is the
+   column that matters and the board sorts nothing above it.
+
+   Deleting a card needs a reason, and the reason plus the whole card
+   goes to the work log before a single row is removed. */
+
+function Cards({ from, to, who, onErr }) {
+  const [days, setDays] = useState(null);
+  const [open, setOpen] = useState(null);   // the day being looked at
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try { setDays(await time.timecardDays(from, to)); }
+    catch (e) { onErr?.(`Could not load timecards — ${e.message || e}`); }
+  }, [from, to, onErr]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!days) return <div style={{ padding: 30, color: C.muted }}>Loading timecards…</div>;
+
+  if (!days.length) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
+        <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
+          No timecards in this range
+        </div>
+        <p style={{ fontSize: 14, color: C.muted, marginTop: 6, maxWidth: 620, lineHeight: 1.55 }}>
+          A card appears here as soon as somebody punches in or books an hour.
+        </p>
+      </div>
+    );
+  }
+
+  const tone = (d) => {
+    if (d.stillOpen) return C.muted;
+    if (Math.abs(d.difference) < 0.01) return C.good;
+    return Math.abs(d.difference) >= 1 ? C.pull : C.watch;
+  };
+
+  return (
+    <>
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+        overflow: "hidden" }}>
+        <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+          <SectionLabel noMargin>Timecards</SectionLabel>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
+            <thead>
+              <tr>
+                {["Date", "Mechanic", "Emp #", "On the clock", "Booked", "True", "Gap", "Lines", ""]
+                  .map((h, i) => (
+                    <th key={h || i}
+                      style={{ ...th, textAlign: i >= 3 && i <= 7 ? "right" : "left" }}>{h}</th>
+                  ))}
+              </tr>
+            </thead>
+            <tbody>
+              {days.map((d) => (
+                <tr key={`${d.mechanicId}-${d.date}`} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{fmtDate(d.date)}</td>
+                  <td style={td}>{d.mechanic}</td>
+                  <td style={{ ...td, fontFamily: FM, color: C.muted }}>{d.empNo || "—"}</td>
+                  <td style={{ ...td, ...tdNum }}>
+                    {d.stillOpen ? <span style={{ color: C.muted }}>on the clock</span>
+                      : nf(d.clockHours, 2)}
+                  </td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(d.bookedHours, 2)}</td>
+                  <td style={{ ...td, ...tdNum, color: C.muted }}>{nf(d.trueHours, 2)}</td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 700, color: tone(d) }}>
+                    {d.stillOpen ? "—"
+                      : `${d.difference > 0 ? "+" : ""}${nf(d.difference, 2)}`}
+                  </td>
+                  <td style={{ ...td, ...tdNum }}>
+                    {d.lines}
+                    {d.uncodedLines > 0 && (
+                      <span style={{ color: C.pull, fontWeight: 700 }}> · {d.uncodedLines} uncoded</span>
+                    )}
+                  </td>
+                  <td style={{ ...td, textAlign: "right" }}>
+                    <button onClick={() => setOpen(d)} style={{ ...linkBtn, fontSize: 12.5 }}>
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.lineSoft}`,
+          fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+          The gap is hours on the clock less hours booked to a unit and a cost code.
+          A positive number is time nobody can charge out yet.
+        </div>
+      </div>
+
+      {open && (
+        <CardDialog day={open} who={who} busy={busy} setBusy={setBusy}
+          onClose={() => setOpen(null)}
+          onErr={onErr}
+          onDeleted={async () => { setOpen(null); await load(); }} />
+      )}
+    </>
+  );
+}
+
+function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted }) {
+  const [entries, setEntries] = useState(null);
+  const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    time.listDay(day.mechanicId, day.date)
+      .then((r) => { if (live) setEntries(r); })
+      .catch((e) => onErr?.(e.message || String(e)));
+    return () => { live = false; };
+  }, [day, onErr]);
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await time.deleteCard(day.mechanicId, day.date, reason, who);
+      await onDeleted();
+    } catch (e) {
+      onErr?.(`The card was not deleted — ${e.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`${day.mechanic} — ${fmtDate(day.date)}`}
+      sub={`${nf(day.clockHours, 2)} on the clock · ${nf(day.bookedHours, 2)} booked`}
+      onClose={onClose} width={720}>
+      {!entries ? (
+        <div style={{ color: C.muted }}>Loading the card…</div>
+      ) : entries.length === 0 ? (
+        <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.55 }}>
+          Nothing booked on this day — the mechanic punched in but has not entered
+          any hours yet.
+        </p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+            <thead>
+              <tr>
+                {["Unit", "Cost code", "Type of work", "Work order", "Hours"].map((h, i) => (
+                  <th key={h} style={{ ...th, textAlign: i === 4 ? "right" : "left" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => (
+                <tr key={e.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                  <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{e.unit}</td>
+                  <td style={td}>
+                    {e.costCode
+                      ? <><span style={{ fontFamily: FM }}>{e.costCode}</span>
+                          <span style={{ color: C.muted }}> {e.costCodeName}</span></>
+                      : <span style={{ color: C.pull, fontWeight: 600 }}>no cost code</span>}
+                  </td>
+                  <td style={{ ...td, color: C.muted }}>
+                    {e.workTypes?.length ? e.workTypes.join(" · ") : "—"}
+                  </td>
+                  <td style={{ ...td, fontFamily: FM, color: C.muted }}>{e.workOrder || "—"}</td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {entries?.length > 0 && (
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+          {!confirming ? (
+            <button onClick={() => setConfirming(true)}
+              style={{ ...linkBtn, fontSize: 13, color: C.pull }}>
+              Delete this card
+            </button>
+          ) : (
+            <>
+              <Field label="Why is this card being deleted?">
+                <input value={reason} onChange={(e) => setReason(e.target.value)}
+                  placeholder="Entered on the wrong day, duplicate, …" style={inp} autoFocus />
+              </Field>
+              <p style={{ fontSize: 12.5, color: C.muted, margin: "8px 0 0", lineHeight: 1.55 }}>
+                The whole card and this reason go to the work log first, and that log
+                cannot be edited or deleted by anyone. If the log will not take it,
+                the card is not removed.
+              </p>
+              <div className="flex justify-end mt-3" style={{ gap: 8 }}>
+                <Btn tone="ghost" onClick={() => { setConfirming(false); setReason(""); }}>
+                  Keep it
+                </Btn>
+                <Btn tone="danger" disabled={busy || reason.trim().length < 4} onClick={remove}>
+                  {busy ? "Deleting…" : `Delete ${entries.length} line${entries.length === 1 ? "" : "s"}`}
+                </Btn>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ── The work log ─────────────────────────────────────────────────
+   Append only, and shown as such. There is no edit here and there is
+   no delete, because there is none in the database either. */
+
+function WorkLog({ from, to, onErr }) {
+  const [rows, setRows] = useState(null);
+  const [type, setType] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    wlog.listLog({ from, to, type: type || undefined })
+      .then((r) => { if (live) setRows(r); })
+      .catch((e) => onErr?.(`Could not load the work log — ${e.message || e}`));
+    return () => { live = false; };
+  }, [from, to, type, onErr]);
+
+  function exportCsv() {
+    const head = ["Timestamp", "Type", "Unit", "Summary", "Recorded by", "Detail (JSON)"];
+    const body = (rows || []).map((r) =>
+      [r.at, r.label, r.unit, r.summary, r.actor, JSON.stringify(r.detail)]);
+    const blob = new Blob([toCSV([head, ...body])], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `allen-work-log-${from}-to-${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  if (!rows) return <div style={{ padding: 30, color: C.muted }}>Loading the work log…</div>;
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+      overflow: "hidden" }}>
+      <div className="flex flex-wrap items-center justify-between"
+        style={{ gap: 8, padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+        <SectionLabel noMargin>Work log · {rows.length} entries</SectionLabel>
+        <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
+          <select value={type} onChange={(e) => setType(e.target.value)}
+            style={{ ...inp, width: 210 }}>
+            <option value="">Everything</option>
+            {Object.entries(wlog.EVENT_LABEL).map(([k, l]) => (
+              <option key={k} value={k}>{l}</option>
+            ))}
+          </select>
+          <Btn tone="ghost" onClick={exportCsv} disabled={!rows.length}>Export CSV</Btn>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ padding: 26, fontSize: 14, color: C.muted, lineHeight: 1.55 }}>
+          Nothing logged in this range yet.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+            <thead>
+              <tr>
+                {["When", "What", "Unit", "What happened", "Who"].map((h) => (
+                  <th key={h} style={{ ...th, textAlign: "left" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                  <td style={{ ...td, fontFamily: FM, fontSize: 12, whiteSpace: "nowrap",
+                    color: C.muted }}>
+                    {new Date(r.at).toLocaleString("en-US",
+                      { month: "2-digit", day: "2-digit", year: "2-digit",
+                        hour: "numeric", minute: "2-digit" })}
+                  </td>
+                  <td style={{ ...td, whiteSpace: "nowrap",
+                    color: r.type === "timecard_deleted" ? C.pull : C.ink,
+                    fontWeight: r.type === "timecard_deleted" ? 700 : 400 }}>
+                    {r.label}
+                  </td>
+                  <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{r.unit || "—"}</td>
+                  <td style={{ ...td, color: C.muted }}>{r.summary}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>{r.actor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.lineSoft}`,
+        fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+        This log is append only. Nothing here can be edited or removed — not from
+        this screen, and not from the database either. A deleted timecard keeps its
+        whole contents and the reason it was deleted.
       </div>
     </div>
   );

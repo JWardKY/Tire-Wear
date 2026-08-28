@@ -67,6 +67,8 @@ export const SECTIONS = [
     subTabs: [
       ["rollup", "Totals"],
       ["detail", "Every entry"],
+      ["cards", "Timecards"],
+      ["log", "Work log"],
     ],
     Component: HoursSection,
   },

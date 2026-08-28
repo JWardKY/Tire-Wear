@@ -219,6 +219,31 @@ spec allows and says nothing about it. Past 1,800 characters the screen refuses 
 mail link and offers the text to copy instead — a silently cut-off purchase order is
 worse than no purchase order.
 
+### Jason's spec says no parts inventory, and we built one
+
+**This is an open disagreement, not a settled decision.** It needs to go back to
+Jason before anybody acts on it either way.
+
+`HANDOFF-SHOP.md` rule 10 is explicit: parts are free text, a mechanic types a part
+number or a plain description plus a quantity, and *"do not reintroduce a stock
+system, a reorder board, or vendor purchasing unless Jason asks — that was a
+considered decision, not an omission."* His new dashboard drops the Inventory tab
+that his old one had, which is the same call made twice.
+
+We have all of it: an Inventory section with stock, vendors, ordering, receiving,
+requests and a CSV import, and a catalog search on the equipment card. Jacob asked
+for it and, asked directly, chose to keep it as built for now and raise it with
+Jason rather than have it removed on a document's say-so.
+
+So: **do not remove Inventory, and do not "fix" the equipment card to free text,
+without Jacob and Jason agreeing.** Either way it is a small change — the card
+would take a typed string instead of a catalog id, and the section would come off
+the nav. The database would keep the tables regardless; nothing needs dropping.
+
+The middle option, if it helps: let the card accept a typed part that is not in the
+catalog, so a mechanic never hits a wall, while a match still draws stock down.
+That is what was recommended and not taken.
+
 ### The mechanic's own side of it
 
 Three things a mechanic needs that the office views do not give them.
@@ -331,6 +356,53 @@ hours — those are entered on the timecard, by the mechanic, behind their PIN.
 
 Elapsed time is recomputed from the start timestamp on every tick rather than counted
 up in the browser, so a screen left on overnight shows the truth.
+
+### The payroll export
+
+Seventeen columns, and the column list is Jason's, not ours:
+
+`Date · Employee # · Mechanic · Cost code · Cost code name · Unit · Shop or service
+call · Job/location · Hours · True clocked hours · Segments · Work order · Type of
+work · DVIR · PM · Parts used · Work performed`
+
+It reads `tw_payroll_lines` rather than rebuilding the rows out of whatever is on
+the Hours screen, and it always exports the whole range: **the search box narrows
+the tables and must never narrow the export**, because a filtered payroll run is a
+wrong one.
+
+Every join in that view is a LEFT JOIN and that is deliberate. An hour missing a
+cost code is exactly the row payroll needs to chase, so nothing in the view may
+quietly drop it. As it happens our schema is stricter than Jason's here — his
+`cost_code` is nullable and the app blocks the save, ours is NOT NULL, so rule 6 is
+enforced by the database and no screen can get round it. The LEFT JOIN stays anyway;
+it costs nothing and the constraint could be relaxed by somebody who has not read
+this.
+
+`trim_scale` on the parts quantity is load-bearing in a small way: `qty_delta` is
+numeric, so without it two of something reads "2.00x" instead of "2x".
+
+### The work log, and why it has no delete
+
+`tw_work_log` is the one append-only table. There is **no update policy and no
+delete policy, for anybody**, and the grants say the same thing so flipping a policy
+alone cannot undo it. `scripts/test-payroll.mjs` asserts both — if somebody grants
+those by accident, that suite goes red.
+
+Deleting a timecard writes a `timecard_deleted` row holding the whole card and a
+required reason, and the log write happens **before** the rows are removed. If the
+log will not take it, the delete does not happen. That ordering is the entire point:
+an auditor needs to see what was removed and why, not find a gap where a day was.
+
+Two consequences worth knowing:
+
+- `log()` swallows its errors and `logStrict()` throws. Recording work must never
+  take down the work — a mechanic should not lose a saved card because a log insert
+  failed. Deletion is the exception and uses `logStrict`.
+- `mechanic_id` is `ON DELETE SET NULL` and `actor_name` is text, so a log row
+  outlives the mechanic it names. That means purging a test mechanic **orphans**
+  their log rows rather than removing them, which is why the tests purge the log
+  first and why `tw_purge_test_work_log_by_actor` exists. Both purge functions
+  refuse anything that is not plainly a test row.
 
 ### Who can see what
 
@@ -557,6 +629,27 @@ HT configs were assigned by a guess from the model name and **will need correcti
 truck by truck** as people work through them. That is expected, not a defect. The
 dropdown on the vehicle screen is there for exactly this.
 
+### Defects, and the state Motive owns
+
+Jason's rule 1: **nothing in this system closes a DVIR.** A mechanic marking a
+defect repaired takes it off their queue and does not close the record — only
+Motive does that, and nothing here writes back to Motive. The Defects tab says
+so on the screen, and the repaired list is sorted oldest-wait-first with the
+count and the longest wait stated plainly, because left alone these sit forever.
+
+**Not yet implemented, and it is a real gap.** His schema has three states —
+`open`, `repaired`, `closed` — where `closed` is set only when a Motive sync
+stops reporting the defect. Ours has `open`, `claimed`, `repaired` and no
+`closed`, and `planDefects` only ever creates and bumps: it never reconciles a
+disappearance. So a repaired defect stays on the waiting list forever, and a
+defect that vanished from Motive stays open forever.
+
+Closing that gap means the sync marking a defect `closed` when Motive stops
+reporting it, and it carries the one requirement Jason flags hardest: **a sync
+must not resurrect a repaired defect onto a mechanic's list, and must preserve
+`repaired_by` and `repair_note` when it closes one.** Getting it wrong corrupts a
+DOT record, which is why it was left alone rather than done quickly.
+
 ### Defects
 
 A defect is something wrong with a truck. Today they are typed in; once the
@@ -775,8 +868,8 @@ See `schema.sql` for the full definition. The shape:
 - **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Other.
 - **`tw_time_entries`** — one row per chunk of work. A cost code is required,
   and so is either a truck or a label. The equipment card adds `work_types`
-  (text[]), `unit_seconds`, `stints` (jsonb, `[{start, stop}]`) and
-  `work_performed`.
+  (text[]), `unit_seconds`, `stints` (jsonb, `[{start, stop}]`),
+  `work_performed`, `job_location` and `pm_program_id`.
 - **`tw_parts`** — a part at a shop. The same number at two shops is two lines,
   because a bearing at Clays Ferry is no use to somebody at Nicholasville.
 - **`tw_part_txns`** — every movement. A trigger applies each one to
@@ -790,6 +883,12 @@ Two more views:
 - **`tw_vehicle_meter`** — the latest odometer per truck, in one place.
 - **`tw_pm_due`** — every active truck against every active program, with
   whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
+- **`tw_work_log`** — append only. See the section above before touching it.
+- **`tw_payroll_lines`** — the seventeen-column payroll export.
+- **`tw_timecard_days`** — one row per mechanic per day, clocked against booked.
+  Its day keys come from a UNION of both sides on purpose: a mechanic who
+  clocked in and booked nothing is the most important row on the board, and
+  joining one side first drops the name off exactly those rows.
 - **`tw_hours`** — time entries joined to the mechanic, unit and cost code.
   It LEFT JOINs the cost code: it used to be an inner join, which would have
   hidden any entry whose code was later retired. Changing its column order
