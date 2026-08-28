@@ -74,10 +74,13 @@ async function latestOdometers(db) {
   return latest;
 }
 
-export async function rawSample({ motiveKey }, what, since) {
+export async function rawSample({ motiveKey }, what, since, { n, status } = {}) {
+  /* Bounded: this returns whole DVIRs, and one is forty-odd checklist
+     lines. Enough to see a field's shape and how its values vary. */
+  const count = Math.min(Math.max(Number(n) || 2, 1), 25);
   return what === "defects"
-    ? await fetchRawInspections(motiveKey, since || daysAgo(14), 2)
-    : await fetchRawVehicles(motiveKey, 2);
+    ? await fetchRawInspections(motiveKey, since || daysAgo(14), count, status || "with_defects")
+    : await fetchRawVehicles(motiveKey, count);
 }
 
 export async function runOdometer({ motiveKey, db }, { write, field }) {
@@ -138,14 +141,24 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
         "defect_key"),
   ]);
 
-  /* A second read of the same endpoint, asking Motive which of those
-     reports it still considers outstanding. This is the only signal we
-     have that a DVIR was closed — see planClosures for why absence from
-     it is treated so carefully. */
-  const stillOpenInMotive = await fetchInspectionDefects(motiveKey, start, "open");
-
+  /* There used to be a second read here, asking for status=open. Motive
+     answers 400 to that — see planClosures — and because it ran before
+     any write, it took the whole defect import down with it, not just
+     closing. Nothing about closing may ever be able to do that again,
+     so importing no longer depends on anything closing needs. */
   const plan = planDefects(fromMotive, vehicles, existing);
-  const closing = planClosures(stillOpenInMotive, existing, { since: start });
+
+  /* What the DVIRs themselves say their state is. This is the signal
+     closing should run on, and it is already here — reporting the
+     distribution is how it gets verified before anything acts on it. */
+  const reportStates = {};
+  for (const d of fromMotive)
+    reportStates[d.reportStatus || "(none)"] = (reportStates[d.reportStatus || "(none)"] || 0) + 1;
+
+  /* Still planned, never applied: the fences stay exercised and the
+     numbers stay visible on a dry run. Fed the whole feed, so it plans
+     no closures — every defect we hold is still in it. */
+  const closing = planClosures(fromMotive, existing, { since: start });
   const out = {
     since: start,
     motiveReturned: fromMotive.length,
@@ -159,8 +172,15 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
     sample: plan.create.slice(0, 5).map((r) => ({
       unit: r.unit_number, category: r.category, safety: r.safety, on: r.first_reported,
     })),
-    stillOpenInMotive: stillOpenInMotive.length,
-    wouldClose: closing.close.length,
+    /* The DVIR states behind the defects in this window. Closing stays
+       off until these are understood — a fault whose report has left
+       "open" is the thing to close on. */
+    reportStates,
+    closingIsOff:
+      "status=open is not a filter Motive accepts, so nothing closes. "
+      + "reportStates is the signal to rebuild this on.",
+    wouldClose: 0,
+    plannedCloseIfItRan: closing.close.length,
     wouldCloseRepaired: closing.close.filter((c) => c.wasRepaired).length,
     closeCandidates: closing.candidates,
     /* Non-null means the guard tripped and nothing will be closed. It is
@@ -194,7 +214,12 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
      them. */
   let closed = 0;
   const closedAt = new Date().toISOString();
-  for (const c of closing.close) {
+  /* Off at the write, not only by what planClosures happens to return.
+     A comment saying "nothing closes" that the code does not enforce is
+     one careless edit away from being false, and the thing it would get
+     wrong is marking an out-of-service truck resolved. */
+  const CLOSING_IS_VERIFIED = false;
+  for (const c of (CLOSING_IS_VERIFIED ? closing.close : [])) {
     const { error } = await db.from("tw_defects")
       .update({ state: "closed", closed_at: closedAt, updated_at: closedAt })
       .eq("id", c.id)

@@ -96,9 +96,9 @@ export async function fetchVehicleOdometers(key) {
   });
 }
 
-export async function fetchRawInspections(key, sinceISO, n = 2) {
+export async function fetchRawInspections(key, sinceISO, n = 2, status = "with_defects") {
   const d = await motive("/v1/inspection_reports", key,
-    { start_date: sinceISO, status: "with_defects", per_page: n, page_no: 1 });
+    { start_date: sinceISO, status, per_page: n, page_no: 1 });
   return (d.inspection_reports || []).slice(0, n);
 }
 
@@ -115,12 +115,15 @@ export async function fetchRawInspections(key, sinceISO, n = 2) {
    All of that was found by looking at a real response. */
 const REAL_DEFECT = new Set(["minor", "major"]);
 
-/* `status` is the one thing that differs between the two feeds we read.
-   "with_defects" is every report that had a fault on it, which is what
-   the queue is built from. "open" is Motive's own view of which of those
-   are still outstanding, and it is the only signal we have that a DVIR
-   was closed — see planClosures, and read its warning before trusting
-   an empty answer from it. */
+/* `status` filters which reports come back. Motive accepts exactly
+   all, with_defects, with_no_defects, with_signature_missing, unknown,
+   harmless and corrected — "open" is NOT among them and the endpoint
+   answers 400 "status does not have a valid value".
+
+   That matters because a report carries its own `status` field whose
+   value IS "open", which is what led to asking for it as a filter. The
+   report-level status is the DVIR's paperwork state, and it is already
+   in the with_defects feed, so reading it needs no second call. */
 export async function fetchInspectionDefects(key, sinceISO, status = "with_defects") {
   const rows = await motiveAll(
     "/v1/inspection_reports", key,
@@ -150,6 +153,11 @@ export async function fetchInspectionDefects(key, sinceISO, status = "with_defec
         /* Motive's own word for it. The report-level status is about the
            paperwork being signed off, not about the truck. */
         unsafe: type === "major",
+        /* The DVIR's own state, carried through so closing a defect can
+           be driven by something Motive actually says rather than by a
+           fault's absence from a second feed. Not yet acted on: see
+           planClosures. */
+        reportStatus: r.status || null,
         /* Deliberately not kept: picture_url is a signed S3 link that
            expires in fifteen minutes, so storing it would save a dead
            link. */
@@ -347,8 +355,20 @@ const faultOf = (unit, category, note) =>
 
    Nothing here closes a DVIR. Motive is the DOT record; a mechanic
    marking a defect repaired takes it off their queue and does not touch
-   Motive. The only evidence we have that Motive considers a fault dealt
-   with is that it stops coming back in the `status=open` feed.
+   Motive.
+
+   This was built to read a second feed, `status=open`, and close
+   anything missing from it. That feed does not exist: Motive answers
+   400, because `open` is a value the report-level status *field* takes,
+   not a value the status *filter* accepts. The first live dry run said
+   so, which is what a dry run is for. Nothing had run against it yet.
+
+   So closing is off until the signal is verified. runDefects reports
+   the distribution of report statuses it actually sees, which is the
+   observation needed to turn it back on — the with_defects feed already
+   carries each report's status, so the right version of this needs no
+   second call at all. What is below still runs on a dry run so the
+   fences stay exercised and testable; nothing reaches it in write mode.
 
    Absence is weak evidence, so it is fenced three ways:
 

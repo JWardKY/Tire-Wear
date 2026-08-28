@@ -15,6 +15,14 @@
      field=odometer | true_odometer   (which Motive number to believe)
      since=YYYY-MM-DD                 (defects: how far back, default 14d)
      write=1                          (with the token: actually write)
+     raw=1                            (what Motive actually sent)
+     n=1..25                          (raw: how many, default 2)
+     status=...                       (raw: which filter to ask Motive for.
+                                       It takes all, with_defects,
+                                       with_no_defects, with_signature_missing,
+                                       unknown, harmless, corrected — and
+                                       answers 400 to anything else, which is
+                                       how the status=open bug was found)
 */
 import { env, runOdometer, runDefects, rawSample } from "./lib/sync.mjs";
 
@@ -51,7 +59,8 @@ export default async (req) => {
   try {
     /* What Motive actually sent, for when it disagrees with the docs. */
     if (q.get("raw") === "1")
-      return json(200, { raw: await rawSample(ctx, what, q.get("since")) });
+      return json(200, { raw: await rawSample(ctx, what, q.get("since"),
+                                              { n: q.get("n"), status: q.get("status") }) });
     if (what === "odometer" || what === "both")
       out.odometer = await runOdometer(ctx, { write: wants, field: q.get("field") });
     if (what === "defects" || what === "both")

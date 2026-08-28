@@ -298,6 +298,28 @@ const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
   is(got[0].unsafe, false, "a minor defect is not unsafe");
   is(got[1].unsafe, true, "a major one is");
   is(got[0].date, "2026-08-26", "dated from the report");
+  is(got[0].reportStatus, "resolved", "and carries the DVIR's own state");
+  is(got[1].reportStatus, "resolved", "on every defect off that report, not just the first");
+}
+
+{
+  /* The bug the first live dry run found. Motive answers 400 to a status
+     it does not accept, and because the closing read ran before any
+     write, it took the whole defect import down with it — a feature that
+     was never verified would have stopped new defects landing at all.
+
+     So: whatever status this asks for has to be one Motive takes. */
+  const MOTIVE_TAKES = new Set(["all", "with_defects", "with_no_defects",
+                                "with_signature_missing", "unknown",
+                                "harmless", "corrected"]);
+  truthy(!MOTIVE_TAKES.has("open"),
+         "\"open\" is not a status filter Motive accepts — it is a value the report FIELD takes");
+  let asked = null;
+  stub((url) => { asked = url.searchParams.get("status");
+                  return ok({ inspection_reports: [] }); });
+  await fetchInspectionDefects("k", "2026-08-01");
+  truthy(MOTIVE_TAKES.has(asked),
+         `the defect feed asks for a status Motive accepts, not "${asked}"`);
 }
 
 {
