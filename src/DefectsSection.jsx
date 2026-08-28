@@ -50,7 +50,7 @@ const daysOld = (iso) => {
   return Math.max(0, Math.round((Date.now() - then.getTime()) / 86400000));
 };
 
-export default function DefectsSection({ who, tab, onBusy }) {
+export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }) {
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -103,6 +103,7 @@ export default function DefectsSection({ who, tab, onBusy }) {
       .filter((d) => (wantClosed
         ? d.state === "closed"
         : d.state !== "closed" && (d.state === "repaired") === wantRepaired))
+      .filter((d) => !FOCUS[focus] || FOCUS[focus].keep(d))
       .filter((d) => !s || `${d.unit} ${d.category} ${d.note} ${d.driver}`.toLowerCase().includes(s))
       .sort(wantRepaired
         /* Oldest repair first, not newest: the one that has sat longest
@@ -111,7 +112,7 @@ export default function DefectsSection({ who, tab, onBusy }) {
         : wantClosed
         ? (a, b) => String(b.closedAt || "").localeCompare(String(a.closedAt || ""))
         : byUrgency);
-  }, [defects, tab, q]);
+  }, [defects, tab, q, focus]);
 
   const live = defects.filter((d) => d.state !== "closed");
   const openCount = live.filter((d) => d.state !== "repaired").length;
@@ -157,6 +158,9 @@ export default function DefectsSection({ who, tab, onBusy }) {
           </div>
         </div>
 
+        {FOCUS[focus] && <FocusChip label={FOCUS[focus].label} count={shown.length}
+          onClear={onClearFocus} />}
+
         {tab === "repaired" && shown.length > 0 && <AwaitingClose rows={shown} />}
         {tab === "closed" && shown.length > 0 && <ClosedNote />}
 
@@ -192,6 +196,24 @@ export default function DefectsSection({ who, tab, onBusy }) {
     </>
   );
 }
+
+/* Arrived here by tapping a number on the Now board. The tile said
+   "17 units out of service", so this list has to be those seventeen and
+   nothing else, or the number was a lie. */
+const FOCUS = {
+  unsafe: {
+    label: "Out of service",
+    keep: (d) => d.safety === "unsafe",
+  },
+  stale: {
+    label: "Open over a week",
+    keep: (d) => {
+      const first = String(d.firstReported || "").slice(0, 10);
+      if (!first) return false;
+      return first < new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    },
+  },
+};
 
 function Empty({ tab, q }) {
   return (
@@ -503,6 +525,30 @@ function ClosedNote() {
         new defect with its own number rather than reopening this one, so the record
         of the first repair stays intact.
       </p>
+    </div>
+  );
+}
+
+/* Says why the list is shorter than the tab claims, and how to widen it.
+   A filter you arrived at by tapping a number elsewhere has to announce
+   itself — otherwise the next person to pick up the tablet is looking at
+   a filtered board with no idea it is filtered. */
+function FocusChip({ label, count, onClear }) {
+  return (
+    <div className="flex flex-wrap items-center"
+      style={{ gap: 10, background: C.card, border: `1px solid ${C.line}`,
+        borderLeft: `4px solid ${C.green700}`, borderRadius: 8,
+        padding: "10px 14px", marginBottom: 12 }}>
+      <span style={{ fontFamily: FD, fontSize: 13.5, fontWeight: 700,
+        letterSpacing: "0.04em", textTransform: "uppercase", color: C.green900 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 13, color: C.muted }}>
+        {count} shown · you tapped this on the shop board
+      </span>
+      <button onClick={onClear} style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
+        Show all
+      </button>
     </div>
   );
 }

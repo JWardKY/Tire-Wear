@@ -31,7 +31,7 @@ function rangeFor(key) {
   return [today.slice(0, 8) + "01", today];
 }
 
-export default function NowSection({ who, tab, onBusy }) {
+export default function NowSection({ who, tab, onBusy, supervisor, go }) {
   const [clock, setClock] = useState([]);
   const [nums, setNums] = useState(null);
   const [err, setErr] = useState("");
@@ -39,6 +39,7 @@ export default function NowSection({ who, tab, onBusy }) {
   const [closing, setClosing] = useState(null);
   const [, forceTick] = useState(0);
   const timer = useRef(null);
+  const clockCard = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -66,9 +67,13 @@ export default function NowSection({ who, tab, onBusy }) {
       {err && <div style={{ background: C.pull, color: "#fff", padding: "8px 12px",
                             borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
 
-      <div style={{ display: "flex", justifyContent: "space-between",
-                    alignItems: "baseline", marginBottom: 10, gap: 12,
-                    flexWrap: "wrap" }}>
+      {/* Tapping "on the clock" on the board scrolls here rather than
+          navigating: the answer is already on this screen, just above
+          the fold on a phone. */}
+      <div ref={clockCard}
+        style={{ display: "flex", justifyContent: "space-between",
+                 alignItems: "baseline", marginBottom: 10, gap: 12,
+                 flexWrap: "wrap", scrollMarginTop: 12 }}>
         <SectionLabel>On the clock now</SectionLabel>
         <span style={{ fontFamily: FD, fontSize: 13, color: C.muted }}>
           {clock.length ? `${clock.length} punched in` : "nobody punched in"}
@@ -138,25 +143,66 @@ export default function NowSection({ who, tab, onBusy }) {
       <div style={{ display: "grid", gap: 8,
                     gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,150px),1fr))" }}>
         {nums && [
-          ["On the clock", nums.onClock, false],
-          ["Open defects", nums.openDefects, nums.openDefects > 0],
-          ["Units out of service", nums.outOfService, nums.outOfService > 0],
-          ["Open over a week", nums.openOverAWeek, nums.openOverAWeek > 0],
-          ["Hours in range", nums.hours, false],
-          ["Entries booked", nums.entries, false],
-          ["Units touched", nums.unitsTouched, false],
-          ["On road calls", `${nums.roadPct}%`, false],
-        ].map(([label, val, warn]) => (
-          <div key={label} style={{ background: C.card, borderRadius: 6,
-                                    padding: "12px 14px", border: `1px solid ${C.line}` }}>
-            <div style={{ fontFamily: FD, fontSize: 26, fontWeight: 700,
-                          color: warn ? C.pull : C.ink, lineHeight: 1.1 }}>{val}</div>
-            <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3,
-                          textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              {label}
-            </div>
-          </div>
-        ))}
+          /* Each number is a question, so each tile is a way of asking
+             it. The fourth item is what to do about it; a tile with
+             nothing behind it stays a plain number rather than
+             pretending to be a link.
+
+             The four hours tiles land in Supervisor, which is gated. If
+             nobody has unlocked it they are left unclickable on purpose
+             — sending a mechanic into a PIN prompt they cannot answer is
+             the surprise this nav was rearranged to stop. */
+          ["On the clock", nums.onClock, false,
+            clock.length ? () => clockCard.current?.scrollIntoView(
+              { behavior: "smooth", block: "start" }) : null,
+            clock.length ? "See who" : null],
+          ["Open defects", nums.openDefects, nums.openDefects > 0,
+            nums.openDefects ? () => go?.("defects", "open") : null, "Open the list"],
+          ["Units out of service", nums.outOfService, nums.outOfService > 0,
+            nums.outOfService ? () => go?.("defects", "open", "unsafe") : null,
+            "Just these"],
+          ["Open over a week", nums.openOverAWeek, nums.openOverAWeek > 0,
+            nums.openOverAWeek ? () => go?.("defects", "open", "stale") : null,
+            "Just these"],
+          ["Hours in range", nums.hours, false,
+            supervisor ? () => go?.("supervisor", "rollup") : null, "Where they went"],
+          ["Entries booked", nums.entries, false,
+            supervisor ? () => go?.("supervisor", "detail") : null, "Every entry"],
+          ["Units touched", nums.unitsTouched, false,
+            supervisor ? () => go?.("supervisor", "rollup") : null, "By unit"],
+          ["On road calls", `${nums.roadPct}%`, false,
+            supervisor ? () => go?.("supervisor", "rollup") : null, "The split"],
+        ].map(([label, val, warn, onClick, hint]) => {
+          const body = (
+            <>
+              <div style={{ fontFamily: FD, fontSize: 26, fontWeight: 700,
+                            color: warn ? C.pull : C.ink, lineHeight: 1.1 }}>{val}</div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3,
+                            textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {label}
+              </div>
+              {onClick && (
+                <div style={{ fontSize: 11, color: C.green600, marginTop: 5,
+                              fontWeight: 600 }}>
+                  {hint} →
+                </div>
+              )}
+            </>
+          );
+          const box = {
+            background: C.card, borderRadius: 6, padding: "12px 14px",
+            border: `1px solid ${C.line}`, textAlign: "left", width: "100%",
+            font: "inherit", color: "inherit",
+          };
+          return onClick ? (
+            <button key={label} onClick={onClick} title={`${label} — ${hint}`}
+              style={{ ...box, cursor: "pointer" }}>
+              {body}
+            </button>
+          ) : (
+            <div key={label} style={box}>{body}</div>
+          );
+        })}
       </div>
 
       {closing && (

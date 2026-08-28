@@ -281,6 +281,33 @@ old one had, and rule 10 says not to reintroduce it. Jacob chose to keep it. Tha
 conversation is still owed; nothing about the above depends on how it lands, because
 a mechanic can now record a part either way.
 
+### The numbers on the Now board are questions
+
+"Sixty-four open defects" wants to be "which ones", so each tile that has an
+answer is a link to it. `AppShell.go(section, tab, focus)` is how one screen hands
+a question to another: Defects understands `unsafe` and `stale`, and applies them
+as a lens on top of whatever tab is showing.
+
+Three rules keep it honest.
+
+**The list must match the number.** If the tile says 17 and the filtered list shows
+16, the tile was lying. The browser test compares the two rather than checking that
+a click merely navigates.
+
+**A filter arrived at by tapping has to announce itself.** It shows a chip naming
+the lens with a "Show all" beside it — otherwise the next person to pick up the
+tablet is looking at a filtered board with no idea it is filtered. Navigating by
+hand clears the focus, so it can never quietly outlive the tap.
+
+**A tile with nothing behind it stays a plain number.** The four hours tiles land
+in Supervisor, which is gated; when nobody has unlocked it they are not buttons at
+all. Sending a mechanic into a PIN prompt they cannot answer is exactly the
+surprise the nav was rearranged to stop, and a link that leads to a wall is worse
+than no link.
+
+On the clock scrolls to the list already above it rather than navigating — the
+answer is on the same screen, just off the top on a phone.
+
 ### The mechanic's own side of it
 
 Three things a mechanic needs that the office views do not give them.
