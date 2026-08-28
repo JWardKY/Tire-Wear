@@ -146,7 +146,8 @@ try {
 
   const lines = (await time.payrollLines(DATE, DATE))
     .filter((r) => r.mechanicId === mechanicId);
-  is(lines.length, 2, "both lines come through");
+  /* Two at this point: the shop-time line is added below. */
+  is(lines.length, 2, "both lines so far come through");
 
   const paid = lines.find((r) => r.entryId === entryId);
   truthy(paid, "the card's line is there");
@@ -168,14 +169,44 @@ try {
 
   is(time.payrollRow(paid).length, 17, "a row has one cell per column");
 
+  /* ── Shop time: no truck, but still a home ────────────────────
+     Sweeping the bay is real time somebody pays for. It carries the
+     activity where a truck number would go and the shop beside it, and
+     it must not vanish from payroll for want of a vehicle_id. */
+  {
+    const shopId = await time.addEntry({
+      mechanicId, date: DATE, vehId: null,
+      unitLabel: "Parts run / pickup",
+      where: "plant", hours: 0.75, costCode: CODE,
+      jobLocation: "Clays Ferry Shop", note: MARK,
+      workTypes: ["Repair"], workPerformed: `${MARK} went for a gearbox`,
+    });
+    truthy(shopId, "shop time saves with no truck on it");
+
+    const line = (await time.payrollLines(DATE, DATE)).find((r) => r.entryId === shopId);
+    truthy(line, "and reaches payroll");
+    is(line.unit, "Parts run / pickup", "the Unit column says what they were doing");
+    is(line.jobLocation, "Clays Ferry Shop", "and Job/location says which shop");
+    is(line.where, "Plant", "booked as indirect rather than as shop-on-a-truck");
+    is(line.hours, 0.75, "with the hours");
+
+    /* The constraint that stops an hour with nowhere to go still holds. */
+    const homeless = await c.from("tw_time_entries").insert({
+      mechanic_id: mechanicId, work_date: DATE, hours: 1, cost_code: CODE,
+      where_worked: "plant", job_location: "Clays Ferry Shop",
+    });
+    truthy(homeless.error,
+           "a job location on its own is not a home — it still needs a unit or a label");
+  }
+
   /* ── The day, clocked against booked ──────────────────────────── */
   const days = (await time.timecardDays(DATE, DATE))
     .filter((d) => d.mechanicId === mechanicId);
   is(days.length, 1, "one card day for the mechanic");
-  is(days[0].bookedHours, 4.25, "booked hours add the lines up");
+  is(days[0].bookedHours, 5, "booked hours add all three lines up");
   is(days[0].clockHours, 0, "with nothing on the clock");
-  is(days[0].difference, -4.25, "so the gap is negative — booked more than clocked");
-  is(days[0].lines, 2, "and counts the lines");
+  is(days[0].difference, -5, "so the gap is negative — booked more than clocked");
+  is(days[0].lines, 3, "and counts the lines");
   is(days[0].uncodedLines, 0, "with nothing uncoded, because nothing can be");
 
   /* ── The work log ─────────────────────────────────────────────── */
@@ -225,19 +256,19 @@ try {
   truthy(refused && /named person/i.test(refused),
          "or without a named person to attribute it to");
 
-  is((await time.listDay(mechanicId, DATE)).length, 2,
+  is((await time.listDay(mechanicId, DATE)).length, 3,
      "and neither refusal removed anything");
 
   const removed = await time.deleteCard(mechanicId, DATE, "entered on the wrong day", MARK);
-  is(removed, 2, "the whole day goes at once");
+  is(removed, 3, "the whole day goes at once");
   is((await time.listDay(mechanicId, DATE)).length, 0, "and the day is empty after");
 
   const after = (await wlog.listLog({}))
     .filter((r) => r.mechanicId === mechanicId && r.type === "timecard_deleted");
   is(after.length, 1, "the deletion is on the log");
   is(after[0].detail.reason, "entered on the wrong day", "with the reason it was given");
-  is(after[0].detail.entries.length, 2, "and a full snapshot of what was removed");
-  is(after[0].detail.hours, 4.25, "including the hours that went with it");
+  is(after[0].detail.entries.length, 3, "and a full snapshot of what was removed");
+  is(after[0].detail.hours, 5, "including the hours that went with it");
 } catch (e) {
   state.failed.push(`threw: ${e.message}`);
   console.log("  !!  threw: " + e.message);
