@@ -26,9 +26,48 @@ const WHERE = [
   ["road", "Outside service call"],
 ];
 
+/* Not every hour is against a truck. Sweeping the bay, a parts run, an
+   hour waiting on a gearbox — that is real time somebody has to pay for,
+   and it used to be pushed off to the Add hours dialog, which meant the
+   clock and the parts list were not available for it. It belongs on the
+   same card.
+
+   The six are Jason's, from the indirect group in his mockup. They say
+   what the person was doing; the cost code says what it charges to, and
+   the two are not the same question — none of the current codes covers
+   "swept the shop", because the 9xx Plant codes are the asphalt plant,
+   not this building. Cost-code pages 1 and 2 are still missing and may
+   fill that gap. */
+const SHOP_WORK = [
+  "Shop cleanup / housekeeping",
+  "Parts run / pickup",
+  "Yard & equipment moves",
+  "Waiting on parts",
+  "Safety meeting / training",
+  "Other shop time",
+];
+
+/* Where the shops are. A short constant rather than a table: there are
+   three, they do not change, and tw_parts.shop is not a usable source
+   because it also holds HT-1294, the field service truck. If somebody
+   needs to add one without a deploy, this becomes a table and a row in
+   Setup. */
+const SHOPS = ["Clays Ferry Shop", "Nicholasville Shop", "Clover Bottom Shop"];
+
+/* The shop a mechanic picked last, so the second card of the day does
+   not ask again. Per browser, which is per person in practice. */
+const LAST_SHOP = "tirewear:lastshop";
+const lastShop = () => {
+  try { return localStorage.getItem(LAST_SHOP) || ""; } catch { return ""; }
+};
+
 const blank = () => ({
   key: Math.random().toString(36).slice(2),
   vehId: "",
+  /* Set instead of vehId when the hour is shop time rather than a unit.
+     Exactly one of the two is ever filled in. */
+  shopWork: "",
+  shop: "",
   where: "shop",
   hours: "",
   hoursTyped: false,
@@ -159,10 +198,15 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     return g;
   }, [codes]);
 
-  const ready = (c) => c.vehId && c.costCode && Number(c.hours) > 0 && Number(c.hours) <= 24;
+  /* A truck or a shop activity — one of the two, never neither. The
+     database says the same thing in tw_time_needs_a_home. */
+  const homed = (c) => !!c.vehId || (!!c.shopWork && !!c.shop);
+  const ready = (c) => homed(c) && c.costCode
+    && Number(c.hours) > 0 && Number(c.hours) <= 24;
   const filled = (c) =>
-    c.vehId || c.costCode || c.hours || c.workPerformed || c.workTypes.length
-      || c.parts.length || c.seconds || c.runningAt || c.jobLocation;
+    c.vehId || c.shopWork || c.costCode || c.hours || c.workPerformed
+      || c.workTypes.length || c.parts.length || c.seconds || c.runningAt
+      || c.jobLocation;
 
   const live = cards.filter(filled);
   const canSave = live.length > 0 && live.every(ready) && !cards.some((c) => c.runningAt);
@@ -172,12 +216,12 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
      the hours are simply gone. Name the first thing standing in the way. */
   const blocker = (() => {
     if (saving || canSave) return null;
-    if (!live.length) return "Pick a unit to start.";
+    if (!live.length) return "Pick a unit or shop time to start.";
     if (cards.some((c) => c.runningAt))
       return "A clock is still running — press Stop, then save.";
     const bad = live.find((c) => !ready(c));
     if (!bad) return null;
-    if (!bad.vehId) return "One card has no unit on it yet.";
+    if (!homed(bad)) return "One card has no unit or shop on it yet.";
     if (!bad.costCode) return "Choose what to charge the time to.";
     if (!Number(bad.hours)) return "Put the hours on it — the clock fills them in when you stop.";
     if (Number(bad.hours) > 24) return "That is more than twenty-four hours.";
@@ -193,10 +237,16 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
       try {
         await time.saveCard({
           date,
-          vehId: c.vehId,
-          unitLabel: (vehicles.find((v) => v.id === c.vehId) || {}).num || null,
+          vehId: c.vehId || null,
+          /* Payroll's Unit column is coalesce(vehicle number, unit_label),
+             so shop time reads as what the person was doing and the shop
+             itself rides in Job/location beside it. */
+          unitLabel: c.shopWork
+            || (vehicles.find((v) => v.id === c.vehId) || {}).num || null,
           where: c.where,
-          jobLocation: c.jobLocation.trim() || null,
+          jobLocation: c.shopWork
+            ? (c.shop || null)
+            : (c.jobLocation.trim() || null),
           hours: Number(c.hours),
           costCode: c.costCode,
           workOrder: c.workOrder.trim() || null,
@@ -276,8 +326,9 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
       </button>
 
       <p style={{ fontSize: 12.5, color: C.muted, margin: "12px 0 0", lineHeight: 1.55 }}>
-        Shop time, cleanup, a parts run, a safety meeting — anything not against a
-        unit — goes on the day with <strong>Add hours</strong> instead.
+        Shop time, cleanup, a parts run, a safety meeting — pick it from the bottom
+        of the equipment list. It runs the same clock and takes the same parts;
+        it just asks which shop instead of where the work happened.
       </p>
 
       <div className="flex flex-wrap items-center justify-end no-print"
@@ -302,6 +353,7 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
 function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onPatch, onClock, onRemove }) {
   const secs = liveSeconds(c, now);
   const running = !!c.runningAt;
+  const isShop = !!c.shopWork;
 
   const toggleType = (t) => onPatch({
     workTypes: c.workTypes.includes(t)
@@ -316,7 +368,7 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
         <div>
           <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.1em",
                         textTransform: "uppercase", color: C.muted }}>
-            Time on this unit
+            {isShop ? "Time on this" : "Time on this unit"}
           </div>
           <div style={{ fontFamily: FM, fontSize: 26, fontWeight: 600, lineHeight: 1.1,
                         color: running ? C.green700 : C.green900 }}>
@@ -345,31 +397,66 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
           -happened toggle needs room to set its two labels on one line. */}
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                                            marginTop: 14 }}>
-        <Field label="Equipment">
-          <select value={c.vehId} onChange={(e) => onPatch({ vehId: e.target.value })} style={inp}>
+        <Field label={isShop ? "Shop time" : "Equipment"}>
+          <select
+            value={c.vehId || (c.shopWork ? `shop:${c.shopWork}` : "")}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v.startsWith("shop:")) {
+                /* Shop time is indirect however it is spent — sweeping the
+                   bay and driving for parts both belong in the same band
+                   on "where the time went", so the toggle goes away and
+                   the answer is fixed rather than left to be got wrong. */
+                onPatch({ vehId: "", shopWork: v.slice(5),
+                          shop: c.shop || lastShop() || SHOPS[0], where: "plant" });
+              } else {
+                onPatch({ vehId: v, shopWork: "", shop: "", where: "shop" });
+              }
+            }}
+            style={inp}>
             <option value="">Pick the unit…</option>
-            {vehicles.map((v) => (
-              <option key={v.id} value={v.id}>{v.num} — {v.make} {v.model}</option>
-            ))}
+            <optgroup label="Trucks and equipment">
+              {vehicles.map((v) => (
+                <option key={v.id} value={v.id}>{v.num} — {v.make} {v.model}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Shop &amp; indirect time">
+              {SHOP_WORK.map((w) => (
+                <option key={w} value={`shop:${w}`}>{w}</option>
+              ))}
+            </optgroup>
           </select>
         </Field>
 
-        <Field label="Where the work happened">
-          <div className="flex" style={{ gap: 6 }}>
-            {WHERE.map(([k, l]) => (
-              <button key={k} onClick={() => onPatch({ where: k })}
-                style={{ flex: 1, fontFamily: FD, fontSize: 13, fontWeight: 600,
-                         letterSpacing: "0.04em", textTransform: "uppercase",
-                         padding: "8px 6px", borderRadius: 5, cursor: "pointer",
-                         whiteSpace: "nowrap",
-                         border: `1px solid ${c.where === k ? C.green700 : C.line}`,
-                         background: c.where === k ? C.green700 : "#fff",
-                         color: c.where === k ? "#fff" : C.muted }}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </Field>
+        {isShop ? (
+          <Field label="Which shop">
+            <select value={c.shop}
+              onChange={(e) => {
+                onPatch({ shop: e.target.value });
+                try { localStorage.setItem(LAST_SHOP, e.target.value); } catch { /* fine */ }
+              }}
+              style={inp}>
+              {SHOPS.map((sh) => <option key={sh} value={sh}>{sh}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <Field label="Where the work happened">
+            <div className="flex" style={{ gap: 6 }}>
+              {WHERE.map(([k, l]) => (
+                <button key={k} onClick={() => onPatch({ where: k })}
+                  style={{ flex: 1, fontFamily: FD, fontSize: 13, fontWeight: 600,
+                           letterSpacing: "0.04em", textTransform: "uppercase",
+                           padding: "8px 6px", borderRadius: 5, cursor: "pointer",
+                           whiteSpace: "nowrap",
+                           border: `1px solid ${c.where === k ? C.green700 : C.line}`,
+                           background: c.where === k ? C.green700 : "#fff",
+                           color: c.where === k ? "#fff" : C.muted }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
       </div>
 
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
@@ -407,7 +494,7 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
 
         {/* Payroll charges a road call against the job it was for, so the
             field only appears once the work is outside the shop. */}
-        {c.where === "road" && (
+        {!isShop && c.where === "road" && (
           <Field label="Job / location">
             <input value={c.jobLocation}
               onChange={(e) => onPatch({ jobLocation: e.target.value })}
@@ -518,7 +605,7 @@ function PartsPulled({ parts, picked, onChange }) {
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.lineSoft}` }}>
       <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
                     textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
-        Parts used on this unit
+        Parts used
       </div>
 
       {picked.length === 0 ? (

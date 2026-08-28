@@ -352,6 +352,27 @@ One trap worth knowing: `updateEntry` only writes the equipment-card fields when
 are passed. The Add hours dialog does not know about stints or type-of-work, and an
 edit from it must not wipe them off an entry made on the card.
 
+**Shop time is on the same card.** Not every hour is against a truck — sweeping the
+bay, a parts run, an hour waiting on a gearbox. That used to be pushed off to the
+Add hours dialog, which meant the clock and the parts list were not available for
+it. The equipment picker now has a second group with Jason's six indirect
+activities, and choosing one swaps *Where the work happened* for *Which shop*.
+
+What lands in the database: `vehicle_id` null, `unit_label` the activity,
+`job_location` the shop, `where_worked` **plant**. Payroll's Unit column is
+`coalesce(vehicle number, unit_label)`, so it reads "Parts run / pickup" with
+"Clays Ferry Shop" beside it, and `plant` is the bucket "Where the time went"
+paints as **Shop & indirect** — the value is badly named but it is the existing
+indirect band, not the asphalt plant.
+
+Two things worth knowing. The activity is not the cost code and does not try to
+be: **none of the current codes covers "swept the shop"**, because 910–920 are all
+the asphalt plant. Cost-code pages 1 and 2 are still missing and may fill that gap;
+until then somebody has to pick the nearest code. And `SHOPS` is a three-item
+constant rather than a table — `tw_parts.shop` is not a usable source because it
+also holds HT-1294, the field service truck. If a shop needs adding without a
+deploy, that becomes a table and a row in Setup.
+
 **The card is a draft until Save, and it says so.** Two things went wrong the
 first morning somebody used it for real, and both come from the same place: the
 form lived only in React state.
