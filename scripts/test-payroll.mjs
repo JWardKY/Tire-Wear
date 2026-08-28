@@ -33,6 +33,18 @@ try {
   mechanicId = m.id;
   truthy(mechanicId, "the test mechanic reads back");
 
+  /* This suite reuses its mechanic across runs, so a previous run that
+     died before cleanup would leave entries on DATE and every count
+     below would be wrong for a reason that has nothing to do with the
+     code. Say so in one line instead. */
+  const before = await time.listDay(mechanicId, DATE);
+  if (before.length) {
+    await c.from("tw_time_entries").delete()
+      .eq("mechanic_id", mechanicId).eq("work_date", DATE);
+    console.log(`  --  cleared ${before.length} row(s) left on ${DATE} by an earlier run`);
+  }
+  is((await time.listDay(mechanicId, DATE)).length, 0, "the test day starts empty");
+
   const truck = await findIdleVehicle(c);
   const { data: testPart } = await c.from("tw_parts")
     .insert({ part_number: `${MARK}-PR1`, name: "Test belt", shop: SHOP, uom: "ea", min_qty: 0 })
@@ -57,10 +69,40 @@ try {
       { start: "2019-01-03T16:00:00.000Z", stop: "2019-01-03T17:00:00.000Z" },
     ],
     workPerformed: `${MARK} welded the bracket`,
-    parts: [{ partId: testPart.id, number: `${MARK}-PR1`, qty: 2 }],
+    parts: [
+      { partId: testPart.id, number: `${MARK}-PR1`, qty: 2 },
+      /* Nothing in the catalog. Rule 10: it still gets recorded. */
+      { partId: null, number: `${MARK}-TYPED`, qty: 3 },
+    ],
     who: MARK,
   }, mechanicId);
   truthy(entryId, "a card saves");
+
+  /* ── A typed part is recorded but moves no stock ──────────────── */
+  const onLine = await time.partsForEntry(entryId);
+  is(onLine.length, 2, "both parts are on the line");
+  const typed = onLine.find((x) => x.number === `${MARK}-TYPED`);
+  const fromCat = onLine.find((x) => x.number === `${MARK}-PR1`);
+  truthy(typed, "the typed part is recorded");
+  is(typed.partId, null, "with no catalog id");
+  is(typed.qty, 3, "and the quantity as typed");
+  truthy(fromCat.partId, "the catalog part keeps its id");
+
+  const { data: moved } = await c.from("tw_part_txns")
+    .select("part_id,qty_delta").eq("time_entry_id", entryId);
+  is(moved.length, 1, "only the catalog part moved stock");
+  is(moved[0].part_id, testPart.id, "and it was that one");
+  is(Number(moved[0].qty_delta), -2, "for the quantity on the line");
+
+  const shelfNow = (await parts.listParts()).find((x) => x.id === testPart.id);
+  is(shelfNow.onHand, 6, "the shelf moved for the catalog part only");
+
+  /* The database refuses two lines for one part on one job, whatever
+     the app does. */
+  const dupe = await c.from("tw_time_entry_parts").insert({
+    time_entry_id: entryId, part_number: `${MARK}-typed`, qty: 1,
+  });
+  truthy(dupe.error, "the database refuses a second line for the same part");
 
   /* Jason's rule 6 — an hour with no cost code cannot be saved, because
      payroll cannot charge it out. Our schema is stricter than his: the
@@ -77,6 +119,25 @@ try {
     mechanicId, date: DATE, vehId: null, unitLabel: "Parts run",
     where: "plant", hours: 1, costCode: CODE, note: MARK,
   });
+
+  /* ── Merging typed part lines, as a pure function ─────────────── */
+  {
+    const m = time.mergeParts([
+      { partId: null, number: "AF-1140", qty: 1 },
+      { partId: null, number: " af-1140 ", qty: 2 },
+      { partId: "cat-id", number: "AF-1140", qty: 0.5, name: "Air filter" },
+      { partId: null, number: "", qty: 3 },
+      { partId: null, number: "OIL-15W40", qty: 0 },
+      { partId: null, number: "OIL-15W40", qty: 4 },
+    ]);
+    is(m.length, 2, "typing the same number twice makes one line, not two");
+    is(m[0].qty, 3.5, "and the quantities add up");
+    is(m[0].partId, "cat-id", "a catalog match wins over a typed one for the same number");
+    is(m[0].name, "Air filter", "and brings its description with it");
+    is(m[0].number, "AF-1140", "the number keeps the spelling it was first given");
+    is(m[1].number, "OIL-15W40", "a line with no quantity is dropped, not zeroed");
+    is(m[1].qty, 4, "leaving only the real one");
+  }
 
   /* ── The payroll export ───────────────────────────────────────── */
   is(time.PAYROLL_COLUMNS.length, 17, "the export is seventeen columns");
@@ -95,7 +156,8 @@ try {
   is(paid.where, "Outside service call", "where reads in words, not a database code");
   is(paid.jobLocation, "JOB-4417", "the job carries through for a road call");
   is(paid.workTypes, "Repair · Welding / fab", "the type of work reads as a list");
-  is(paid.parts, `2x ${MARK}-PR1`, "and the parts pulled for it");
+  is(paid.parts, `2x ${MARK}-PR1; 3x ${MARK}-TYPED`,
+     "payroll shows both, so a typed part is not silently dropped");
   truthy(paid.workPerformed.includes("welded"), "and what was performed");
   is(paid.costCodeName, "Service", "the cost code name comes off the join");
 

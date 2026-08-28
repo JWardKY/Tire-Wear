@@ -219,30 +219,38 @@ spec allows and says nothing about it. Past 1,800 characters the screen refuses 
 mail link and offers the text to copy instead — a silently cut-off purchase order is
 worse than no purchase order.
 
-### Jason's spec says no parts inventory, and we built one
+### Parts: a catalog and free text, both
 
-**This is an open disagreement, not a settled decision.** It needs to go back to
-Jason before anybody acts on it either way.
+Jason's rule 10 says a mechanic types a part number or a plain description plus a
+quantity, and that no stock system should stand in the way of that. We also have a
+real catalog, which he did not want. **Both are now true at once**, and
+`tw_time_entry_parts` is how.
 
-`HANDOFF-SHOP.md` rule 10 is explicit: parts are free text, a mechanic types a part
-number or a plain description plus a quantity, and *"do not reintroduce a stock
-system, a reorder board, or vendor purchasing unless Jason asks — that was a
-considered decision, not an omission."* His new dashboard drops the Inventory tab
-that his old one had, which is the same call made twice.
+That table records what the mechanic actually put on the job, always. When the text
+matched the catalog, `part_id` points at it and a `tw_part_txns` issue draws the
+stock down as well; when it did not, the line stands on its own as typed and moves
+no stock. Nobody is ever blocked because a part is not in the system, and stock
+still moves when it can. The card marks a typed line **TYPED — NO STOCK** so nobody
+thinks the shelf went down.
 
-We have all of it: an Inventory section with stock, vendors, ordering, receiving,
-requests and a CSV import, and a catalog search on the equipment card. Jacob asked
-for it and, asked directly, chose to keep it as built for now and raise it with
-Jason rather than have it removed on a document's say-so.
+Two details that matter:
 
-So: **do not remove Inventory, and do not "fix" the equipment card to free text,
-without Jacob and Jason agreeing.** Either way it is a small change — the card
-would take a typed string instead of a catalog id, and the section would come off
-the nav. The database would keep the tables regardless; nothing needs dropping.
+- **The payroll export reads `tw_time_entry_parts`, not `tw_part_txns`.** A typed
+  part moves no stock at all, so reading the movements would have silently dropped
+  it from payroll — exactly the case rule 10 is about.
+- **Typing the same number twice adds the quantities** rather than making a second
+  line, matched on the trimmed and case-folded number. `mergeParts` does it in the
+  app and a unique index says the same thing in the database, so a bug in the former
+  surfaces as a failed save rather than as two lines for one part.
 
-The middle option, if it helps: let the card accept a typed part that is not in the
-catalog, so a mechanic never hits a wall, while a match still draws stock down.
-That is what was recommended and not taken.
+`part_number` is kept as text even when `part_id` is set, so the line still reads
+correctly if the catalog row is later renamed or removed.
+
+**What is still open:** whether the Inventory section — stock, vendors, ordering,
+receiving, requests — should exist at all. Jason's new dashboard drops the tab his
+old one had, and rule 10 says not to reintroduce it. Jacob chose to keep it. That
+conversation is still owed; nothing about the above depends on how it lands, because
+a mechanic can now record a part either way.
 
 ### The mechanic's own side of it
 
@@ -883,6 +891,8 @@ Two more views:
 - **`tw_vehicle_meter`** — the latest odometer per truck, in one place.
 - **`tw_pm_due`** — every active truck against every active program, with
   whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
+- **`tw_time_entry_parts`** — what a mechanic put on a timecard line, typed or
+  from the catalog. The payroll export reads this, not the stock movements.
 - **`tw_work_log`** — append only. See the section above before touching it.
 - **`tw_payroll_lines`** — the seventeen-column payroll export.
 - **`tw_timecard_days`** — one row per mechanic per day, clocked against booked.
