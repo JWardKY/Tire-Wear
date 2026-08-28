@@ -4,6 +4,8 @@ import { fmtDate, nf, toCSV, Btn, Field, SectionLabel, inp, th, td, tdNum, linkB
   from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as wlog from "./logData.js";
+import * as clock from "./nowData.js";
+import { todayISO } from "./day.js";
 
 /* ── The Hours section ────────────────────────────────────────────
    Where the hours went, for the office. Read only: hours are entered
@@ -20,7 +22,10 @@ function startOfWeek(d) {
   x.setDate(x.getDate() - day);
   return x.toISOString().slice(0, 10);
 }
-const todayStr = () => new Date().toISOString().slice(0, 10);
+/* The shop's day. This was `new Date().toISOString()`, which is the UTC
+   date and puts the week boundary in the wrong place for an evening
+   shift — the same trap day.js exists to close. */
+const todayStr = todayISO;
 function addDays(iso, n) {
   const x = new Date(iso + "T00:00:00");
   x.setDate(x.getDate() + n);
@@ -31,6 +36,8 @@ const RANGES = [
   ["week", "This week"],
   ["last", "Last week"],
   ["month", "This month"],
+  ["prevmonth", "Last month"],
+  ["custom", "Custom…"],
 ];
 
 function rangeFor(key) {
@@ -40,17 +47,38 @@ function rangeFor(key) {
     const thisMon = startOfWeek(today);
     return [addDays(thisMon, -7), addDays(thisMon, -1)];
   }
+  if (key === "prevmonth") {
+    const firstOfThis = today.slice(0, 8) + "01";
+    const lastOfPrev = addDays(firstOfThis, -1);
+    return [lastOfPrev.slice(0, 8) + "01", lastOfPrev];
+  }
   return [today.slice(0, 8) + "01", today];
 }
 
 export default function HoursSection({ who, tab, onBusy, supervisor }) {
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
+  /* A preset writes the dates; typing a date switches the preset to
+     Custom. Payroll runs on pay periods, and a pay period does not line
+     up with "this week" — the presets are a shortcut, not the range. */
   const [rangeKey, setRangeKey] = useState("week");
+  const [from, setFrom] = useState(() => rangeFor("week")[0]);
+  const [to, setTo] = useState(() => rangeFor("week")[1]);
+  const pickRange = (k) => {
+    setRangeKey(k);
+    if (k === "custom") return;
+    const [f, t] = rangeFor(k);
+    setFrom(f);
+    setTo(t);
+  };
+  const setEnd = (which) => (e) => {
+    const v = e.target.value;
+    if (!v) return;
+    setRangeKey("custom");
+    (which === "from" ? setFrom : setTo)(v);
+  };
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState("");
-
-  const [from, to] = useMemo(() => rangeFor(rangeKey), [rangeKey]);
 
   const load = useCallback(async () => {
     try {
@@ -137,12 +165,16 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
             </div>
           </div>
           <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
-            <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value)}
-              style={{ ...inp, width: 150 }}>
+            <select value={rangeKey} onChange={(e) => pickRange(e.target.value)}
+              style={{ ...inp, width: 140 }}>
               {RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
+            <input type="date" value={from} max={to} onChange={setEnd("from")}
+              aria-label="From" style={{ ...inp, width: 150 }} />
+            <input type="date" value={to} min={from} onChange={setEnd("to")}
+              aria-label="To" style={{ ...inp, width: 150 }} />
             <input value={q} onChange={(e) => setQ(e.target.value)}
-              placeholder="Find a name, truck or code" style={{ ...inp, width: 220 }} />
+              placeholder="Find a name, truck or code" style={{ ...inp, width: 200 }} />
             <Btn tone="ghost" onClick={exportCsv} disabled={exporting || !rows.length}>
               {exporting ? "Building…" : "Payroll CSV"}
             </Btn>
@@ -150,9 +182,9 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
         </div>
 
         {tab === "cards" ? (
-          <Cards from={from} to={to} who={supervisor?.name || who} onErr={setErr} />
+          <Cards from={from} to={to} q={q} who={supervisor?.name || who} onErr={setErr} />
         ) : tab === "log" ? (
-          <WorkLog from={from} to={to} onErr={setErr} />
+          <WorkLog from={from} to={to} q={q} onErr={setErr} />
         ) : rows.length === 0 ? (
           <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
             <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
@@ -330,21 +362,92 @@ function WhereTheTimeWent({ rows }) {
    Deleting a card needs a reason, and the reason plus the whole card
    goes to the work log before a single row is removed. */
 
-function Cards({ from, to, who, onErr }) {
-  const [days, setDays] = useState(null);
+function Cards({ from, to, q, who, onErr }) {
+  const [all, setAll] = useState(null);
   const [open, setOpen] = useState(null);   // the day being looked at
   const [busy, setBusy] = useState(false);
+  const [mech, setMech] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
-    try { setDays(await time.timecardDays(from, to)); }
+    try { setAll(await time.timecardDays(from, to)); }
     catch (e) { onErr?.(`Could not load timecards — ${e.message || e}`); }
   }, [from, to, onErr]);
 
   useEffect(() => { load(); }, [load]);
 
-  if (!days) return <div style={{ padding: 30, color: C.muted }}>Loading timecards…</div>;
+  /* Only mechanics who actually have a card in this range. A dropdown
+     of the whole roster is mostly names with nothing behind them. */
+  const roster = useMemo(() => {
+    const m = new Map();
+    (all || []).forEach((d) => m.set(d.mechanicId, d.mechanic));
+    return [...m].map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [all]);
 
-  if (!days.length) {
+  const days = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return (all || []).filter((d) =>
+      (!mech || d.mechanicId === mech)
+      && (!s || `${d.mechanic} ${d.empNo}`.toLowerCase().includes(s)));
+  }, [all, mech, q]);
+
+  /* The numbers a supervisor is actually chasing, before they open
+     anything: what the shop clocked, what it booked, and the gap. */
+  const kpi = useMemo(() => {
+    const clocked = days.reduce((a, d) => a + d.clockHours, 0);
+    const booked = days.reduce((a, d) => a + d.bookedHours, 0);
+    return {
+      cards: days.length,
+      clocked, booked,
+      gap: clocked - booked,
+      offBalance: days.filter((d) => !d.stillOpen && Math.abs(d.difference) >= 0.25).length,
+      running: days.filter((d) => d.stillOpen).length,
+    };
+  }, [days]);
+
+  /* The short export: one row per mechanic per cost code. The payroll
+     CSV is the full seventeen columns; this is the one you read. */
+  async function summaryCsv() {
+    setExporting(true);
+    try {
+      const lines = await time.payrollLines(from, to);
+      const keep = lines.filter((r) =>
+        (!mech || r.mechanicId === mech)
+        && (!q.trim() || `${r.mechanic} ${r.empNo}`.toLowerCase()
+              .includes(q.trim().toLowerCase())));
+      const m = new Map();
+      keep.forEach((r) => {
+        const k = `${r.mechanicId}|${r.costCode}`;
+        const g = m.get(k) || {
+          mechanic: r.mechanic, empNo: r.empNo,
+          costCode: r.costCode, costCodeName: r.costCodeName, hours: 0, lines: 0,
+        };
+        g.hours = Math.round((g.hours + r.hours) * 100) / 100;
+        g.lines += 1;
+        m.set(k, g);
+      });
+      const body = [...m.values()]
+        .sort((a, b) => a.mechanic.localeCompare(b.mechanic)
+          || String(a.costCode).localeCompare(String(b.costCode)))
+        .map((g) => [g.mechanic, g.empNo, g.costCode, g.costCodeName, g.hours, g.lines]);
+      const head = ["Mechanic", "Employee #", "Cost code", "Cost code name", "Hours", "Lines"];
+      const blob = new Blob([toCSV([head, ...body])], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `allen-hours-summary-${from}-to-${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      onErr?.(`Could not build the summary — ${e.message || e}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  if (!all) return <div style={{ padding: 30, color: C.muted }}>Loading timecards…</div>;
+
+  if (!all.length) {
     return (
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
         <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
@@ -367,9 +470,39 @@ function Cards({ from, to, who, onErr }) {
     <>
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
         overflow: "hidden" }}>
-        <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
-          <SectionLabel noMargin>Timecards</SectionLabel>
+        <div className="flex flex-wrap items-center justify-between"
+          style={{ gap: 8, padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+          <SectionLabel noMargin>
+            Timecards · {days.length}{days.length !== all.length ? ` of ${all.length}` : ""}
+          </SectionLabel>
+          <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
+            <select value={mech} onChange={(e) => setMech(e.target.value)}
+              style={{ ...inp, width: 200 }}>
+              <option value="">All mechanics</option>
+              {roster.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <Btn tone="ghost" disabled={exporting || !days.length} onClick={summaryCsv}>
+              {exporting ? "Building…" : "Summary CSV"}
+            </Btn>
+          </div>
         </div>
+
+        <Kpi items={[
+          ["Cards", nf(kpi.cards)],
+          ["On the clock", nf(kpi.clocked, 2)],
+          ["Booked", nf(kpi.booked, 2)],
+          ["Gap", `${kpi.gap > 0 ? "+" : ""}${nf(kpi.gap, 2)}`,
+            Math.abs(kpi.gap) >= 1 ? C.pull : Math.abs(kpi.gap) >= 0.01 ? C.watch : C.good],
+          ["Out of balance", nf(kpi.offBalance), kpi.offBalance ? C.watch : C.muted],
+          ["Still clocked in", nf(kpi.running), kpi.running ? C.green700 : C.muted],
+        ]} />
+
+        {days.length === 0 && (
+          <div style={{ padding: 22, fontSize: 14, color: C.muted, lineHeight: 1.55 }}>
+            Nothing matches that. {all.length} card{all.length === 1 ? "" : "s"} in the range.
+          </div>
+        )}
+
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
             <thead>
@@ -432,16 +565,28 @@ function Cards({ from, to, who, onErr }) {
 
 function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted }) {
   const [entries, setEntries] = useState(null);
+  const [shifts, setShifts] = useState(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     let live = true;
-    time.listDay(day.mechanicId, day.date)
-      .then((r) => { if (live) setEntries(r); })
+    Promise.all([
+      time.listDay(day.mechanicId, day.date),
+      /* The punches, not just the total. "Clocked 9, booked 6" invites
+         the question "when did they clock in and out", and a dialog
+         that cannot answer it sends somebody to another screen. */
+      clock.shiftsForDay(day.mechanicId, day.date),
+    ])
+      .then(([e, sh]) => { if (live) { setEntries(e); setShifts(sh); } })
       .catch((e) => onErr?.(e.message || String(e)));
     return () => { live = false; };
   }, [day, onErr]);
+
+  const hm = (iso) => (iso
+    ? new Date(iso).toLocaleTimeString("en-US",
+        { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+    : "—");
 
   const remove = async () => {
     setBusy(true);
@@ -459,6 +604,38 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted }) {
     <Modal title={`${day.mechanic} — ${fmtDate(day.date)}`}
       sub={`${nf(day.clockHours, 2)} on the clock · ${nf(day.bookedHours, 2)} booked`}
       onClose={onClose} width={720}>
+      {shifts && (
+        <div style={{ marginBottom: 14, paddingBottom: 12,
+          borderBottom: `1px solid ${C.lineSoft}` }}>
+          <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600,
+            letterSpacing: "0.09em", textTransform: "uppercase", color: C.muted,
+            marginBottom: 6 }}>
+            Punches
+          </div>
+          {shifts.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted }}>
+              Never clocked in on this day — the hours below were entered by hand.
+            </div>
+          ) : (
+            <div className="flex flex-wrap" style={{ gap: 16 }}>
+              {shifts.map((sh) => (
+                <div key={sh.id} style={{ fontSize: 13 }}>
+                  <span style={{ fontFamily: FM, fontWeight: 600 }}>
+                    {hm(sh.startedAt)} – {sh.open
+                      ? <span style={{ color: C.green700 }}>still on</span>
+                      : hm(sh.endedAt)}
+                  </span>
+                  <span style={{ color: C.muted }}>
+                    {sh.lunch ? ` · ${sh.lunch} min lunch` : " · no lunch"}
+                    {!sh.open && ` · ${nf(sh.clockHours, 2)} hr`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {!entries ? (
         <div style={{ color: C.muted }}>Loading the card…</div>
       ) : entries.length === 0 ? (
@@ -536,17 +713,37 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted }) {
    Append only, and shown as such. There is no edit here and there is
    no delete, because there is none in the database either. */
 
-function WorkLog({ from, to, onErr }) {
-  const [rows, setRows] = useState(null);
+function WorkLog({ from, to, q, onErr }) {
+  const [all, setAll] = useState(null);
   const [type, setType] = useState("");
+  const [who, setWho] = useState("");
+  const [unit, setUnit] = useState("");
 
   useEffect(() => {
     let live = true;
+    /* The type filter goes to the database because it is indexed and
+       cuts the most; who and unit are narrowed here, so switching them
+       does not cost a round trip on a log that is already loaded. */
     wlog.listLog({ from, to, type: type || undefined })
-      .then((r) => { if (live) setRows(r); })
+      .then((r) => { if (live) setAll(r); })
       .catch((e) => onErr?.(`Could not load the work log — ${e.message || e}`));
     return () => { live = false; };
   }, [from, to, type, onErr]);
+
+  const people = useMemo(
+    () => [...new Set((all || []).map((r) => r.actor).filter(Boolean))].sort(),
+    [all]);
+  const units = useMemo(
+    () => [...new Set((all || []).map((r) => r.unit).filter(Boolean))].sort(),
+    [all]);
+
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return (all || []).filter((r) =>
+      (!who || r.actor === who)
+      && (!unit || r.unit === unit)
+      && (!s || `${r.summary} ${r.actor} ${r.unit} ${r.label}`.toLowerCase().includes(s)));
+  }, [all, who, unit, q]);
 
   function exportCsv() {
     const head = ["Timestamp", "Type", "Unit", "Summary", "Recorded by", "Detail (JSON)"];
@@ -560,29 +757,51 @@ function WorkLog({ from, to, onErr }) {
     URL.revokeObjectURL(a.href);
   }
 
-  if (!rows) return <div style={{ padding: 30, color: C.muted }}>Loading the work log…</div>;
+  if (!all) return <div style={{ padding: 30, color: C.muted }}>Loading the work log…</div>;
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
       overflow: "hidden" }}>
       <div className="flex flex-wrap items-center justify-between"
         style={{ gap: 8, padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
-        <SectionLabel noMargin>Work log · {rows.length} entries</SectionLabel>
+        <SectionLabel noMargin>
+          Work log · {rows.length}{rows.length !== all.length ? ` of ${all.length}` : ""} entries
+        </SectionLabel>
         <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
           <select value={type} onChange={(e) => setType(e.target.value)}
-            style={{ ...inp, width: 210 }}>
-            <option value="">Everything</option>
+            style={{ ...inp, width: 190 }}>
+            <option value="">All work</option>
             {Object.entries(wlog.EVENT_LABEL).map(([k, l]) => (
               <option key={k} value={k}>{l}</option>
             ))}
           </select>
-          <Btn tone="ghost" onClick={exportCsv} disabled={!rows.length}>Export CSV</Btn>
+          <select value={who} onChange={(e) => setWho(e.target.value)}
+            style={{ ...inp, width: 180 }}>
+            <option value="">Everyone</option>
+            {people.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <select value={unit} onChange={(e) => setUnit(e.target.value)}
+            style={{ ...inp, width: 150 }}>
+            <option value="">All units</option>
+            {units.map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+          <Btn tone="ghost" onClick={exportCsv} disabled={!rows.length}>Audit export</Btn>
         </div>
       </div>
 
+      <Kpi items={[
+        ["Entries", nf(rows.length)],
+        ["People", nf(people.length)],
+        ["Units touched", nf(units.length)],
+        ["Deletions", nf(rows.filter((r) => r.type === "timecard_deleted").length),
+          rows.some((r) => r.type === "timecard_deleted") ? C.pull : C.muted],
+      ]} />
+
       {rows.length === 0 ? (
         <div style={{ padding: 26, fontSize: 14, color: C.muted, lineHeight: 1.55 }}>
-          Nothing logged in this range yet.
+          {all.length
+            ? `Nothing matches that. ${all.length} entr${all.length === 1 ? "y" : "ies"} in the range.`
+            : "Nothing logged in this range yet."}
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
@@ -624,6 +843,33 @@ function WorkLog({ from, to, onErr }) {
         this screen, and not from the database either. A deleted timecard keeps its
         whole contents and the reason it was deleted.
       </div>
+    </div>
+  );
+}
+
+/* A strip of numbers across the top of a panel. Jason's dashboard leads
+   every board with one, and it is the right instinct: the question a
+   supervisor opens this with is usually answered before they read a
+   single row. */
+function Kpi({ items }) {
+  return (
+    <div className="flex flex-wrap"
+      style={{ gap: 0, borderBottom: `1px solid ${C.lineSoft}`, background: C.paper }}>
+      {items.map(([label, value, colour]) => (
+        <div key={label}
+          style={{ padding: "9px 16px", borderRight: `1px solid ${C.lineSoft}`,
+                   minWidth: 118, flex: "0 1 auto" }}>
+          <div style={{ fontFamily: FD, fontSize: 10.5, fontWeight: 600,
+                        letterSpacing: "0.1em", textTransform: "uppercase",
+                        color: C.muted }}>
+            {label}
+          </div>
+          <div style={{ fontFamily: FM, fontSize: 17, fontWeight: 600, lineHeight: 1.2,
+                        color: colour || C.green900 }}>
+            {value}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

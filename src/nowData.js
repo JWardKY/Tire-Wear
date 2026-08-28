@@ -9,6 +9,12 @@ import { fetchAll } from "./data.js";
    until they have filled in a timecard, which is backwards — they are
    in the shop from the moment they punch in. */
 
+const rpc = async (fn, args) => {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) throw error;
+  return data;
+};
+
 export async function listOnClock() {
   const { data, error } = await supabase
     .from("tw_on_clock").select("*").order("started_at");
@@ -47,22 +53,27 @@ export async function punchIn(mechanicId, note) {
   return { ok: true };
 }
 
+/* The server stamps the punch, not the tablet.
+   punchIn takes started_at from the column default, so it is already the
+   database's clock. This used to send new Date() from the browser, and a
+   tablet running a second behind the server produced an ended_at earlier
+   than started_at — the shift constraint refused it and the mechanic got
+   a raw database error while trying to clock out.
+   The quieter problem was worse: a tablet ten minutes slow would have
+   booked every punch-out ten minutes early and nobody would have known. */
 export async function punchOut(mechanicId) {
   const open = await openShift(mechanicId);
-  if (!open) return { ok: false, error: "Not on the clock." };
-  const { error } = await supabase.from("tw_shifts")
-    .update({ ended_at: new Date().toISOString() }).eq("id", open.id);
-  if (error) throw error;
-  return { ok: true, startedAt: open.started_at };
+  const r = await rpc("tw_punch_out", { p_mechanic: mechanicId });
+  if (r && r.ok === false) return r;
+  return { ok: true, startedAt: open?.started_at };
 }
 
 /* Closing somebody else's forgotten shift, from the board. Kept
    separate from punchOut because it is a different act: a supervisor
    tidying up, not a mechanic finishing. */
 export async function closeShift(shiftId) {
-  const { error } = await supabase.from("tw_shifts")
-    .update({ ended_at: new Date().toISOString() }).eq("id", shiftId);
-  if (error) throw error;
+  const r = await rpc("tw_close_shift", { p_shift: shiftId });
+  if (r && r.ok === false) throw new Error(r.error);
 }
 
 /* ── The numbers across the top ────────────────────────────────── */
@@ -134,6 +145,25 @@ export function fmtHMS(sec) {
    More than a punch. Both times are editable and there is a lunch
    deduction, because a clock a mechanic cannot correct is one they stop
    using the first morning they forget to punch in. */
+
+/* Every punch pair on one day, oldest first. The board shows one number
+   for the day; a supervisor chasing a gap needs to see the punches that
+   made it — somebody who clocked out for two hours at lunch and back in
+   looks identical in the total. */
+export async function shiftsForDay(mechanicId, dateISO) {
+  const { data, error } = await supabase
+    .from("tw_shift_days").select("*")
+    .eq("mechanic_id", mechanicId).eq("work_date", dateISO)
+    .order("started_at", { ascending: true });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: r.id, date: r.work_date,
+    startedAt: r.started_at, endedAt: r.ended_at,
+    lunch: Number(r.lunch_minutes),
+    clockHours: Number(r.clock_hours),
+    open: !!r.open,
+  }));
+}
 
 export async function shiftForDay(mechanicId, dateISO) {
   const { data, error } = await supabase

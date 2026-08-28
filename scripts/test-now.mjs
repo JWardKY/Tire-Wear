@@ -51,7 +51,20 @@ try {
   /* Having closed one, another can be opened — the unique index is on
      open shifts only, not on the mechanic. */
   truthy((await now.punchIn(mechId, MARK)).ok, "a second shift can be opened later");
-  await now.punchOut(mechId);
+
+  /* Punching straight back out is the case that used to break. started_at
+     comes from the database's clock and ended_at used to come from the
+     browser's; a client running a second behind produced a shift ending
+     before it started and the mechanic got a raw constraint error. Both
+     ends are stamped by the server now, so this holds however far the
+     tablet has drifted. */
+  const quick = await now.punchOut(mechId);
+  truthy(quick.ok, "punching straight back out works, whatever the tablet's clock says");
+  const justClosed = await c.from("tw_shifts")
+    .select("started_at,ended_at").eq("mechanic_id", mechId)
+    .order("started_at", { ascending: false }).limit(1).single();
+  truthy(new Date(justClosed.data.ended_at) >= new Date(justClosed.data.started_at),
+         "and the shift does not end before it starts");
 
   /* A shift left open from yesterday must read as stale, because a
      nineteen hour timer on the wall is a missed punch-out, not a day. */
@@ -72,6 +85,25 @@ try {
     ended_at: new Date(Date.now() - 3600000).toISOString(),
   });
   truthy(bad.error, "the database refuses a shift that ends before it starts");
+
+  /* The clock the punch is stamped with is the server's, not this
+     machine's. Proven by measuring the skew and showing the punch does
+     not carry it — on a container running behind, a browser-stamped
+     punch-out lands in the past. */
+  {
+    const { data: dbNow } = await c.rpc("tw_punch_out", { p_mechanic: mechId });
+    is(dbNow.ok, false, "punching out when not on the clock is refused by the server too");
+    is(dbNow.error, "Not on the clock.", "in the same words the app uses");
+
+    await now.punchIn(mechId, MARK);
+    const before = Date.now();
+    await now.punchOut(mechId);
+    const row = await c.from("tw_shifts").select("ended_at").eq("mechanic_id", mechId)
+      .order("started_at", { ascending: false }).limit(1).single();
+    const skew = new Date(row.data.ended_at).getTime() - before;
+    truthy(Math.abs(skew) < 120000,
+           `the punch is stamped within two minutes of real time (skew ${skew} ms)`);
+  }
 
   /* ── The shift card: lunch, corrections, and the reconciliation ── */
   const today = todayISO();   // the shop's day, Eastern, same as the view stamps

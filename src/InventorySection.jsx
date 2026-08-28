@@ -23,6 +23,7 @@ const STATE_COLOR = {
   low: C.watch,
   ok: C.good,
   "no reorder point": C.muted,
+  "not stocked": C.muted,
   untracked: C.muted,
 };
 
@@ -31,6 +32,10 @@ const STATE_LABEL = {
   low: "Low",
   ok: "In stock",
   "no reorder point": "No reorder point",
+  /* Zero on hand and nobody has said we carry it. Not the same as out:
+     see the note on tw_parts_reorder. Setting a reorder point on one is
+     how it joins the reorder board. */
+  "not stocked": "Not stocked",
   untracked: "Untracked",
 };
 
@@ -97,6 +102,15 @@ export default function InventorySection({ who, tab, onBusy }) {
         return a.num.localeCompare(b.num);
       });
   }, [rows, q, shopFilter, tab]);
+
+  /* The real catalog is 2,295 parts, and putting every row in the DOM
+     took nineteen seconds on a throttled CPU — a shop tablet would look
+     frozen. Nobody reads a list that long anyway; they search it. So
+     render a page of it and say plainly how much is being held back.
+     The reorder board is short by construction and never hits this. */
+  const PAGE = 200;
+  const capped = shown.length > PAGE;
+  const visible = capped ? shown.slice(0, PAGE) : shown;
 
   const value = shown.reduce((a, r) => a + (r.cost || 0) * r.onHand, 0);
   const outCount = rows.filter((r) => r.state === "out").length;
@@ -186,7 +200,7 @@ export default function InventorySection({ who, tab, onBusy }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {shown.map((r) => (
+                    {visible.map((r) => (
                       <tr key={r.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                         <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>
                           <button onClick={() => setOpening(r)} style={{ ...linkBtn, fontFamily: FM }}>
@@ -218,6 +232,14 @@ export default function InventorySection({ who, tab, onBusy }) {
                   </tbody>
                 </table>
               </div>
+            {capped && (
+              <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.lineSoft}`,
+                fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+                Showing the first {nf(PAGE)} of {nf(shown.length)}. Search a part number,
+                a description or a bin to narrow it — the whole catalog is here, it is
+                just not all on the screen at once.
+              </div>
+            )}
             </div>
           )}
         </>

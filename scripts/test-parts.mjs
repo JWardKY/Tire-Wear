@@ -118,6 +118,53 @@ try {
   const zero = await c.from("tw_part_txns")
     .insert({ part_id: bearing.id, kind: "adjust", qty_delta: 0 });
   truthy(zero.error, "and refuses a movement of nothing");
+
+  /* ── What "out" means ─────────────────────────────────────────
+     Importing the real catalog put 1,285 parts on the reorder board
+     that the shop has never carried, because the view called anything
+     at zero "out" before it asked whether there was a reorder point.
+     A part nobody has set a min or max on is not out of stock. */
+  {
+    const mk = async (fields) => {
+      const { data } = await c.from("tw_parts")
+        .insert({ shop: SHOP, uom: "ea", ...fields }).select("id").single();
+      return data.id;
+    };
+    const stateOf = async (id) =>
+      (await parts.listParts()).find((p) => p.id === id)?.state;
+
+    const never = await mk({ part_number: `${MARK}-NEVER`, name: "Bought once" });
+    is(await stateOf(never), "not stocked",
+       "zero on hand with no reorder point reads as not stocked, not out");
+
+    const carried = await mk({ part_number: `${MARK}-CARRIED`, name: "We stock this", min_qty: 2 });
+    is(await stateOf(carried), "out",
+       "zero on hand WITH a reorder point is genuinely out");
+
+    const byMax = await mk({ part_number: `${MARK}-MAX`, name: "Max only", max_qty: 5 });
+    is(await stateOf(byMax), "out",
+       "a max on its own is also somebody saying we carry it");
+
+    const stocked = await mk({ part_number: `${MARK}-HAS`, name: "On the shelf" });
+    await parts.move(stocked, "receive", 3, { note: MARK }, WHO);
+    is(await stateOf(stocked), "no reorder point",
+       "stock with no reorder point is still just that");
+
+    const low = await mk({ part_number: `${MARK}-LOW`, name: "Running down", min_qty: 5 });
+    await parts.move(low, "receive", 4, { note: MARK }, WHO);
+    is(await stateOf(low), "low", "at or under the reorder point is low");
+
+    /* The board itself: of the five made here, only the three somebody
+       has said we carry belong on it. Scoped to these five, because the
+       suite has already put other parts in this shop. */
+    const mine = new Set([`${MARK}-NEVER`, `${MARK}-CARRIED`, `${MARK}-MAX`,
+                          `${MARK}-HAS`, `${MARK}-LOW`]);
+    const board = (await parts.listParts())
+      .filter((p) => mine.has(p.num) && (p.state === "out" || p.state === "low"))
+      .map((p) => p.num).sort();
+    is(board.join(","), [`${MARK}-CARRIED`, `${MARK}-LOW`, `${MARK}-MAX`].sort().join(","),
+       "only the three somebody has said we carry reach the reorder board");
+  }
 } catch (e) {
   state.failed.push(`threw: ${e.message}`);
   console.log("  !!  threw: " + e.message);
