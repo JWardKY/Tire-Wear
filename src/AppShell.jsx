@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import AllenLogo from "./AllenLogo.jsx";
 import { C, FB, FD, FM } from "./theme.js";
 import { SECTIONS, findSection } from "./sections.jsx";
@@ -23,10 +23,27 @@ export default function AppShell({ who, onSwitchUser }) {
      Everything else is theirs to use without a password in the way. */
   const [supervisor, setSupervisor] = useState(() => readSupervisor());
 
+  /* A number on the Now board is a question — "sixty-four open defects"
+     wants to be "which ones". `go` is how one screen hands the answer to
+     another: the section, the sub-tab, and optionally a focus the target
+     understands (Defects knows "unsafe" and "stale").
+
+     The focus is remembered against the section it was aimed at and
+     cleared the moment somebody navigates by hand, so a filter arrived
+     at by tapping a tile never quietly outlives the tap. */
+  const [focus, setFocus] = useState(null);      // { section, what }
+
   const section = findSection(sectionKey);
   const Body = section.Component;
   const tab = subTabs[section.key] || section.subTabs?.[0]?.[0] || null;
-  const setTab = (t) => setSubTabs((p) => ({ ...p, [section.key]: t }));
+  const setTab = (t) => { setFocus(null); setSubTabs((p) => ({ ...p, [section.key]: t })); };
+
+  const go = useCallback((key, t, what) => {
+    setSectionKey(key);
+    if (t) setSubTabs((p) => ({ ...p, [key]: t }));
+    setFocus(what ? { section: key, what } : null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   /* Two rows of identical tabs read as peers, so whichever row is the
      primary nav gets the paper tab and the other steps down to an
@@ -119,7 +136,8 @@ export default function AppShell({ who, onSwitchUser }) {
             {multi && (
               <div className="flex flex-wrap justify-end" style={{ gap: 2 }}>
                 {SECTIONS.map((s) =>
-                  primaryTab(s.key === section.key, s.label, () => setSectionKey(s.key), s.key)
+                  primaryTab(s.key === section.key, s.label,
+                    () => { setFocus(null); setSectionKey(s.key); }, s.key)
                 )}
               </div>
             )}
@@ -145,7 +163,10 @@ export default function AppShell({ who, onSwitchUser }) {
         /* A supervisor-gated section is told who unlocked it, so a
            deletion is attributed to the person who authorised it and
            not to whichever badge the tablet happens to carry. */
-        <Body who={who} tab={tab} onBusy={setBusy} supervisor={supervisor} />
+        <Body who={who} tab={tab} onBusy={setBusy} supervisor={supervisor}
+          go={go}
+          focus={focus?.section === section.key ? focus.what : null}
+          onClearFocus={() => setFocus(null)} />
       )}
     </div>
   );
