@@ -352,6 +352,24 @@ One trap worth knowing: `updateEntry` only writes the equipment-card fields when
 are passed. The Add hours dialog does not know about stints or type-of-work, and an
 edit from it must not wipe them off an entry made on the card.
 
+**The card is a draft until Save, and it says so.** Two things went wrong the
+first morning somebody used it for real, and both come from the same place: the
+form lived only in React state.
+
+A phone discards a backgrounded tab whenever it likes. A mechanic who starts a
+clock on a truck and puts the phone in their pocket is the ordinary case, not the
+edge one — and that eviction took the running clock and everything typed with it,
+silently, with nothing in the database to show for the morning. `beforeunload` does
+not fire for it. The form is now mirrored into `localStorage` on every change,
+keyed per mechanic per day so two people on a shop tablet cannot inherit each
+other's half-finished card, and a restored draft announces itself with **"this is
+not saved yet"**. It is a draft, not a record: only Save writes to the database.
+
+And **Save says why it is off.** A greyed-out button that will not explain itself is
+where a timecard goes to die — the mechanic assumes it saved, walks away, and the
+hours are gone. It now names the first thing in the way: no unit, a clock still
+running, no cost code, no hours.
+
 **My jobs** lives under Timecard, behind the PIN, because it is one person's own
 work and should not be readable by whoever happens to be standing at the tablet. It is
 the same data as Defects and PM, scoped to them. A mechanic

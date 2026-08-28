@@ -54,10 +54,66 @@ const toQuarters = (sec) => Math.round((sec / 3600) * 4) / 4;
 const liveSeconds = (c, now) =>
   c.seconds + (c.runningAt ? Math.max(0, (now - new Date(c.runningAt).getTime()) / 1000) : 0);
 
+/* A phone discards a backgrounded tab whenever it feels like it, and a
+   mechanic who starts a clock on a truck and puts the phone in their
+   pocket is the ordinary case, not the edge one. Until Save is pressed
+   the card lives only in React state, so that eviction used to take the
+   running clock and everything typed with it — silently, with nothing in
+   the database to show for the morning.
+
+   So the form is mirrored into localStorage on every change and read
+   back on the way in. It is per mechanic and per day, so two people
+   sharing a shop tablet cannot inherit each other's half-finished card.
+   It is a draft, not a record: the database is still only written by
+   Save. */
+const draftKey = (mechanicId, date) => `tirewear:card:${mechanicId}:${date}`;
+
+function readDraft(mechanicId, date) {
+  try {
+    const raw = localStorage.getItem(draftKey(mechanicId, date));
+    if (!raw) return null;
+    const cards = JSON.parse(raw);
+    if (!Array.isArray(cards) || !cards.length) return null;
+    /* Shape it back into something the form can hold, in case an older
+       draft is missing a field a newer build expects. */
+    return cards.map((c) => ({ ...blank(), ...c }));
+  } catch {
+    return null;   // private window, full disk, or a draft we cannot read
+  }
+}
+
 export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts, onSaved, onErr }) {
-  const [cards, setCards] = useState(() => [blank()]);
+  const [cards, setCards] = useState(() => readDraft(mechanic.id, date) || [blank()]);
+  const [restored, setRestored] = useState(
+    () => !!readDraft(mechanic.id, date));
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+
+  /* Swap drafts when the day or the person changes. The ref stops the
+     mirror below from writing the outgoing card into the incoming key. */
+  const loadedFor = useRef(draftKey(mechanic.id, date));
+  useEffect(() => {
+    const key = draftKey(mechanic.id, date);
+    if (loadedFor.current === key) return;
+    loadedFor.current = key;
+    const found = readDraft(mechanic.id, date);
+    setCards(found || [blank()]);
+    setRestored(!!found);
+  }, [mechanic.id, date]);
+
+  /* Mirror every change. An empty form clears the draft rather than
+     leaving an empty one behind to be "restored" tomorrow. */
+  useEffect(() => {
+    const key = draftKey(mechanic.id, date);
+    if (loadedFor.current !== key) return;
+    try {
+      const worth = cards.some((c) =>
+        c.vehId || c.costCode || c.hours || c.workPerformed || c.workTypes.length
+        || c.parts.length || c.seconds || c.runningAt || c.jobLocation);
+      if (worth) localStorage.setItem(key, JSON.stringify(cards));
+      else localStorage.removeItem(key);
+    } catch { /* storage full or blocked — the form still works */ }
+  }, [cards, mechanic.id, date]);
 
   const anyRunning = cards.some((c) => c.runningAt);
   useEffect(() => {
@@ -110,6 +166,23 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
 
   const live = cards.filter(filled);
   const canSave = live.length > 0 && live.every(ready) && !cards.some((c) => c.runningAt);
+
+  /* A greyed-out button that will not say what is wrong is where a
+     timecard goes to die: the mechanic assumes it saved, walks away, and
+     the hours are simply gone. Name the first thing standing in the way. */
+  const blocker = (() => {
+    if (saving || canSave) return null;
+    if (!live.length) return "Pick a unit to start.";
+    if (cards.some((c) => c.runningAt))
+      return "A clock is still running — press Stop, then save.";
+    const bad = live.find((c) => !ready(c));
+    if (!bad) return null;
+    if (!bad.vehId) return "One card has no unit on it yet.";
+    if (!bad.costCode) return "Choose what to charge the time to.";
+    if (!Number(bad.hours)) return "Put the hours on it — the clock fills them in when you stop.";
+    if (Number(bad.hours) > 24) return "That is more than twenty-four hours.";
+    return null;
+  })();
   const totalHours = live.reduce((a, c) => a + (Number(c.hours) || 0), 0);
 
   const save = async () => {
@@ -141,7 +214,11 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
       }
     }
     setSaving(false);
-    if (saved) setCards([blank()]);
+    if (saved) {
+      setCards([blank()]);
+      setRestored(false);
+      try { localStorage.removeItem(draftKey(mechanic.id, date)); } catch { /* fine */ }
+    }
     if (failed.length) onErr?.(failed.join(" "));
     else onErr?.(null);
     await onSaved?.();
@@ -151,6 +228,8 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     if (!live.length) return;
     if (!window.confirm("Clear everything on this form? Nothing has been saved yet.")) return;
     setCards([blank()]);
+    setRestored(false);
+    try { localStorage.removeItem(draftKey(mechanic.id, date)); } catch { /* fine */ }
   };
 
   return (
@@ -162,6 +241,22 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
           {live.length ? `${nf(totalHours, 2)} hr across ${live.length} unit${live.length === 1 ? "" : "s"}` : "Nothing on the form yet"}
         </span>
       </div>
+
+      {restored && (
+        <div className="flex flex-wrap items-center"
+          style={{ gap: 10, background: C.card, border: `1px solid ${C.line}`,
+            borderLeft: `4px solid ${C.watch}`, borderRadius: 8,
+            padding: "10px 14px", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>
+            Picked up where you left off. <strong>This is not saved yet</strong> —
+            it is still only on this phone until you press Save timecard.
+          </span>
+          <button onClick={() => setRestored(false)}
+            style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
+            Got it
+          </button>
+        </div>
+      )}
 
       {cards.map((c, i) => (
         <UnitCard key={c.key} card={c} index={i} count={cards.length}
@@ -187,9 +282,9 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
 
       <div className="flex flex-wrap items-center justify-end no-print"
         style={{ gap: 8, marginTop: 12 }}>
-        {cards.some((c) => c.runningAt) && (
+        {blocker && (
           <span style={{ fontSize: 12.5, color: C.watch, fontWeight: 600, marginRight: "auto" }}>
-            A clock is still running. Stop it before you save.
+            {blocker}
           </span>
         )}
         <Btn tone="ghost" onClick={clear} disabled={saving || !live.length}>Clear form</Btn>
