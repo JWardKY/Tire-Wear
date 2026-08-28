@@ -601,7 +601,10 @@ function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
 
   const grouped = useMemo(() => {
     const g = {};
-    codes.forEach((c) => { (g[c.group] ||= []).push(c); });
+    /* A code filed under nothing would head an optgroup with a blank
+       label, which renders as an unnamed gap. Setup asks for a group, so
+       this is only a backstop. */
+    codes.forEach((c) => { (g[c.group || "Other"] ||= []).push(c); });
     return g;
   }, [codes]);
 

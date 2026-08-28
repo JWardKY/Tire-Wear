@@ -86,10 +86,19 @@ export async function setCostCodeActive(code, active) {
 /* Applying a pasted plan. Adds and renames go in as upserts; a
    "replace whole list" deactivates what the paste left out rather than
    deleting it, because hours already booked against a code still have
-   to render its name. */
+   to render its name.
+
+   The group and the sort order come off the plan, not off the loop
+   counter. Numbering rows 0, 1, 2 as they happen to arrive would file
+   every pasted code ahead of the whole existing list and strip the
+   group off any code being renamed. */
 export async function applyCodePlan(plan) {
-  const rows = [...plan.add, ...plan.rename].map((r, i) => ({
-    code: r.code, name: r.name, active: true, sort_order: i,
+  const rows = [...plan.add, ...plan.rename].map((r) => ({
+    code: r.code,
+    name: r.name,
+    code_group: r.group || null,
+    active: true,
+    sort_order: Number(r.sort) || 0,
   }));
   if (rows.length) {
     const { error } = await supabase.from("tw_cost_codes")

@@ -893,6 +893,26 @@ a label saying what it was instead (plant work, a parts run, a safety
 meeting). The database enforces both.
 
 The fourteen cost codes are Allen's own, grouped Vehicle / Plant / Other.
+None of them covers shop time — 910 to 920 are all the asphalt plant — so the
+list is expected to grow.
+
+**Adding more.** Supervisor → Cost codes takes them two ways: **+ ADD CODE**
+for one at a time, or the paste box for a column out of a spreadsheet
+(`873 Service`, `873,Service` or tab separated, which is what Excel gives
+you). Pasting a code that already exists renames it rather than duplicating
+it, and the preview says how many will be added, renamed or retired before
+anything is written. Retiring never deletes — hours already booked against a
+code still need its name to render.
+
+Both routes ask which **group** the new codes go under, because the group is
+the heading they sit under in the mechanic's dropdown. A code filed under
+nothing used to head a section with a blank label, so **+ ADD CODE** now
+refuses to save without one and the paste box says so in red until one is
+chosen. New codes also sort to the *end* of the list rather than the top: the
+paste used to number rows 0, 1, 2 as they arrived, which put a sixty-line
+paste in front of everything Allen already had. A rename keeps the group and
+the position the code already has — it is changing the name, nothing else.
+`scripts/test-setup.mjs` covers all of that.
 
 **There is no roster yet, so the roster builds itself.** The first time
 somebody opens their timecard they enter their name and choose a four digit
