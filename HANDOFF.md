@@ -760,7 +760,7 @@ run must be a dry run**, and somebody must read `wouldClose`, `closeCandidates` 
 `closeRefused` before `write=1` is used:
 
     curl -H "X-Sync-Token: $SYNC_TOKEN" \
-      "https://allenhaul.netlify.app/api/motive-sync?what=defects&since=2026-06-01"
+      "https://allenhaul.netlify.app/.netlify/functions/motive-sync?what=defects&since=2026-06-01"
 
 If `stillOpenInMotive` comes back as 0, or `wouldClose` is most of
 `closeCandidates`, the parameter is not doing what we think and the guard has
