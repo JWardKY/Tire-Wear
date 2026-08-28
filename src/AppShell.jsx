@@ -19,7 +19,7 @@ export default function AppShell({ who, onSwitchUser }) {
   const [sectionKey, setSectionKey] = useState(SECTIONS[0].key);
   const [subTabs, setSubTabs] = useState({});
   const [busy, setBusy] = useState(false);
-  /* Hours and Setup are the only two the shop floor does not open.
+  /* Supervisor is the only section the shop floor does not open.
      Everything else is theirs to use without a password in the way. */
   const [supervisor, setSupervisor] = useState(() => readSupervisor());
 
@@ -82,7 +82,10 @@ export default function AppShell({ who, onSwitchUser }) {
               </span>
             </div>
             <div style={{ fontSize: 12.5, color: C.onDark, marginBottom: 12, marginTop: 2 }}>
-              {section.blurb}
+              {/* One line cannot describe a section that holds both the
+                  payroll export and the roster, so a blurb may depend on
+                  the sub-tab you are actually looking at. */}
+              {typeof section.blurb === "function" ? section.blurb(tab) : section.blurb}
             </div>
           </div>
 
@@ -96,7 +99,7 @@ export default function AppShell({ who, onSwitchUser }) {
               )}
               {supervisor && (
                 <button onClick={() => { forgetSupervisor(); setSupervisor(null); }}
-                  title={`Signed in as ${supervisor.name} for Hours and Setup`}
+                  title={`Signed in as ${supervisor.name} for the supervisor tab`}
                   style={{ background: "none", border: `1px solid ${C.green600}`, borderRadius: 4,
                     color: C.onDark, fontFamily: FD, fontSize: 12, fontWeight: 600,
                     letterSpacing: "0.06em", textTransform: "uppercase", padding: "4px 10px",
@@ -121,7 +124,9 @@ export default function AppShell({ who, onSwitchUser }) {
               </div>
             )}
 
-            {section.subTabs && (
+            {/* Sub-tabs of a locked section are not shown: offering six
+                tabs that all land on the same PIN prompt is noise. */}
+            {section.subTabs && !(section.supervisor && !supervisor) && (
               <div className="flex flex-wrap justify-end"
                 style={{ gap: 2, marginBottom: multi ? 4 : 0 }}>
                 {section.subTabs.map(([k, label]) =>

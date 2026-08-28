@@ -325,7 +325,7 @@ not lost and so gating later is a UI change rather than another migration.
 
 Five wrong tries locks an account for fifteen minutes. Long enough to stop somebody
 thumbing 0000 to 9999 on a tablet, short enough that a fat-fingered mechanic is not
-stuck for the shift. A reset under Setup clears it.
+stuck for the shift. A reset under Supervisor → Mechanics clears it.
 
 ### The clock is not the timecard
 
@@ -410,7 +410,7 @@ Two consequences worth knowing:
 punch in and book hours without one, and a wall between a mechanic and their own
 timecard is a wall between the shop and using this at all.
 
-**Hours and Setup ask for a supervisor.** Tap your name, enter your PIN, and you are
+**The Supervisor tab asks for a supervisor.** Tap your name, enter your PIN, and you are
 let through only if your role is `dashboard` or `admin`. It reuses the roster and the
 PINs that already exist rather than adding a second shared secret: nothing new to
 remember, nothing to circulate when somebody leaves, and it records *who* looked rather
@@ -1156,3 +1156,24 @@ Committee or a vendor conversation.
 
 **Questions on intent, the metric, or what the shop will actually do:** Jason Ward,
 Haul Division.
+
+### Why the office is one tab at the end
+
+The nav order is a shift, not an alphabet: **Now** at a glance, **Timecard** for your
+own day, then **Defects · PM · Work orders** as the three queues of what needs doing,
+then **Tires · Inventory** for what the shop owns and tracks, then **Supervisor**.
+
+Hours and Setup used to be separate tabs sitting in the middle of that row, which was
+wrong twice over. The two tabs a mechanic never opens were between the ones they open
+all day, so the bar read as one flat list; and tapping one of them produced a PIN
+prompt out of nowhere. Grouping them under one gated tab at the end says what they are
+before anybody taps, and it means there is exactly one gate to reason about.
+
+`SupervisorSection.jsx` is a router, not a screen — Hours and Setup are still whole
+components with their own sub-tabs, and it only decides which one a sub-tab belongs
+to. Adding a supervisor screen is a row in its `subTabs` plus a case in `HOURS_TABS`.
+
+Two small things that came with it: a section's `blurb` may be a function of the
+sub-tab, because one line cannot honestly describe a section holding both the payroll
+export and the roster; and the sub-tabs of a locked section are hidden until you are
+through the gate, since six tabs that all land on the same PIN prompt are noise.

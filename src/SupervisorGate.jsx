@@ -4,9 +4,9 @@ import { Card, Field, Btn, inp } from "./ui.jsx";
 import * as setup from "./setupData.js";
 
 /* ── The supervisor gate ──────────────────────────────────────────
-   Hours and Setup ask who you are before they open. Everything else
-   in the shop is open, because the mechanics have to be able to use
-   it without a password in the way.
+   The Supervisor section asks who you are before it opens. Everything
+   else in the shop is open, because the mechanics have to be able to
+   use it without a password in the way.
 
    It reuses the roster and the PINs that already exist rather than
    introducing a second shared secret. That is better in three ways:
@@ -18,7 +18,10 @@ import * as setup from "./setupData.js";
    This keeps people out of screens they have no business wandering
    into. It is a door with a lock on it, not a vault. Hours and pay
    would need real per-person auth to be genuinely private, and
-   HANDOFF.md says so. */
+   HANDOFF.md says so.
+
+   `what` names the section so the copy stays right if a second gated
+   one is ever added; with one it reads "The supervisor tab". */
 
 const KEY = "tirewear:supervisor";
 const HOURS = 12;
@@ -106,8 +109,8 @@ export default function SupervisorGate({ what, onIn }) {
   if (!roster.length) {
     return (
       <div style={{ maxWidth: 520, padding: 8 }}>
-        <Card title={`${what} is for supervisors`}
-          note="Nobody on the roster is marked Dashboard or Admin yet, so there is no one to let in. Set somebody's role under Setup — which needs a supervisor too, so the first one has to be set in the database.">
+        <Card title={`The ${what.toLowerCase()} tab is for supervisors`}
+          note="Nobody on the roster is marked Dashboard or Admin yet, so there is no one to let in. Set somebody's role under Supervisor → Mechanics — which needs a supervisor too, so the first one has to be set in the database.">
           <div />
         </Card>
       </div>
@@ -117,8 +120,8 @@ export default function SupervisorGate({ what, onIn }) {
   if (!picked) {
     return (
       <div style={{ maxWidth: 560, padding: 8 }}>
-        <Card title={`${what} is for supervisors`}
-          note="Tap your name, then your four-digit PIN. It is the same PIN as your timecard.">
+        <Card title={`The ${what.toLowerCase()} tab is for supervisors`}
+          note="Hours, timecards, the work log, the roster and the cost codes. Tap your name, then your four-digit PIN. It is the same PIN as your timecard.">
           <div style={{ display: "grid", gap: 7,
                         gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,185px),1fr))" }}>
             {roster.map((m) => (
