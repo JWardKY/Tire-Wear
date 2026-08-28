@@ -892,7 +892,54 @@ refuses to save a line without it. Every hour also needs a home: a truck, or
 a label saying what it was instead (plant work, a parts run, a safety
 meeting). The database enforces both.
 
-The fourteen cost codes are Allen's own, grouped Vehicle / Plant / Other.
+Fourteen of the cost codes are Allen's own, grouped Vehicle / Plant / Other.
+The list is expected to grow.
+
+**Shop time charges to the shop.** None of Allen's fourteen covers an hour
+spent sweeping the bay or driving for parts — 910 to 920 are all the asphalt
+plant, not this building — so a mechanic with no piece of equipment in front
+of them had nothing honest to pick. There are now three more codes, one per
+shop, in a group of their own:
+
+| Code | Name |
+|---|---|
+| `SHOP-CF` | Clays Ferry Shop |
+| `SHOP-NIC` | Nicholasville Shop |
+| `SHOP-CB` | Clover Bottom Shop |
+
+They are deliberately **not numeric**, because they are not Allen's numbers —
+cost-code pages 1 and 2, which is where shop overhead presumably lives, have
+never arrived. A placeholder that looks like a placeholder on the payroll
+export is safer than a real 9xx code charged to the wrong thing. When the
+real numbers turn up, renumbering is an update to `tw_cost_codes.code` and
+`tw_time_entries.cost_code` together, in that order.
+
+On the timecard, **picking the shop is what charges the hour to it**: choose
+shop time from the bottom of the equipment list, name the shop, and the cost
+code fills itself in. It stays editable, in case those hours really do belong
+somewhere else, and switching back to a unit takes the shop's code away again
+rather than leaving it charged to the shop.
+
+The shop list is no longer a hardcoded constant — it *is* the Shop group, so
+a fourth shop is a row in Setup rather than a deploy.
+
+**Adding more.** Supervisor → Cost codes takes them two ways: **+ ADD CODE**
+for one at a time, or the paste box for a column out of a spreadsheet
+(`873 Service`, `873,Service` or tab separated, which is what Excel gives
+you). Pasting a code that already exists renames it rather than duplicating
+it, and the preview says how many will be added, renamed or retired before
+anything is written. Retiring never deletes — hours already booked against a
+code still need its name to render.
+
+Both routes ask which **group** the new codes go under, because the group is
+the heading they sit under in the mechanic's dropdown. A code filed under
+nothing used to head a section with a blank label, so **+ ADD CODE** now
+refuses to save without one and the paste box says so in red until one is
+chosen. New codes also sort to the *end* of the list rather than the top: the
+paste used to number rows 0, 1, 2 as they arrived, which put a sixty-line
+paste in front of everything Allen already had. A rename keeps the group and
+the position the code already has — it is changing the name, nothing else.
+`scripts/test-setup.mjs` covers all of that.
 
 **There is no roster yet, so the roster builds itself.** The first time
 somebody opens their timecard they enter their name and choose a four digit
@@ -1022,7 +1069,10 @@ See `schema.sql` for the full definition. The shape:
 - **`tw_pm_completions`** — one row per service performed. Newest is the baseline.
 - **`tw_mechanics`** — who enters hours. Read-only to the app; `pin_hash` is
   withheld by column grant and only the PIN functions touch it.
-- **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Other.
+- **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Shop / Other.
+  `tw_time_entries.cost_code` is a foreign key on the code *string*, so a code
+  can be renamed freely but renumbering one that has hours against it is an
+  update to both tables.
 - **`tw_time_entries`** — one row per chunk of work. A cost code is required,
   and so is either a truck or a label. The equipment card adds `work_types`
   (text[]), `unit_seconds`, `stints` (jsonb, `[{start, stop}]`),

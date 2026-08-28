@@ -6,11 +6,13 @@
 */
 import { parseCodes, planCodes } from "../src/codePaste.js";
 import * as setup from "../src/setupData.js";
+import * as time from "../src/timeData.js";
 import { client, MARK, makeChecks, cleanup, report } from "./_testkit.mjs";
 
 const c = client();
 const { state, is, truthy } = makeChecks();
 const EMAIL = "setup-test@invalid";
+const TESTCODE = "ZZ-TEST-CODE";
 let cleanupOk = false;
 
 try {
@@ -37,8 +39,8 @@ try {
 
   /* ── Planning against what is already there ─────────────────── */
   const existing = [
-    { code: "873", name: "Service", active: true },
-    { code: "999", name: "Old thing", active: true },
+    { code: "873", name: "Service", group: "Vehicle", sort: 10, active: true },
+    { code: "999", name: "Old thing", group: "Plant", sort: 40, active: true },
   ];
   const plan = planCodes(parseCodes("873 Service\n874 Road call"), existing, false);
   is(plan.add.length, 1, "one new code");
@@ -46,15 +48,59 @@ try {
   is(plan.same.length, 1, "one already matches");
   is(plan.deactivate.length, 0, "without replace, nothing is retired");
 
-  const ren = planCodes(parseCodes("873 Servicing"), existing, false);
+  /* Group and position, which is what a sixty-line paste gets wrong if
+     nobody carries them: the whole batch lands ungrouped, at the top. */
+  const grouped = planCodes(parseCodes("874 Road call\n875 Shop labour"),
+                            existing, false, "Vehicle");
+  is(grouped.add[0].group, "Vehicle", "a new code is filed under the chosen group");
+  is(grouped.add[1].group, "Vehicle", "every new code in the paste, not just the first");
+  is(grouped.add[0].sort, 50, "and sorts after the last code already on the list");
+  is(grouped.add[1].sort, 60, "the next one after that");
+  truthy(grouped.add.every((r) => r.sort > 40),
+         "so a paste never jumps ahead of what is already there");
+
+  const ren = planCodes(parseCodes("873 Servicing"), existing, false, "Plant");
   is(ren.rename.length, 1, "a changed name reads as a rename");
   is(ren.rename[0].was, "Service", "and says what it was");
+  is(ren.rename[0].group, "Vehicle",
+     "a rename keeps the group the code already had, not the paste's");
+  is(ren.rename[0].sort, 10, "and keeps its place in the list");
 
   const rep = planCodes(parseCodes("873 Service"), existing, true);
   is(rep.deactivate.length, 1, "replace retires what the paste left out");
   is(rep.deactivate[0].code, "999", "namely the one not pasted");
   truthy(!rep.deactivate.some((x) => x.code === "873"),
          "and never retires one that IS in the paste");
+
+  /* ── A code added by hand, for real ─────────────────────────── */
+  /* Jason adds these one at a time off a sheet, so the group and the
+     position have to survive the round trip, not just the plan. */
+  await setup.saveCostCode({ code: TESTCODE, name: `${MARK} Shop time`,
+                             group: "Other", sort: 9000 });
+  const all = await setup.listAllCostCodes();
+  const mine = all.find((x) => x.code === TESTCODE);
+  truthy(mine, "a cost code added by hand reads back");
+  is(mine.name, `${MARK} Shop time`, "with the name it was given");
+  is(mine.group, "Other", "and the group, which is its heading on the timecard");
+  is(mine.active, true, "and in use straight away");
+  is(mine.sort, 9000, "and where it was put, not at the top");
+
+  /* listCostCodes is the mechanic's list — it must carry the group too,
+     or the dropdown has nothing to head the section with. */
+  const forCard = await time.listCostCodes();
+  is((forCard.find((x) => x.code === TESTCODE) || {}).group, "Other",
+     "and the mechanic's dropdown gets that group, not a blank heading");
+
+  /* ── Shop time has somewhere to go ──────────────────────────── */
+  /* An hour with no piece of equipment on it still needs a cost code —
+     the column is not null and payroll cannot charge it out without one.
+     Before these existed the only thing to pick was a 9xx Plant code,
+     which is the asphalt plant, not the shop. */
+  const shops = all.filter((x) => x.group === "Shop" && x.active);
+  truthy(shops.length >= 1, "there is a cost code to charge shop time to");
+  truthy(shops.every((x) => x.name), "and each one names its shop");
+  const onCard = forCard.filter((x) => x.group === "Shop");
+  is(onCard.length, shops.length, "and the mechanic's dropdown offers all of them");
 
   /* ── The roster, for real ───────────────────────────────────── */
   const add = await setup.addMechanic(`${MARK} Fitter`, "mechanic", EMAIL);
@@ -192,6 +238,16 @@ try {
   console.log("  !!  threw: " + e.message);
 } finally {
   cleanupOk = await cleanup(c, [
+    {
+      label: "test cost code",
+      run: async () => { await c.from("tw_cost_codes").delete().eq("code", TESTCODE); },
+      verify: async () => {
+        const { count, error } = await c.from("tw_cost_codes")
+          .select("code", { count: "exact", head: true }).eq("code", TESTCODE);
+        return error ? null : (count || 0);
+      },
+      manual: `delete from tw_cost_codes where code='${TESTCODE}';`,
+    },
     {
       label: "test mechanic",
       run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: EMAIL, p_name: null }); },

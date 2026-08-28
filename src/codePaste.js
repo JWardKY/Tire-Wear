@@ -50,15 +50,25 @@ export function parseCodes(text) {
 }
 
 /* What the paste would do against what is already there, so it can be
-   shown before anything is written. */
-export function planCodes(parsed, existing, replaceWholeList) {
+   shown before anything is written.
+
+   A new code carries the group it should file under and a sort order
+   past the end of the list. Both matter once somebody pastes sixty of
+   them: with no group they land in an unlabelled clump at the bottom of
+   the mechanic's dropdown, and with sort order 0 they jump the queue
+   ahead of codes that were already there. A rename keeps the group and
+   the position the code already had — the paste is changing its name,
+   nothing else. */
+export function planCodes(parsed, existing, replaceWholeList, group = "") {
   const have = new Map(existing.map((c) => [c.code, c]));
   const add = [], rename = [], same = [];
+  const end = existing.reduce((m, c) => Math.max(m, Number(c.sort) || 0), 0);
 
   for (const r of parsed.rows) {
     const cur = have.get(r.code);
-    if (!cur) add.push(r);
-    else if (cur.name !== r.name) rename.push({ ...r, was: cur.name });
+    if (!cur) add.push({ ...r, group, sort: end + 10 * (add.length + 1) });
+    else if (cur.name !== r.name)
+      rename.push({ ...r, was: cur.name, group: cur.group || "", sort: Number(cur.sort) || 0 });
     else same.push(r);
   }
 

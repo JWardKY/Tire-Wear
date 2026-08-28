@@ -192,14 +192,26 @@ function Roster({ roster, run }) {
 
 /* ── Cost codes ────────────────────────────────────────────────── */
 
+/* The mechanic's cost-code dropdown is grouped by these, so a code
+   filed under nothing lands in an unlabelled clump at the bottom of it.
+   Whatever groups are already in use win; these are the fallback for a
+   list that has not got any yet. */
+const CODE_GROUPS = ["Vehicle", "Plant", "Shop", "Other"];
+
 function Codes({ codes, run }) {
   const [text, setText] = useState("");
   const [replace, setReplace] = useState(false);
   const [plan, setPlan] = useState(null);
+  const [group, setGroup] = useState("");
   const [adding, setAdding] = useState(false);
-  const [one, setOne] = useState({ code: "", name: "" });
+  const [one, setOne] = useState({ code: "", name: "", group: "" });
 
-  const preview = () => setPlan(planCodes(parseCodes(text), codes, replace));
+  const groups = [...new Set([...codes.map((c) => c.group).filter(Boolean),
+                              ...CODE_GROUPS])];
+  /* New codes go after the ones already there, not on top of them. */
+  const endOfList = codes.reduce((m, c) => Math.max(m, Number(c.sort) || 0), 0);
+
+  const preview = () => setPlan(planCodes(parseCodes(text), codes, replace, group));
 
   return (
     <>
@@ -213,6 +225,7 @@ function Codes({ codes, run }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead><tr>
             <th style={th}>Code</th><th style={th}>Name</th>
+            <th style={th}>Group</th>
             <th style={th}>In use</th><th style={th}></th>
           </tr></thead>
           <tbody>
@@ -220,6 +233,9 @@ function Codes({ codes, run }) {
               <tr key={c.code} style={{ opacity: c.active ? 1 : 0.5 }}>
                 <td style={{ ...td, fontFamily: "monospace" }}>{c.code}</td>
                 <td style={td}>{c.name}</td>
+                <td style={{ ...td, color: c.group ? C.ink : C.pull }}>
+                  {c.group || "not filed"}
+                </td>
                 <td style={td}>{c.active ? "yes" : "no"}</td>
                 <td style={{ ...td, textAlign: "right" }}>
                   <Btn tone="ghost" onClick={() => run(
@@ -231,7 +247,7 @@ function Codes({ codes, run }) {
               </tr>
             ))}
             {!codes.length && (
-              <tr><td style={{ ...td, color: C.muted }} colSpan={4}>
+              <tr><td style={{ ...td, color: C.muted }} colSpan={5}>
                 No cost codes yet. Paste the sheet in below.
               </td></tr>
             )}
@@ -250,6 +266,21 @@ function Codes({ codes, run }) {
         value={text} placeholder={"873 Service\n874,Road call\n875\tShop labour"}
         onChange={(e) => { setText(e.target.value); setPlan(null); }} />
 
+      <div style={{ maxWidth: 260, marginTop: 10 }}>
+        <Field label="File the new ones under">
+          <select style={inp} value={group}
+                  onChange={(e) => { setGroup(e.target.value); setPlan(null); }}>
+            <option value="">Choose a group…</option>
+            {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </Field>
+        <div style={{ fontSize: 12, color: group ? C.muted : C.pull, marginTop: -4 }}>
+          {group
+            ? `New codes show under ${group} on the timecard. Codes already on the list keep the group they have.`
+            : "Without one, new codes sit in an unlabelled group at the bottom of the mechanic's dropdown."}
+        </div>
+      </div>
+
       <label style={{ display: "flex", alignItems: "center", gap: 8,
                       margin: "10px 0", fontSize: 13 }}>
         <input type="checkbox" checked={replace}
@@ -264,7 +295,7 @@ function Codes({ codes, run }) {
       {plan && (
         <Modal title="What this will do" onClose={() => setPlan(null)}>
           <ul style={{ fontSize: 14, lineHeight: 1.7, paddingLeft: 18 }}>
-            <li><b>{plan.add.length}</b> new</li>
+            <li><b>{plan.add.length}</b> new{plan.add.length && group ? ` under ${group}` : ""}</li>
             <li><b>{plan.rename.length}</b> renamed</li>
             <li><b>{plan.same.length}</b> already match and stay as they are</li>
             {!!plan.deactivate.length &&
@@ -311,11 +342,22 @@ function Codes({ codes, run }) {
             <input style={inp} value={one.name}
                    onChange={(e) => setOne({ ...one, name: e.target.value })} />
           </Field>
+          <Field label="Group">
+            <select style={inp} value={one.group}
+                    onChange={(e) => setOne({ ...one, group: e.target.value })}>
+              <option value="">Choose a group…</option>
+              {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </Field>
+          <p style={{ color: C.muted, fontSize: 12 }}>
+            The group is the heading it sits under in the mechanic's dropdown.
+          </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <Btn tone="ghost" onClick={() => setAdding(false)}>CANCEL</Btn>
-            <Btn disabled={!one.code.trim() || !one.name.trim()}
-                 onClick={() => { const o = one; setAdding(false);
-                   setOne({ code: "", name: "" });
+            <Btn disabled={!one.code.trim() || !one.name.trim() || !one.group}
+                 onClick={() => { const o = { ...one, sort: endOfList + 10 };
+                   setAdding(false);
+                   setOne({ code: "", name: "", group: "" });
                    run(() => setup.saveCostCode(o), `${o.code} added.`); }}>
               ADD
             </Btn>

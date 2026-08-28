@@ -34,10 +34,9 @@ const WHERE = [
 
    The six are Jason's, from the indirect group in his mockup. They say
    what the person was doing; the cost code says what it charges to, and
-   the two are not the same question — none of the current codes covers
-   "swept the shop", because the 9xx Plant codes are the asphalt plant,
-   not this building. Cost-code pages 1 and 2 are still missing and may
-   fill that gap. */
+   the two are not the same question. "Swept the shop" charges to the
+   shop's own code, picked for the mechanic by the shop they name below;
+   the 9xx Plant codes are the asphalt plant, not this building. */
 const SHOP_WORK = [
   "Shop cleanup / housekeeping",
   "Parts run / pickup",
@@ -47,15 +46,18 @@ const SHOP_WORK = [
   "Other shop time",
 ];
 
-/* Where the shops are. A short constant rather than a table: there are
-   three, they do not change, and tw_parts.shop is not a usable source
-   because it also holds HT-1294, the field service truck. If somebody
-   needs to add one without a deploy, this becomes a table and a row in
-   Setup. */
-const SHOPS = ["Clays Ferry Shop", "Nicholasville Shop", "Clover Bottom Shop"];
+/* The shops are the cost codes filed under Shop. They used to be a
+   hardcoded list of three names, which meant an hour of shop time still
+   had to be charged to a piece of equipment's code — in practice one of
+   the 9xx Plant codes, which are the asphalt plant, not this building.
+   Now picking the shop IS charging the time to it, and adding a fourth
+   shop is a row in Setup rather than a deploy. */
+const shopsFrom = (codes) => codes.filter((c) => c.group === "Shop");
 
 /* The shop a mechanic picked last, so the second card of the day does
-   not ask again. Per browser, which is per person in practice. */
+   not ask again. Per browser, which is per person in practice. Stored as
+   the code, not the name: a name can be corrected in Setup, and a stale
+   one here would silently stop matching. */
 const LAST_SHOP = "tirewear:lastshop";
 const lastShop = () => {
   try { return localStorage.getItem(LAST_SHOP) || ""; } catch { return ""; }
@@ -68,6 +70,9 @@ const blank = () => ({
      Exactly one of the two is ever filled in. */
   shopWork: "",
   shop: "",
+  /* The Shop cost code behind that name, so switching back to a unit
+     knows which charge it put there and can take it away again. */
+  shopCode: "",
   where: "shop",
   hours: "",
   hoursTyped: false,
@@ -192,9 +197,14 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     }));
   }, []);
 
+  const shops = useMemo(() => shopsFrom(codes), [codes]);
+
   const codeGroups = useMemo(() => {
     const g = {};
-    codes.forEach((c) => { (g[c.group] ||= []).push(c); });
+    /* A code filed under nothing would head an optgroup with a blank
+       label, which renders as an unnamed gap. Setup asks for a group, so
+       this is only a backstop. */
+    codes.forEach((c) => { (g[c.group || "Other"] ||= []).push(c); });
     return g;
   }, [codes]);
 
@@ -310,7 +320,7 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
 
       {cards.map((c, i) => (
         <UnitCard key={c.key} card={c} index={i} count={cards.length}
-          now={now} vehicles={vehicles} codeGroups={codeGroups} parts={parts}
+          now={now} vehicles={vehicles} codeGroups={codeGroups} shops={shops} parts={parts}
           onPatch={(f) => patch(c.key, f)}
           onClock={() => toggleClock(c.key)}
           onRemove={() => setCards((cs) => (cs.length === 1 ? [blank()] : cs.filter((x) => x.key !== c.key)))} />
@@ -350,10 +360,14 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
 
 /* ── One unit ─────────────────────────────────────────────────── */
 
-function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onPatch, onClock, onRemove }) {
+function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, parts, onPatch, onClock, onRemove }) {
   const secs = liveSeconds(c, now);
   const running = !!c.runningAt;
   const isShop = !!c.shopWork;
+  /* A draft written before the shop carried its code has only the name.
+     Match it back up rather than showing the select on the wrong shop. */
+  const shopValue = c.shopCode
+    || (shops.find((x) => x.name === c.shop) || {}).code || "";
 
   const toggleType = (t) => onPatch({
     workTypes: c.workTypes.includes(t)
@@ -407,10 +421,20 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
                    bay and driving for parts both belong in the same band
                    on "where the time went", so the toggle goes away and
                    the answer is fixed rather than left to be got wrong. */
-                onPatch({ vehId: "", shopWork: v.slice(5),
-                          shop: c.shop || lastShop() || SHOPS[0], where: "plant" });
+                const want = c.shopCode || lastShop();
+                const sh = shops.find((x) => x.code === want) || shops[0];
+                onPatch({ vehId: "", shopWork: v.slice(5), where: "plant",
+                          shopCode: sh ? sh.code : "",
+                          shop: sh ? sh.name : "",
+                          /* Picking the shop is what charges the hour. A
+                             code already typed by hand is left alone. */
+                          costCode: c.costCode || (sh ? sh.code : "") });
               } else {
-                onPatch({ vehId: v, shopWork: "", shop: "", where: "shop" });
+                /* Coming back to a unit drops the shop's code with the
+                   shop, or the hour would still be charged to the shop. */
+                onPatch({ vehId: v, shopWork: "", shop: "", shopCode: "",
+                          where: "shop",
+                          costCode: c.costCode === c.shopCode ? "" : c.costCode });
               }
             }}
             style={inp}>
@@ -430,14 +454,22 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
 
         {isShop ? (
           <Field label="Which shop">
-            <select value={c.shop}
+            <select value={shopValue}
               onChange={(e) => {
-                onPatch({ shop: e.target.value });
+                const sh = shops.find((x) => x.code === e.target.value);
+                onPatch({ shopCode: e.target.value, shop: sh ? sh.name : "",
+                          costCode: e.target.value });
                 try { localStorage.setItem(LAST_SHOP, e.target.value); } catch { /* fine */ }
               }}
-              style={inp}>
-              {SHOPS.map((sh) => <option key={sh} value={sh}>{sh}</option>)}
+              style={{ ...inp, borderColor: c.shopCode ? C.line : C.pull }}>
+              {!shops.length && <option value="">No shops set up yet</option>}
+              {shops.map((sh) => <option key={sh.code} value={sh.code}>{sh.name}</option>)}
             </select>
+            <div style={{ fontSize: 12, color: shops.length ? C.muted : C.pull, marginTop: 4 }}>
+              {shops.length
+                ? "The hours charge to this shop."
+                : "A supervisor adds these under Cost codes, filed under Shop."}
+            </div>
           </Field>
         ) : (
           <Field label="Where the work happened">
@@ -480,11 +512,15 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
               </optgroup>
             ))}
           </select>
-          {!c.costCode && (
+          {!c.costCode ? (
             <div style={{ fontSize: 12, color: C.pull, fontWeight: 600, marginTop: 4 }}>
               Payroll needs this to charge the hours out.
             </div>
-          )}
+          ) : isShop && c.costCode === shopValue ? (
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+              Set by the shop above. Change it if these hours belong elsewhere.
+            </div>
+          ) : null}
         </Field>
 
         <Field label="Work order">
