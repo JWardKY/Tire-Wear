@@ -219,6 +219,35 @@ spec allows and says nothing about it. Past 1,800 characters the screen refuses 
 mail link and offers the text to copy instead — a silently cut-off purchase order is
 worse than no purchase order.
 
+### The real catalog, and two things it broke
+
+The catalog landed on 28 Aug 2026: **2,295 parts across four locations**, about
+$277k of stock, imported as 985 `import` transactions with nothing written directly
+to `on_hand`. One of the four "shops" is **HT-1294**, the field service truck — a
+mobile stock location, not a mistake.
+
+Importing it exposed two things that were invisible with an empty table.
+
+**"Out" did not mean out.** `tw_parts_reorder` checked `on_hand <= 0 -> 'out'`
+*before* it asked whether a reorder point existed, so all 1,285 parts the shop has
+bought once and does not carry were flagged as needing reordering. The Reorder tab
+filters to low-or-out, so it showed **1,310 rows when the answer was 79**, with the
+25 that had genuinely run out buried among them. A part with no min and no max is
+one nobody has said we stock: at zero that is now `not stocked`. Setting a reorder
+point on it is how somebody says "we carry this now", and it joins the board by
+itself. Nothing is hidden — it still lists under All parts, still comes up in the
+timecard parts search, still carries its cost.
+
+**All parts froze the tab.** Every row went into the DOM, and 2,295 of them took
+**19.6 seconds** on a 4×-throttled CPU — a shop tablet would have looked hung. It
+renders 200 now and says how many it is holding back; the same measurement is 1.3
+seconds. Nobody reads a list of 2,295 anyway, they search it, and search is 338ms.
+The reorder board is short by construction and never hit this.
+
+Both are the same lesson: a table with nothing in it will not tell you what it does
+with real data. When the next catalog or roster lands, measure the screen that
+lists it before assuming it still works.
+
 ### Parts: a catalog and free text, both
 
 Jason's rule 10 says a mechanic types a part number or a plain description plus a
