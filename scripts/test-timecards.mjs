@@ -177,6 +177,24 @@ try {
       manual: `delete from tw_parts where shop='${SHOP}';`,
     },
     {
+      /* saveCard writes to the work log, and the log is append only for
+         the app — this guarded purge is the only way out, and it refuses
+         any actor that is not plainly a test one. Log rows go before the
+         mechanic: mechanic_id is ON DELETE SET NULL, so purging the
+         mechanic first orphans them beyond reach of the by-mechanic call. */
+      label: "work log rows",
+      run: async () => {
+        if (mechanicId) await c.rpc("tw_purge_test_work_log", { p_mechanic: mechanicId });
+        await c.rpc("tw_purge_test_work_log_by_actor", { p_actor: WHO });
+      },
+      verify: async () => {
+        const { count, error } = await c.from("tw_work_log")
+          .select("id", { count: "exact", head: true }).eq("actor_name", WHO);
+        return error ? null : (count || 0);
+      },
+      manual: `delete from tw_work_log where actor_name='${WHO}';`,
+    },
+    {
       label: "time entries",
       run: async () => {
         if (mechanicId) {

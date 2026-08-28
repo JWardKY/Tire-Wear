@@ -37,6 +37,7 @@ const OPEN_BY_DESIGN = [
   ["tw_mechanics", "id, name, email, active, pin_set"],
   "tw_active_tires", "tw_tire_wear", "tw_vehicle_meter", "tw_pm_due",
   "tw_hours", "tw_parts_reorder", "tw_on_clock", "tw_part_vendor", "tw_work_history", "tw_shift_days",
+  "tw_work_log", "tw_payroll_lines", "tw_timecard_days",
 ];
 
 /* Open to anon, but not by us and not ours to close. Reported every run

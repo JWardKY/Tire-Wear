@@ -17,6 +17,7 @@ const SUITES = [
   ["test-shop", "defects and PM"],
   ["test-pins", "PIN plumbing — the security properties"],
   ["test-timecards", "time entries and the hours rollup"],
+  ["test-payroll", "the payroll export, the card board and the work log"],
   ["test-parts", "stock, movements, CSV import"],
   ["test-setup", "the roster and the cost-code paste"],
   ["test-now", "the punch clock and the Now board"],

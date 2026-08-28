@@ -3,22 +3,28 @@ import TiresSection from "./TireWear.jsx";
 import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
 import TimecardSection from "./TimecardSection.jsx";
-import HoursSection from "./HoursSection.jsx";
 import InventorySection from "./InventorySection.jsx";
 import WorkSection from "./WorkSection.jsx";
-import SetupSection from "./SetupSection.jsx";
+import SupervisorSection from "./SupervisorSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
    component — the shell renders the nav, owns which section is showing,
    and keeps each section's sub-tab separate from the others'.
 
-   Order is the order they appear, and it is deliberate: what is broken
-   comes before what is due, which comes before what is wearing out.
-   `blurb` is the line under the logo, so the header says what you are
-   looking at rather than always saying tires.
+   Order is the order they appear, and it is deliberate. It reads as a
+   shift: the board at a glance, then your own day, then the three
+   queues of what needs doing, then the two things the shop owns and
+   tracks, then the office.
 
-   Still to come, per the shop foreman's mockups: Now, My jobs, Setup.
-   And the Motive sync, which is waiting on an API key. */
+   The office is last and it is one tab. Hours and Setup used to sit in
+   the middle of the row, so the two tabs a mechanic never opens were
+   between the ones they open all day; the bar read as one flat list and
+   hitting a PIN prompt was a surprise. Everything gated now lives under
+   Supervisor, at the end, where it announces itself.
+
+   `blurb` is the line under the logo, so the header says what you are
+   looking at rather than always saying tires. It may be a function of
+   the sub-tab where one line cannot cover the section honestly. */
 
 export const SECTIONS = [
   {
@@ -26,6 +32,18 @@ export const SECTIONS = [
     label: "Now",
     blurb: "Who is on the clock, and the shop at a glance",
     Component: NowSection,
+  },
+  {
+    key: "timecard",
+    label: "Timecard",
+    blurb: "Your own hours for the day — behind a PIN, because these are pay records",
+    subTabs: [
+      ["today", "Today"],
+      ["myjobs", "My jobs"],
+      ["history", "My history"],
+      ["pin", "My PIN"],
+    ],
+    Component: TimecardSection,
   },
   {
     key: "defects",
@@ -48,27 +66,22 @@ export const SECTIONS = [
     Component: PmSection,
   },
   {
-    key: "timecard",
-    label: "Timecard",
-    blurb: "Your own hours for the day — behind a PIN, because these are pay records",
-    subTabs: [
-      ["today", "Today"],
-      ["myjobs", "My jobs"],
-      ["history", "My history"],
-      ["pin", "My PIN"],
-    ],
-    Component: TimecardSection,
+    key: "work",
+    label: "Work orders",
+    blurb: "Numbered jobs, who is on them, and everything that has happened",
+    subTabs: [["orders", "Work orders"], ["history", "Work history"]],
+    Component: WorkSection,
   },
   {
-    key: "hours",
-    supervisor: true,
-    label: "Hours",
-    blurb: "Where the shop's hours went, by mechanic, by unit and by cost code",
+    key: "tires",
+    label: "Tires",
+    blurb: "Tread depth, miles run, and cost-per-mile by brand and position",
     subTabs: [
-      ["rollup", "Totals"],
-      ["detail", "Every entry"],
+      ["fleet", "Fleet"],
+      ["analysis", "Analysis"],
+      ["settings", "Settings"],
     ],
-    Component: HoursSection,
+    Component: TiresSection,
   },
   {
     key: "inventory",
@@ -86,30 +99,24 @@ export const SECTIONS = [
     Component: InventorySection,
   },
   {
-    key: "tires",
-    label: "Tires",
-    blurb: "Tread depth, miles run, and cost-per-mile by brand and position",
-    subTabs: [
-      ["fleet", "Fleet"],
-      ["analysis", "Analysis"],
-      ["settings", "Settings"],
-    ],
-    Component: TiresSection,
-  },
-  {
-    key: "work",
-    label: "Work orders",
-    blurb: "Numbered jobs, who is on them, and everything that has happened",
-    subTabs: [["orders", "Work orders"], ["history", "Work history"]],
-    Component: WorkSection,
-  },
-  {
-    key: "setup",
+    key: "supervisor",
     supervisor: true,
-    label: "Setup",
-    blurb: "The roster and the cost codes everything else books against",
-    subTabs: [["roster", "Mechanics"], ["codes", "Cost codes"]],
-    Component: SetupSection,
+    label: "Supervisor",
+    blurb: (tab) =>
+      tab === "roster" ? "The roster, the PINs, and who can open this tab"
+      : tab === "codes" ? "The cost codes everything else books against"
+      : tab === "cards" ? "Every card, clocked hours against booked hours"
+      : tab === "log" ? "The audit trail — append only, and nothing here can edit it"
+      : "Where the shop's hours went, by mechanic, by unit and by cost code",
+    subTabs: [
+      ["rollup", "Totals"],
+      ["detail", "Every entry"],
+      ["cards", "Timecards"],
+      ["log", "Work log"],
+      ["roster", "Mechanics"],
+      ["codes", "Cost codes"],
+    ],
+    Component: SupervisorSection,
   },
 ];
 

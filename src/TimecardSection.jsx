@@ -399,7 +399,7 @@ function Gate({ who, onIn }) {
     return (
       <div style={{ maxWidth: 460 }}>
         <Card title="Nobody on the roster yet"
-          note="Mechanics are added under Setup. Once somebody is on the roster they tap their name here and choose a PIN." >
+          note="Mechanics are added under Supervisor → Mechanics. Once somebody is on the roster they tap their name here and choose a PIN." >
           <div />
         </Card>
       </div>
@@ -499,7 +499,7 @@ function Gate({ who, onIn }) {
         <p style={{ fontSize: 11.5, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>
           Five wrong tries locks it for fifteen minutes. The PIN is stored hashed —
           nobody, including this page, can read it back. Forgotten ones are reset
-          under Setup.
+          under Supervisor → Mechanics.
         </p>
       </Card>
     </div>

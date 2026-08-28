@@ -34,6 +34,7 @@ const blank = () => ({
   hoursTyped: false,
   costCode: "",
   workOrder: "",
+  jobLocation: "",
   workTypes: [],
   workPerformed: "",
   parts: [],
@@ -105,7 +106,7 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
   const ready = (c) => c.vehId && c.costCode && Number(c.hours) > 0 && Number(c.hours) <= 24;
   const filled = (c) =>
     c.vehId || c.costCode || c.hours || c.workPerformed || c.workTypes.length
-      || c.parts.length || c.seconds || c.runningAt;
+      || c.parts.length || c.seconds || c.runningAt || c.jobLocation;
 
   const live = cards.filter(filled);
   const canSave = live.length > 0 && live.every(ready) && !cards.some((c) => c.runningAt);
@@ -120,7 +121,9 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
         await time.saveCard({
           date,
           vehId: c.vehId,
+          unitLabel: (vehicles.find((v) => v.id === c.vehId) || {}).num || null,
           where: c.where,
+          jobLocation: c.jobLocation.trim() || null,
           hours: Number(c.hours),
           costCode: c.costCode,
           workOrder: c.workOrder.trim() || null,
@@ -306,6 +309,17 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, parts, onP
           <input value={c.workOrder} onChange={(e) => onPatch({ workOrder: e.target.value })}
             placeholder="optional" style={{ ...inp, fontFamily: FM }} />
         </Field>
+
+        {/* Payroll charges a road call against the job it was for, so the
+            field only appears once the work is outside the shop. */}
+        {c.where === "road" && (
+          <Field label="Job / location">
+            <input value={c.jobLocation}
+              onChange={(e) => onPatch({ jobLocation: e.target.value })}
+              placeholder="Job number or where you went"
+              style={inp} />
+          </Field>
+        )}
       </div>
 
       <div style={{ marginTop: 12 }}>
