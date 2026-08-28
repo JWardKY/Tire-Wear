@@ -196,7 +196,7 @@ function Roster({ roster, run }) {
    filed under nothing lands in an unlabelled clump at the bottom of it.
    Whatever groups are already in use win; these are the fallback for a
    list that has not got any yet. */
-const CODE_GROUPS = ["Vehicle", "Plant", "Other"];
+const CODE_GROUPS = ["Vehicle", "Plant", "Shop", "Other"];
 
 function Codes({ codes, run }) {
   const [text, setText] = useState("");

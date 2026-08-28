@@ -91,6 +91,17 @@ try {
   is((forCard.find((x) => x.code === TESTCODE) || {}).group, "Other",
      "and the mechanic's dropdown gets that group, not a blank heading");
 
+  /* ── Shop time has somewhere to go ──────────────────────────── */
+  /* An hour with no piece of equipment on it still needs a cost code —
+     the column is not null and payroll cannot charge it out without one.
+     Before these existed the only thing to pick was a 9xx Plant code,
+     which is the asphalt plant, not the shop. */
+  const shops = all.filter((x) => x.group === "Shop" && x.active);
+  truthy(shops.length >= 1, "there is a cost code to charge shop time to");
+  truthy(shops.every((x) => x.name), "and each one names its shop");
+  const onCard = forCard.filter((x) => x.group === "Shop");
+  is(onCard.length, shops.length, "and the mechanic's dropdown offers all of them");
+
   /* ── The roster, for real ───────────────────────────────────── */
   const add = await setup.addMechanic(`${MARK} Fitter`, "mechanic", EMAIL);
   truthy(add.ok, "a mechanic can be added");

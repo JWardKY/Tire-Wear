@@ -23,9 +23,15 @@ let cleanupOk = false;
 
 try {
   const codes = await time.listCostCodes();
-  is(codes.length, 14, "14 cost codes load");
+  /* Not a fixed count — Jason adds codes by hand, and a test that says
+     "there are fourteen" fails on the fifteenth without anything being
+     wrong. What has to hold is that the list loads and stays grouped. */
+  truthy(codes.length >= 14, "the cost codes load");
+  truthy(codes.every((x) => x.group), "and every one of them is filed under a group");
   truthy(codes.some((x) => x.code === "873" && x.group === "Vehicle"),
          "873 Service is a Vehicle code");
+  truthy(codes.some((x) => x.group === "Shop"),
+         "and shop time has a code of its own to charge to");
   const CODE = "873";
 
   /* Reuse the test mechanic if a previous run left it, otherwise make it. */
