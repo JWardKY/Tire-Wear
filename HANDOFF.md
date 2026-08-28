@@ -365,6 +365,26 @@ hours — those are entered on the timecard, by the mechanic, behind their PIN.
 Elapsed time is recomputed from the start timestamp on every tick rather than counted
 up in the browser, so a screen left on overnight shows the truth.
 
+### The server stamps a punch, not the tablet
+
+`punchIn` takes `started_at` from the column default, so it has always been the
+database's clock. `punchOut` used to send `new Date()` from the browser, and those
+are two different clocks. A tablet running a second behind the server produced an
+`ended_at` earlier than `started_at`, the shift constraint refused it, and the
+mechanic got a raw database error while trying to clock out. A container 1.1
+seconds behind reproduced it on every run.
+
+The accuracy problem underneath was worse than the crash: a tablet ten minutes slow
+would have booked **every punch-out ten minutes early**, and nothing would ever have
+flagged it. So `tw_punch_out` and `tw_close_shift` stamp `greatest(now(), started_at)`
+server-side, and `nowData` calls those rather than writing a timestamp.
+
+Editing a shift by hand stays client-supplied on purpose — there a person is
+deliberately typing "I actually left at 15:30", and the whole point is that it is
+not the clock's opinion.
+
+`scripts/test-now.mjs` measures the skew and asserts the punch does not carry it.
+
 ### The payroll export
 
 Seventeen columns, and the column list is Jason's, not ours:
@@ -1200,6 +1220,27 @@ Committee or a vendor conversation.
 
 **Questions on intent, the metric, or what the shop will actually do:** Jason Ward,
 Haul Division.
+
+### The supervisor board, and what it is for
+
+The Timecards board answers one question — who clocked hours nobody can charge out —
+so the **gap** column is the point and the KPI strip states it before you read a row.
+The range is real from/to dates with presets as a shortcut, because payroll runs on
+pay periods and a pay period does not line up with "this week".
+
+Two exports, deliberately: **Payroll CSV** is Jason's seventeen columns for the
+office system, **Summary CSV** is one row per mechanic per cost code for the person
+who just wants to read it. The summary honours the mechanic filter and the search
+box; the payroll export never does — a filtered payroll run is a wrong one, and that
+asymmetry is intentional rather than an oversight.
+
+Opening a card shows the **punches**, not just the totals. "Clocked 9, booked 6"
+invites "when did they clock in and out", and a dialog that cannot answer sends
+somebody to another screen.
+
+The shared search box reaches every tab. It used to filter only the Totals and
+Every-entry tables while sitting visibly above the Timecards board doing nothing,
+which is worse than not having it.
 
 ### Why the office is one tab at the end
 
