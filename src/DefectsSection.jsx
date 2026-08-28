@@ -98,18 +98,24 @@ export default function DefectsSection({ who, tab, onBusy }) {
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     const wantRepaired = tab === "repaired";
+    const wantClosed = tab === "closed";
     return defects
-      .filter((d) => (d.state === "repaired") === wantRepaired)
+      .filter((d) => (wantClosed
+        ? d.state === "closed"
+        : d.state !== "closed" && (d.state === "repaired") === wantRepaired))
       .filter((d) => !s || `${d.unit} ${d.category} ${d.note} ${d.driver}`.toLowerCase().includes(s))
       .sort(wantRepaired
         /* Oldest repair first, not newest: the one that has sat longest
            waiting for somebody to close it in Motive is the problem. */
         ? (a, b) => String(a.repairedAt || "").localeCompare(String(b.repairedAt || ""))
+        : wantClosed
+        ? (a, b) => String(b.closedAt || "").localeCompare(String(a.closedAt || ""))
         : byUrgency);
   }, [defects, tab, q]);
 
-  const openCount = defects.filter((d) => d.state !== "repaired").length;
-  const unsafeCount = defects.filter((d) => d.state !== "repaired" && d.safety === "unsafe").length;
+  const live = defects.filter((d) => d.state !== "closed");
+  const openCount = live.filter((d) => d.state !== "repaired").length;
+  const unsafeCount = live.filter((d) => d.state !== "repaired" && d.safety === "unsafe").length;
 
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading defects…</div>;
 
@@ -127,12 +133,16 @@ export default function DefectsSection({ who, tab, onBusy }) {
           <div>
             <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900,
               lineHeight: 1.1 }}>
-              {tab === "repaired"
-                ? `${shown.length} repaired — waiting to be closed in Motive`
-                : `${openCount} open defect${openCount === 1 ? "" : "s"}`}
+              {tab === "closed"
+                ? `${shown.length} closed in Motive`
+                : tab === "repaired"
+                  ? `${shown.length} repaired — waiting to be closed in Motive`
+                  : `${openCount} open defect${openCount === 1 ? "" : "s"}`}
             </div>
             <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
-              {tab === "repaired"
+              {tab === "closed"
+                ? "Closed by a Motive sync, most recent first. Nothing here can reopen one."
+                : tab === "repaired"
                 ? "Longest wait first. Nothing here closes a DVIR."
                 : unsafeCount
                   ? `${unsafeCount} of them put a truck out of service.`
@@ -148,6 +158,7 @@ export default function DefectsSection({ who, tab, onBusy }) {
         </div>
 
         {tab === "repaired" && shown.length > 0 && <AwaitingClose rows={shown} />}
+        {tab === "closed" && shown.length > 0 && <ClosedNote />}
 
         {shown.length === 0 ? (
           <Empty tab={tab} q={q} />
@@ -186,11 +197,15 @@ function Empty({ tab, q }) {
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
       <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
-        {q ? "Nothing matches that" : tab === "repaired" ? "Nothing repaired yet" : "No open defects"}
+        {q ? "Nothing matches that"
+          : tab === "closed" ? "Nothing closed yet"
+          : tab === "repaired" ? "Nothing repaired yet" : "No open defects"}
       </div>
       <p style={{ fontSize: 14, color: C.muted, marginTop: 6, maxWidth: 620, lineHeight: 1.55 }}>
         {q
           ? "Try a truck number, or part of what is wrong with it."
+          : tab === "closed"
+            ? "A defect lands here when a Motive sync stops reporting it. Nothing in this app closes a DVIR."
           : tab === "repaired"
             ? "Defects show up here once someone marks them repaired, with who did it and how long it took."
             : "Log one with the button above. Once the Motive sync is wired up, open DVIR faults from the drivers' inspections will land here on their own."}
@@ -463,6 +478,30 @@ function AwaitingClose({ rows }) {
         the DVIR — Motive is the DOT record and nothing here writes back to it. These
         drop off the list once a sync stops seeing them, so somebody has to close them
         in Motive.
+      </p>
+    </div>
+  );
+}
+
+/* Closed by Motive, and only by Motive. Kept visible rather than hidden
+   because "what happened to that fault" is a question an auditor asks,
+   and because a defect vanishing without trace is how people stop
+   trusting a board. */
+function ClosedNote() {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`,
+      borderLeft: `4px solid ${C.good}`, borderRadius: 8,
+      padding: "12px 16px", marginBottom: 12 }}>
+      <div style={{ fontFamily: FD, fontSize: 15, fontWeight: 700, color: C.green900 }}>
+        Closed in Motive
+      </div>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", maxWidth: 760,
+        lineHeight: 1.55 }}>
+        These dropped off because a sync stopped seeing them, which is the only way a
+        defect closes here — nothing in this app writes back to Motive. Who repaired
+        it and what they wrote is kept. If the same fault comes back it arrives as a
+        new defect with its own number rather than reopening this one, so the record
+        of the first repair stays intact.
       </p>
     </div>
   );

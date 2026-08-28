@@ -51,7 +51,8 @@ export const SECTIONS = [
     blurb: "What is wrong with the fleet, who has it, and what was done",
     subTabs: [
       ["open", "Open"],
-      ["repaired", "Repaired"],
+      ["repaired", "Waiting on Motive"],
+      ["closed", "Closed"],
     ],
     Component: DefectsSection,
   },
