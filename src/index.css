@@ -40,3 +40,15 @@ body { -webkit-text-size-adjust: 100%; }
 @media (max-width: 767px) {
   .rail-grid { grid-template-columns: minmax(0, 1fr) !important; }
 }
+
+/* Printing a timecard.
+   The mechanic card has a Print button and a shop that prints one wants
+   the day on paper, not the app's chrome. Everything marked no-print
+   drops out and the page sets in black on white. */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  button, select, textarea, input { break-inside: avoid; }
+  #equipment-worked, .print-block { break-inside: avoid; }
+}

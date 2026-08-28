@@ -1,5 +1,6 @@
 import { supabase } from "./supabase.js";
 import { fetchAll } from "./data.js";
+import * as parts from "./partsData.js";
 
 /* Mechanics, PINs, cost codes and timecards.
    ─────────────────────────────────────────────────────────────────
@@ -83,7 +84,18 @@ const toEntry = (r) => ({
   workOrder: r.work_order || "",
   note: r.note || "",
   defectId: r.defect_id,
+  workTypes: r.work_types || [],
+  unitSeconds: Number(r.unit_seconds || 0),
+  stints: r.stints || [],
+  workPerformed: r.work_performed || "",
 });
+
+/* The chips on the equipment card. Stored as an array because a job is
+   often two of these at once — a PM that turned into a repair. */
+export const WORK_TYPES = [
+  "PM service", "Repair", "Tires", "DOT / annual",
+  "Diagnostics", "Welding / fab", "Road call",
+];
 
 export async function listDay(mechanicId, date) {
   const { data, error } = await supabase
@@ -114,9 +126,12 @@ export async function listRange(from, to) {
   return rows.map(toEntry);
 }
 
+/* Returns the new row's id. The equipment card needs it, because the
+   parts pulled on a job are linked back to the hours that pulled them. */
 export async function addEntry(e) {
-  check(
-    await supabase.from("tw_time_entries").insert({
+  const { data, error } = await supabase
+    .from("tw_time_entries")
+    .insert({
       mechanic_id: e.mechanicId,
       work_date: e.date,
       vehicle_id: e.vehId || null,
@@ -127,14 +142,30 @@ export async function addEntry(e) {
       work_order: e.workOrder || null,
       note: e.note || null,
       defect_id: e.defectId || null,
+      work_types: e.workTypes || [],
+      unit_seconds: Math.max(0, Math.round(Number(e.unitSeconds || 0))),
+      stints: e.stints || [],
+      work_performed: e.workPerformed || null,
     })
-  );
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
 }
 
+/* Only the keys given are written. The Add hours dialog does not know
+   about the equipment card's fields, and an edit from it must not wipe
+   the stints or the type of work off an entry made there. */
 export async function updateEntry(id, e) {
+  const extra = {};
+  if (e.workTypes !== undefined) extra.work_types = e.workTypes || [];
+  if (e.unitSeconds !== undefined) extra.unit_seconds = Math.max(0, Math.round(Number(e.unitSeconds) || 0));
+  if (e.stints !== undefined) extra.stints = e.stints || [];
+  if (e.workPerformed !== undefined) extra.work_performed = e.workPerformed || null;
   check(
     await supabase.from("tw_time_entries")
       .update({
+        ...extra,
         work_date: e.date,
         vehicle_id: e.vehId || null,
         unit_label: e.vehId ? null : (e.unitLabel || null),
@@ -151,4 +182,37 @@ export async function updateEntry(id, e) {
 
 export async function deleteEntry(id) {
   check(await supabase.from("tw_time_entries").delete().eq("id", id));
+}
+
+/* ── The equipment card ────────────────────────────────────────────
+   One unit's worth of a mechanic's day: the hours, what kind of work
+   it was, what they found, and the parts that came off the shelf for
+   it. Saved as one time entry plus one issue per part.
+
+   The entry is written first and the parts hang off its id, so a part
+   issue can always answer "which hours pulled this". If a part issue
+   fails, the hours still stand — we say which parts did not go through
+   rather than silently dropping either half. */
+export async function saveCard(card, mechanicId) {
+  const id = await addEntry({ ...card, mechanicId });
+
+  const failed = [];
+  for (const p of card.parts || []) {
+    try {
+      await parts.move(p.partId, "issue", p.qty, {
+        vehId: card.vehId || null,
+        workOrder: card.workOrder || null,
+        note: card.workPerformed || null,
+        timeEntryId: id,
+      }, card.who);
+    } catch (e) {
+      failed.push(`${p.number} — ${e.message || e}`);
+    }
+  }
+  if (failed.length) {
+    throw new Error(
+      `The hours saved, but these parts did not come off the shelf: ${failed.join("; ")}`
+    );
+  }
+  return id;
 }

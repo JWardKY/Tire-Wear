@@ -72,6 +72,7 @@ export async function move(partId, kind, qty, extra = {}, who) {
       vehicle_id: extra.vehId || null,
       work_order: extra.workOrder || null,
       note: extra.note || null,
+      time_entry_id: extra.timeEntryId || null,
       who,
     })
   );

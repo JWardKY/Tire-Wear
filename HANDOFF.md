@@ -234,6 +234,35 @@ clock against hours booked to a truck and a code. The gap is the whole point —
 catches somebody who clocked nine and booked six, on their own screen, while they can
 still remember why. Over-booking is flagged just as loudly as under-booking.
 
+**Equipment worked** is the shape the shop asked for, and it is where most of a
+mechanic's day now gets entered. One block per unit: pick the truck, run a clock on
+it, say whether it was in the shop or an outside service call, what kind of work it
+was, what you found, and what parts came off the shelf for it. `+ Add another unit`
+adds a second, and Save writes them all at once.
+
+Two things in it are not decoration.
+
+The **sub-clock is per unit and it keeps its stints**. A mechanic starts on a truck,
+gets pulled to a road call, comes back. One elapsed number would lie about that, so
+`tw_time_entries.stints` holds `[{start, stop}]` and `unit_seconds` the total. The
+hours field is what payroll charges; the clock fills it in, rounded to the quarter
+hour, and a mechanic can type over it — same rule as the shift card, for the same
+reason. Once they type, the clock stops overwriting it. Saving is refused while a
+clock is still running, and closing the tab with one running asks first.
+
+The **parts pulled here are issued against the time entry**, not just the truck:
+`tw_part_txns.time_entry_id` points back at the hours that pulled them. That is what
+makes "what did this job cost" answerable — the labour and the parts share an id. If
+a part issue fails the hours still stand, and the message says which parts did not go
+through rather than silently dropping either half.
+
+Shop time, cleanup, a parts run, a safety meeting — anything not against a unit — goes
+in through **Add hours** instead. The card requires a unit on purpose.
+
+One trap worth knowing: `updateEntry` only writes the equipment-card fields when they
+are passed. The Add hours dialog does not know about stints or type-of-work, and an
+edit from it must not wipe them off an entry made on the card.
+
 **My jobs** lives under Timecard, behind the PIN, because it is one person's own
 work and should not be readable by whoever happens to be standing at the tablet. It is
 the same data as Defects and PM, scoped to them. A mechanic
@@ -274,6 +303,16 @@ thumbing 0000 to 9999 on a tablet, short enough that a fat-fingered mechanic is 
 stuck for the shift. A reset under Setup clears it.
 
 ### The clock is not the timecard
+
+**The shop's day is an Eastern day, and `todayISO()` in `src/day.js` is the only
+place that decides it.** It was `new Date().toISOString().slice(0, 10)` — the UTC
+date — while `tw_shift_days` stamps `work_date` in `America/New_York`. So between
+8pm Eastern and midnight the two disagreed: a mechanic on an evening shift punched
+in, the timecard defaulted to tomorrow, the shift card looked for their shift under
+the wrong day, and it read back "Not clocked in" while their clock was running.
+Jason Ward's first punch-in landed at 8:44pm Eastern, squarely in that window. It has
+its own module rather than living in `ui.jsx` so the test scripts, which Node runs
+without a JSX loader, can hold the app to the same day.
 
 `tw_shifts` says a mechanic is in the shop. `tw_time_entries` says what the work was
 and what it charges to. They are deliberately separate: the Now board has to show
@@ -735,11 +774,16 @@ See `schema.sql` for the full definition. The shape:
   withheld by column grant and only the PIN functions touch it.
 - **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Other.
 - **`tw_time_entries`** — one row per chunk of work. A cost code is required,
-  and so is either a truck or a label.
+  and so is either a truck or a label. The equipment card adds `work_types`
+  (text[]), `unit_seconds`, `stints` (jsonb, `[{start, stop}]`) and
+  `work_performed`.
 - **`tw_parts`** — a part at a shop. The same number at two shops is two lines,
   because a bearing at Clays Ferry is no use to somebody at Nicholasville.
 - **`tw_part_txns`** — every movement. A trigger applies each one to
-  `tw_parts.on_hand`; nothing else may touch that column.
+  `tw_parts.on_hand`; nothing else may touch that column. `time_entry_id`
+  points at the hours that pulled a part, so a job's labour and its parts
+  can be costed together. Note the trigger is INSERT-only: deleting a
+  movement does not put the stock back.
 
 Two more views:
 
@@ -747,6 +791,10 @@ Two more views:
 - **`tw_pm_due`** — every active truck against every active program, with
   whichever trigger fires first and a `level` of over / soon / ok / nobaseline.
 - **`tw_hours`** — time entries joined to the mechanic, unit and cost code.
+  It LEFT JOINs the cost code: it used to be an inner join, which would have
+  hidden any entry whose code was later retired. Changing its column order
+  needs `DROP VIEW` then `CREATE VIEW` — `CREATE OR REPLACE` refuses to
+  rename or reorder a view's columns. Recreate it with `security_invoker`.
 - **`tw_parts_reorder`** — parts with a `stock_state` of out / low / ok /
   no reorder point / untracked, and a suggested order quantity.
 

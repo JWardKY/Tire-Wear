@@ -10,7 +10,8 @@ import { C, FD, FB, FM } from "./theme.js";
    for instance, means nothing to a defect. */
 
 /* ── Small helpers ────────────────────────────────────────────── */
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+/* The shop's date lives in its own module — see day.js. */
+export { todayISO } from "./day.js";
 export const nf = (n, d = 0) =>
   n === null || n === undefined || !isFinite(n) ? "—"
     : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });

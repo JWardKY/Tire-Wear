@@ -10,6 +10,8 @@ import * as setup from "./setupData.js";
 import * as buy from "./purchasingData.js";
 import MyJobs from "./MyJobsSection.jsx";
 import * as shop from "./shopData.js";
+import * as partsData from "./partsData.js";
+import EquipmentWorked from "./EquipmentWorked.jsx";
 
 /* ── The Timecard section ─────────────────────────────────────────
    Your own hours for one day. Behind a PIN, because this is the one
@@ -57,18 +59,21 @@ export default function TimecardSection({ who, tab, onBusy }) {
   const [entries, setEntries] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [codes, setCodes] = useState([]);
+  const [parts, setParts] = useState([]);
   const [editing, setEditing] = useState(null);
   const [changingPin, setChangingPin] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [m, v, cc] = await Promise.all([
+        const [m, v, cc, pp] = await Promise.all([
           time.findMechanic(who), shop.listVehicles(), time.listCostCodes(),
+          partsData.listParts(),
         ]);
         setMechanic(m);
         setVehicles(v);
         setCodes(cc);
+        setParts(pp);
       } catch (e) {
         setErr(`Could not load your timecard — ${e.message || e}`);
       }
@@ -172,6 +177,15 @@ export default function TimecardSection({ who, tab, onBusy }) {
       <Shift mechanicId={unlocked.id} date={date} entries={entries}
         onBusy={onBusy} onErr={setErr} />
 
+      <EquipmentWorked mechanic={unlocked} date={date}
+        vehicles={vehicles} codes={codes} parts={parts}
+        onErr={setErr}
+        onSaved={async () => {
+          await loadDay().catch((e) => setErr(e.message));
+          /* Parts came off the shelf, so the catalog counts moved. */
+          partsData.listParts().then(setParts).catch(() => {});
+        }} />
+
       {entries.length === 0 ? (
         <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
           <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
@@ -211,7 +225,16 @@ export default function TimecardSection({ who, tab, onBusy }) {
                       <span style={{ color: C.muted }}> {e.costCodeName}</span>
                     </td>
                     <td style={{ ...td, fontFamily: FM, color: C.muted }}>{e.workOrder || "—"}</td>
-                    <td style={{ ...td, color: C.muted }}>{e.note || "—"}</td>
+                    <td style={{ ...td, color: C.muted }}>
+                      {e.workTypes?.length > 0 && (
+                        <span style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600,
+                                       letterSpacing: "0.06em", textTransform: "uppercase",
+                                       color: C.green700, marginRight: 6 }}>
+                          {e.workTypes.join(" · ")}
+                        </span>
+                      )}
+                      {e.workPerformed || e.note || (e.workTypes?.length ? "" : "—")}
+                    </td>
                     <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
                     <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                       <button disabled={busy} onClick={() => setEditing(e)}
