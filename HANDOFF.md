@@ -770,9 +770,44 @@ sync may close one, and that is enforced rather than merely intended:
 
 `scripts/test-shop.mjs` holds all of that against the live database.
 
-**How closure is decided, and why it is fenced.** The only evidence we have is that
-a defect stops coming back from `/v1/inspection_reports?status=open`. Absence is
-weak evidence, so `planClosures` fences it three ways:
+**Closing is OFF, and here is the whole story.** It was built to read a second
+feed, `/v1/inspection_reports?status=open`, and close anything missing from it.
+That value came from Jason's `dvir-open.mjs` and his README, not from a response
+anybody had looked at. The first live dry run — the one this section told you to
+run — answered:
+
+    Motive 400 on /v1/inspection_reports: {"error_message":"status does not have a valid value"}
+
+`open` is not a filter Motive accepts. Probed against Allen's own account, the
+endpoint takes exactly these seven and refuses everything else:
+
+    all · with_defects · with_no_defects · with_signature_missing
+    unknown · harmless · corrected
+
+The trap is that a *report* carries a `status` field whose value genuinely is
+`open`. That is the DVIR's own state, not a filter.
+
+**That bug was not merely inert.** The failing read ran before any write, so it
+threw and took the whole defect import with it — nothing created, nothing
+bumped. It was caught the same day it merged, six hours before the nightly would
+have run on it.
+
+**The signal to rebuild it on, now verified.** The report-level `status` is in the
+`with_defects` feed we already fetch, so the right version needs no second call at
+all. Across 25 real reports from July onwards:
+
+| Report `status` | Count |
+|---|---|
+| `resolved` | 20 |
+| `open` | 5 |
+
+`mechanic_signed_at` was null on all 25, so signing is not the signal — `status`
+is. That makes closing a *positive* rule ("Motive says this DVIR is resolved")
+rather than the absence-inference it was, which is both safer and simpler.
+`fetchInspectionDefects` already carries `reportStatus` through onto every defect,
+and the dry run reports the distribution it sees under `reportStates`.
+
+`planClosures` and its three fences are intact and fully tested, just not applied:
 
 1. **Only inside the window.** The feed is date-bounded. A defect last reported
    before `since` would not appear even if it were wide open, so it is never a
@@ -782,29 +817,32 @@ weak evidence, so `planClosures` fences it three ways:
    we hold open defects in the window, that is a bad key or an outage far more
    often than a fixed fleet. Same if a run would close more than 80% of candidates
    (above a floor of 4, so a genuinely small clear-out is not blocked). Both refuse
-   and say why, on dry runs too — you see the refusal before you ever pass
-   `write=1`.
+   and say why, on dry runs too.
 
-Every closure writes a `defect_closed` row to the work log saying whether it had
-been repaired here first. A repaired one closing is the loop finishing; an open one
-closing means somebody dealt with it outside this system, and those are counted
-separately in the sync's output.
+Closing is disabled at the *write*, behind `CLOSING_IS_VERIFIED` in `sync.mjs`,
+not only by what `planClosures` returns. A comment saying "nothing closes" that
+the code does not enforce is one careless edit from marking an out-of-service
+truck resolved.
 
-**Still to verify, and the reason to run a dry run first.** Our defect feed uses
-`status=with_defects`; the closure feed uses `status=open`. That second value comes
-from Jason's own `dvir-open.mjs` and his README ("gone from Motive → dropped"), not
-from a response anybody has looked at in this build — and Motive's documentation
-has already been wrong three times in this project (see below). So **the first live
-run must be a dry run**, and somebody must read `wouldClose`, `closeCandidates` and
-`closeRefused` before `write=1` is used:
+Every closure, when it is turned back on, writes a `defect_closed` row to the work
+log saying whether it had been repaired here first. A repaired one closing is the
+loop finishing; an open one closing means somebody dealt with it outside this
+system.
+
+**Asking Motive things without a deploy.** The raw diagnostic takes a status and a
+count, which is how the table above was produced:
+
+    curl -H "X-Sync-Token: $SYNC_TOKEN" \
+      ".../.netlify/functions/motive-sync?what=defects&raw=1&n=25&status=with_defects&since=2026-07-01"
+
+and the plain dry run reports `reportStates` alongside the import numbers:
 
     curl -H "X-Sync-Token: $SYNC_TOKEN" \
       "https://allenhaul.netlify.app/.netlify/functions/motive-sync?what=defects&since=2026-06-01"
 
-If `stillOpenInMotive` comes back as 0, or `wouldClose` is most of
-`closeCandidates`, the parameter is not doing what we think and the guard has
-already stopped it. The planning logic itself is pure and covered by 21 checks in
-`scripts/test-motive.mjs`, which need no key.
+The planning logic is pure and covered by `scripts/test-motive.mjs`, which needs
+no key — including a guard that the feed can only ever ask Motive for a status it
+accepts. That check is the one that would have caught this before it shipped.
 
 ### Defects
 
