@@ -39,6 +39,34 @@ export const addMechanic = (name, role, email, empNo) =>
     p_name: name, p_role: role || "mechanic",
     p_email: email || null, p_emp_no: empNo || null });
 
+/* Correcting a record rather than adding a second one. Without this,
+   "D. Bradley" could not become "Donald Bradley" and the roster grew a
+   duplicate instead — which is exactly what happened. */
+export const updateMechanic = (id, { name, email, empNo }) =>
+  rpc("tw_mechanic_update", {
+    p_id: id, p_name: name, p_email: email || null, p_emp_no: empNo || null });
+
+/* Address, phone and next of kin. These are the only fields in the app
+   the browser cannot read with the key that ships in the page — they
+   cost the supervisor's own PIN, checked in the database, because a
+   list of where everybody lives is not roster data. The PIN is passed
+   per call and never stored: the supervisor gate deliberately remembers
+   who signed in and nothing else. */
+export const getPrivate = (actorId, pin, id) =>
+  rpc("tw_mechanic_private_get", { p_actor: actorId, p_pin: pin, p_id: id });
+
+export const setPrivate = (actorId, pin, id, d) =>
+  rpc("tw_mechanic_private_set", {
+    p_actor: actorId, p_pin: pin, p_id: id,
+    p_address: d.address || null, p_phone: d.phone || null,
+    p_emergency_name: d.emergencyName || null,
+    p_emergency_phone: d.emergencyPhone || null });
+
+/* Only ever for one added by mistake. It refuses anybody with a
+   timecard line or a punch against them, and says so, because the
+   foreign keys cascade and the delete would take their hours too. */
+export const removeMechanic = (id) => rpc("tw_mechanic_remove", { p_id: id });
+
 export const resetPin = (id) => rpc("tw_mechanic_reset_pin_by_id", { p_id: id });
 
 export const setMechanicActive = (id, active) =>
