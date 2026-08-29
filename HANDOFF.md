@@ -794,16 +794,25 @@ have run on it.
 
 **The signal to rebuild it on, now verified.** The report-level `status` is in the
 `with_defects` feed we already fetch, so the right version needs no second call at
-all. Across 25 real reports from July onwards:
+all. Across the 78 real defects in the August window:
 
 | Report `status` | Count |
 |---|---|
-| `resolved` | 20 |
-| `open` | 5 |
+| `resolved` | 60 |
+| `open` | 17 |
+| `acceptable` | 1 |
 
-`mechanic_signed_at` was null on all 25, so signing is not the signal — `status`
-is. That makes closing a *positive* rule ("Motive says this DVIR is resolved")
+`mechanic_signed_at` was null throughout, so signing is not the signal — `status`
+is. That makes closing a *positive* rule ("Motive says this DVIR is dealt with")
 rather than the absence-inference it was, which is both safer and simpler.
+
+**Note the third value.** A 25-report sample showed only `resolved` and `open`;
+widening the window turned up `acceptable`, which is Motive's "looked at it, it
+is fine". So the rule to build is *`open` means outstanding, anything else means
+dealt with* — never a list of closed-states to match, because the next unseen
+value would then read as still open forever. `reportStates` in the dry run exists
+to keep that honest: if a value appears there that nobody has thought about, it is
+visible before it matters.
 `fetchInspectionDefects` already carries `reportStatus` through onto every defect,
 and the dry run reports the distribution it sees under `reportStates`.
 
