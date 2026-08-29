@@ -233,6 +233,74 @@ try {
 
   const missing = await setup.resetPin("00000000-0000-0000-0000-000000000000");
   is(missing.ok, false, "resetting somebody who does not exist says so");
+
+  /* ── Correcting a record instead of adding a second one ─────── */
+  /* "D. Bradley" could not become "Donald Bradley", so the roster grew
+     a duplicate. That is the bug this whole block exists for. */
+  const up = await setup.updateMechanic(nid, { name: `${MARK} Renamed`, empNo: "E-4471" });
+  truthy(up.ok, "a mechanic can be renamed rather than duplicated");
+  let after = (await setup.listRoster()).find((x) => x.id === nid);
+  is(after.name, `${MARK} Renamed`, "and the new name reads back");
+  is(after.empNo, "E-4471", "with the Allen employee number on it");
+
+  const blank = await setup.updateMechanic(nid, { name: "   " });
+  is(blank.ok, false, "a blank name is refused — that is how somebody vanishes");
+  after = (await setup.listRoster()).find((x) => x.id === nid);
+  is(after.name, `${MARK} Renamed`, "and the old name survives the refusal");
+
+  const taken = await setup.updateMechanic(nid, { name: `${MARK} Renamed`, email: EMAIL });
+  is(taken.ok, false, "an email already on somebody else is refused");
+
+  const badMail = await setup.updateMechanic(nid, { name: `${MARK} Renamed`, email: "nope" });
+  is(badMail.ok, false, "and so is something that is not an address");
+
+  /* ── The personal details, which are not roster data ────────── */
+  const priv = { address: "1 Test Road", phone: "555-0100",
+                 emergencyName: `${MARK} Kin`, emergencyPhone: "555-0199" };
+  const bossId = (await setup.listRoster()).find((x) => x.email === EMAIL).id;
+
+  const wrongPin = await setup.setPrivate(bossId, "0000", nid, priv);
+  is(wrongPin.ok, false, "a wrong PIN cannot write somebody's address");
+
+  await setup.setRole(bossId, "admin");
+  await setup.resetPin(bossId);
+  await setup.setPin(bossId, "7788");
+
+  const wrote = await setup.setPrivate(bossId, "7788", nid, priv);
+  truthy(wrote.ok, "a supervisor's own PIN can");
+  const got = await setup.getPrivate(bossId, "7788", nid);
+  is(got.address, "1 Test Road", "and it reads back");
+  is(got.emergency_phone, "555-0199", "next of kin and all");
+
+  /* The point of the whole arrangement: not through the table. */
+  const direct = await c.from("tw_mechanics")
+    .select("address,phone,emergency_name,emergency_phone").eq("id", nid);
+  truthy(direct.error,
+         "and the browser cannot read those columns off the table at all");
+
+  /* A mechanic is not a supervisor, whatever PIN they hold. */
+  await setup.setRole(nid, "mechanic");
+  await setup.resetPin(nid);
+  await setup.setPin(nid, "3344");
+  const notBoss = await setup.getPrivate(nid, "3344", nid);
+  is(notBoss.ok, false, "a mechanic cannot read personal details, not even their own");
+
+  /* ── Removing one added by mistake ──────────────────────────── */
+  const gone = await setup.removeMechanic(nid);
+  truthy(gone.ok, "a mechanic with no history can be removed outright");
+  truthy(!(await setup.listRoster()).some((x) => x.id === nid),
+         "and is off the roster for good");
+
+  /* Jason Ward has real hours. Deleting him would cascade to them. */
+  const real = (await setup.listRoster()).find((x) => x.name === "Jason Ward");
+  if (real) {
+    const refused = await setup.removeMechanic(real.id);
+    is(refused.ok, false, "somebody with hours on record is never deleted");
+    truthy(/timecard line|punch/.test(refused.error || ""),
+           "and is told what is holding them");
+    truthy((await setup.listRoster()).some((x) => x.id === real.id),
+           "and is still there afterwards");
+  }
 } catch (e) {
   state.failed.push(`threw: ${e.message}`);
   console.log("  !!  threw: " + e.message);

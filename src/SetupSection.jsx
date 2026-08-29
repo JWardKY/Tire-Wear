@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { C } from "./theme.js";
+import { C, FM } from "./theme.js";
 import { Btn, Field, Modal, SectionLabel, inp, th, td } from "./ui.jsx";
 import * as setup from "./setupData.js";
 import { parseCodes, planCodes } from "./codePaste.js";
@@ -14,7 +14,7 @@ import { parseCodes, planCodes } from "./codePaste.js";
    so they can pick again. There is no path to reveal one — it is a
    bcrypt hash and the browser is not granted the column. */
 
-export default function SetupSection({ who, tab, onBusy }) {
+export default function SetupSection({ who, tab, onBusy, supervisor }) {
   const [roster, setRoster] = useState([]);
   const [codes, setCodes] = useState([]);
   const [err, setErr] = useState("");
@@ -41,7 +41,7 @@ export default function SetupSection({ who, tab, onBusy }) {
       {note && <div style={banner(C.good)}>{note}</div>}
       {tab === "codes"
         ? <Codes codes={codes} run={run} />
-        : <Roster roster={roster} run={run} />}
+        : <Roster roster={roster} run={run} supervisor={supervisor} />}
     </div>
   );
 }
@@ -53,8 +53,9 @@ const banner = (bg) => ({
 
 /* ── Roster ────────────────────────────────────────────────────── */
 
-function Roster({ roster, run }) {
+function Roster({ roster, run, supervisor }) {
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [confirm, setConfirm] = useState(null);
@@ -110,6 +111,7 @@ function Roster({ roster, run }) {
                 </td>
                 <td style={td}>{m.active ? "yes" : "no"}</td>
                 <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                  <Btn tone="ghost" onClick={() => setEditing(m)}>EDIT</Btn>{" "}
                   {m.pinSet && (
                     <Btn tone="ghost" onClick={() => setConfirm(m)}>RESET PIN</Btn>
                   )}{" "}
@@ -117,7 +119,7 @@ function Roster({ roster, run }) {
                     () => setup.setMechanicActive(m.id, !m.active),
                     m.active ? `${m.name} taken off the roster.`
                              : `${m.name} back on the roster.`)}>
-                    {m.active ? "REMOVE" : "RESTORE"}
+                    {m.active ? "OFF ROSTER" : "RESTORE"}
                   </Btn>
                 </td>
               </tr>
@@ -168,6 +170,11 @@ function Roster({ roster, run }) {
         </Modal>
       )}
 
+      {editing && (
+        <EditMechanic m={editing} run={run} supervisor={supervisor}
+          onClose={() => setEditing(null)} />
+      )}
+
       {confirm && (
         <Modal title={`Reset ${confirm.name}'s PIN?`} onClose={() => setConfirm(null)}>
           <p style={{ fontSize: 14 }}>
@@ -187,6 +194,177 @@ function Roster({ roster, run }) {
         </Modal>
       )}
     </>
+  );
+}
+
+/* ── Editing one mechanic ──────────────────────────────────────── */
+
+/* Jason's record: name, address, phone, email, Allen employee number,
+   emergency contact, PIN.
+
+   It comes in two halves on purpose. The top half is what the roster
+   already shows the whole shop, so it saves on its own. The bottom half
+   is where somebody lives and who to ring if they are hurt, and the
+   browser is not granted those columns at all — they are fetched and
+   written by a database function that checks the supervisor's own PIN.
+   That is one PIN entry, on a screen used now and then, in exchange for
+   a home address not being readable by anyone who pulls the key out of
+   the page. */
+function EditMechanic({ m, run, supervisor, onClose }) {
+  const [name, setName] = useState(m.name || "");
+  const [email, setEmail] = useState(m.email || "");
+  const [empNo, setEmpNo] = useState(m.empNo || "");
+
+  const [pin, setPin] = useState("");
+  const [priv, setPriv] = useState(null);      // null until unlocked
+  const [privErr, setPrivErr] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [confirmGone, setConfirmGone] = useState(false);
+
+  const changed = name.trim() !== (m.name || "")
+    || email.trim() !== (m.email || "")
+    || empNo.trim() !== (m.empNo || "");
+
+  const unlock = async () => {
+    setPrivErr(""); setUnlocking(true);
+    try {
+      const r = await setup.getPrivate(supervisor.id, pin, m.id);
+      if (!r?.ok) { setPrivErr(r?.error || "Could not check that PIN."); return; }
+      setPriv({
+        address: r.address || "", phone: r.phone || "",
+        emergencyName: r.emergency_name || "",
+        emergencyPhone: r.emergency_phone || "",
+      });
+    } catch (e) {
+      setPrivErr(e.message || String(e));
+    } finally { setUnlocking(false); }
+  };
+
+  return (
+    <Modal title={`Edit ${m.name}`} width={560} onClose={onClose}>
+      <Field label="Name">
+        <input style={inp} value={name} autoFocus
+               onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Email">
+        <input style={inp} value={email} placeholder="optional"
+               onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <Field label="Allen Co employee number">
+        <input style={{ ...inp, fontFamily: FM }} value={empNo} placeholder="optional"
+               onChange={(e) => setEmpNo(e.target.value)} />
+      </Field>
+
+      <div style={{ borderTop: `1px solid ${C.line}`, margin: "16px 0 12px" }} />
+      <SectionLabel>Personal details</SectionLabel>
+
+      {!supervisor ? (
+        <p style={{ fontSize: 13, color: C.muted }}>
+          Sign in on the supervisor tab to see these.
+        </p>
+      ) : !priv ? (
+        <>
+          <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 8px", maxWidth: 480 }}>
+            Address and next of kin are kept out of everything the browser can
+            read on its own. Type your own PIN, {supervisor.name.split(" ")[0]},
+            to see and change them.
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div style={{ maxWidth: 150 }}>
+              <Field label="Your PIN">
+                <input style={{ ...inp, fontFamily: FM, letterSpacing: 4 }}
+                  type="password" inputMode="numeric" maxLength={4} value={pin}
+                  onChange={(e) => { setPin(e.target.value.replace(/\D/g, "")); setPrivErr(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && pin.length === 4) unlock(); }} />
+              </Field>
+            </div>
+            <Btn disabled={pin.length !== 4 || unlocking} onClick={unlock}>
+              {unlocking ? "CHECKING…" : "UNLOCK"}
+            </Btn>
+          </div>
+          {privErr && (
+            <div style={{ color: C.pull, fontSize: 12, fontWeight: 600, marginTop: 6 }}>
+              {privErr}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <Field label="Address">
+            <textarea style={{ ...inp, minHeight: 60 }} value={priv.address}
+              onChange={(e) => setPriv({ ...priv, address: e.target.value })} />
+          </Field>
+          <Field label="Phone">
+            <input style={{ ...inp, fontFamily: FM }} value={priv.phone}
+              onChange={(e) => setPriv({ ...priv, phone: e.target.value })} />
+          </Field>
+          <Field label="Emergency contact name">
+            <input style={inp} value={priv.emergencyName}
+              onChange={(e) => setPriv({ ...priv, emergencyName: e.target.value })} />
+          </Field>
+          <Field label="Emergency contact phone">
+            <input style={{ ...inp, fontFamily: FM }} value={priv.emergencyPhone}
+              onChange={(e) => setPriv({ ...priv, emergencyPhone: e.target.value })} />
+          </Field>
+        </>
+      )}
+
+      <div style={{ borderTop: `1px solid ${C.line}`, margin: "16px 0 12px" }} />
+      <SectionLabel>PIN for this site</SectionLabel>
+      <p style={{ fontSize: 13, color: C.muted, margin: "6px 0 0" }}>
+        {m.pinSet
+          ? "Set. Nobody can read it back — resetting it lets them choose again, from the RESET PIN button on the roster."
+          : "Not set yet. They choose it themselves the first time they tap their name on the timecard tab."}
+      </p>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "space-between",
+                    alignItems: "center", marginTop: 18 }}>
+        {/* Only offered for somebody who has never worked. Anyone else
+            goes off the roster instead — the delete cascades to hours. */}
+        <Btn tone="ghost" onClick={() => setConfirmGone(true)}>DELETE</Btn>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+          <Btn disabled={!name.trim() || (!changed && !priv)}
+            onClick={() => {
+              const wanted = { name: name.trim(), email: email.trim(), empNo: empNo.trim() };
+              const p = priv;
+              onClose();
+              run(async () => {
+                if (changed) {
+                  const r = await setup.updateMechanic(m.id, wanted);
+                  if (!r?.ok) throw new Error(r?.error || "Could not save that.");
+                }
+                if (p) {
+                  const r = await setup.setPrivate(supervisor.id, pin, m.id, p);
+                  if (!r?.ok) throw new Error(r?.error || "Could not save the personal details.");
+                }
+              }, `${wanted.name} saved.`);
+            }}>
+            SAVE
+          </Btn>
+        </div>
+      </div>
+
+      {confirmGone && (
+        <Modal title={`Delete ${m.name} for good?`} onClose={() => setConfirmGone(false)}>
+          <p style={{ fontSize: 14 }}>
+            This is for somebody added by mistake. It only goes through if they
+            have never booked an hour or punched in — anyone who has is taken off
+            the roster instead, so their hours stay where payroll can see them.
+          </p>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <Btn tone="ghost" onClick={() => setConfirmGone(false)}>CANCEL</Btn>
+            <Btn onClick={() => { setConfirmGone(false); onClose();
+              run(async () => {
+                const r = await setup.removeMechanic(m.id);
+                if (!r?.ok) throw new Error(r?.error || "Could not remove them.");
+              }, `${m.name} removed.`); }}>
+              DELETE
+            </Btn>
+          </div>
+        </Modal>
+      )}
+    </Modal>
   );
 }
 

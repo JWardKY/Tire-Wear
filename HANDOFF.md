@@ -794,16 +794,25 @@ have run on it.
 
 **The signal to rebuild it on, now verified.** The report-level `status` is in the
 `with_defects` feed we already fetch, so the right version needs no second call at
-all. Across 25 real reports from July onwards:
+all. Across the 78 real defects in the August window:
 
 | Report `status` | Count |
 |---|---|
-| `resolved` | 20 |
-| `open` | 5 |
+| `resolved` | 60 |
+| `open` | 17 |
+| `acceptable` | 1 |
 
-`mechanic_signed_at` was null on all 25, so signing is not the signal — `status`
-is. That makes closing a *positive* rule ("Motive says this DVIR is resolved")
+`mechanic_signed_at` was null throughout, so signing is not the signal — `status`
+is. That makes closing a *positive* rule ("Motive says this DVIR is dealt with")
 rather than the absence-inference it was, which is both safer and simpler.
+
+**Note the third value.** A 25-report sample showed only `resolved` and `open`;
+widening the window turned up `acceptable`, which is Motive's "looked at it, it
+is fine". So the rule to build is *`open` means outstanding, anything else means
+dealt with* — never a list of closed-states to match, because the next unseen
+value would then read as still open forever. `reportStates` in the dry run exists
+to keep that honest: if a value appears there that nobody has thought about, it is
+visible before it matters.
 `fetchInspectionDefects` already carries `reportStatus` through onto every defect,
 and the dry run reports the distribution it sees under `reportStates`.
 
@@ -985,6 +994,47 @@ PIN, which creates their `tw_mechanics` row. When the real list arrives it
 can be reconciled against what is there. Once it does, self-registration is
 the thing to turn off.
 
+**The mechanic record.** Supervisor → Mechanics → EDIT holds what Jason asked
+for: name, address, phone, email, Allen employee number, emergency contact name
+and phone, and the PIN's state. It exists because there was no way to *correct*
+a row — "D. Bradley" could not become "Donald Bradley", so the roster grew a
+second Bradley instead.
+
+It saves in two halves, and the split is the point:
+
+- **Name, email, employee number** save on their own. These are already
+  anon-readable, so gating them behind a PIN would be theatre. What the
+  database does enforce is that the row stays valid: a blank name is refused
+  (that is how somebody quietly vanishes off the roster) and an email already
+  on somebody else is refused.
+- **Address, phone, next of kin** cost the supervisor's own PIN, checked in the
+  database on every read and every write. Those four columns are **not granted
+  to `anon` at all** — the same call the schema already made for `pin_hash`.
+  A list of where the whole shop lives is not roster data, and the anon key
+  ships in the page. `tw_mechanic_private_get` / `_set` are the only way in,
+  and they refuse anybody whose role is not `dashboard` or `admin`.
+
+The supervisor gate deliberately remembers *who* signed in and never their PIN,
+so there is nothing to reuse — hence one PIN entry per dialog. That is the trade,
+and it is the right way round.
+
+**Deleting versus taking off the roster.** The roster button used to say REMOVE
+while only deactivating, which is part of what sent Jason looking for another
+way out. It now says OFF ROSTER. A real delete lives in the edit dialog and
+`tw_mechanic_remove` refuses anybody with a timecard line or a punch against
+them, naming the counts — because `tw_time_entries` and `tw_shifts` both
+**CASCADE** on `mechanic_id`, so deleting a mechanic who has worked would take
+their hours with them silently. Only a row added by mistake, with no history at
+all, can actually go.
+
+**One trap worth remembering.** Postgres grants `EXECUTE` on a new function to
+`PUBLIC`, and `anon` inherits it. Revoking from `anon` alone leaves the function
+callable. That was caught here on `tw_mechanic_is_supervisor`, which would have
+been an unthrottled PIN oracle — unlike `tw_mechanic_check_pin` it counts no
+failed attempts and locks nothing, because it was only ever meant to be called
+by the two functions above it. Four digits is ten thousand guesses. **Revoke
+from `public`, not from `anon`.**
+
 **What the PIN is:** it stops a colleague opening your timecard on a shared
 shop tablet. That is the thing that actually happens in a shop, and it is
 handled properly — bcrypt, and the browser is never allowed to read the hash.
@@ -1105,7 +1155,9 @@ See `schema.sql` for the full definition. The shape:
   workflow; see Defects above.
 - **`tw_pm_programs`** — the services and their intervals.
 - **`tw_pm_completions`** — one row per service performed. Newest is the baseline.
-- **`tw_mechanics`** — who enters hours. Read-only to the app; `pin_hash` is
+- **`tw_mechanics`** — who enters hours. `address`, `phone`, `emergency_name`
+  and `emergency_phone` are withheld from `anon` alongside `pin_hash` and reached
+  only through PIN-checked definer functions. Read-only to the app; `pin_hash` is
   withheld by column grant and only the PIN functions touch it.
 - **`tw_cost_codes`** — Allen's chart, grouped Vehicle / Plant / Shop / Other.
   `tw_time_entries.cost_code` is a foreign key on the code *string*, so a code
