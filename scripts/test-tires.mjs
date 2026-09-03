@@ -36,12 +36,15 @@ try {
     const POS = "3RO";
     await db.mountTire(truck.id, {
       pos: POS, brand: "Bridgestone", model: "TESTONLY", size: "11R24.5", type: "virgin",
-      newDepth: 28, onDate: "2026-01-05", onOdo: 100000, cost: 500, casing: CASING,
+      wheel: "aluminum", newDepth: 28, onDate: "2026-01-05", onOdo: 100000,
+      cost: 500, casing: CASING,
     }, WHO);
 
     let d = await db.loadAll();
     let tire = d.tires.find((t) => t.casing === CASING);
     truthy(tire, "a tire can be mounted");
+
+    is(tire.wheel, "aluminum", "the wheel material is stored with the mount");
 
     is(d.wear[tire.id]?.miPer32 ?? null, null,
        "no wear rate from the mount record alone");
