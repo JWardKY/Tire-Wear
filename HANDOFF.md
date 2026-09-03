@@ -71,6 +71,38 @@ new to learn and nothing new to pay for:
 | Hosting | Netlify, deploys from `main` on push |
 | Charts | Recharts |
 
+### Standing the database up from scratch
+
+Four files, in this order:
+
+```
+schema.sql        tire wear: vehicles, tires, tread readings, mileage, settings
+schema-shop.sql   everything else: defects, PM, timecards and the clock, parts,
+                  purchasing, work orders, the mechanic roster — plus the 32
+                  functions, the stock trigger, RLS and the tw_mechanics grants
+seed-fleet.sql    the 134 units, from Motive
+seed-shop.sql     cost codes and PM programs
+```
+
+`schema.sql` goes first because `schema-shop.sql` references `tw_vehicles`. All four
+are re-runnable.
+
+**`schema-shop.sql` was written on 09/03/2026, and is worth knowing the history of.**
+Those tables were built directly in the database during the shop rollout and never
+written down — the repo described six tables while the app queried twenty-nine. That
+went unnoticed until the app was moved onto its own Supabase project and six sections
+had nothing to run against. Recovering it took three passes over the source database:
+tables and views, then functions, triggers and grants, then the reference rows.
+
+Two things did not survive the first pass and are called out at the top of that file:
+`tw_mechanics.pin_set` and `tw_parts.available` are **generated columns**. Nothing in
+the app writes either one, so as plain columns they fail quietly — `pin_set` stays null
+and sign-in stalls; `available` is written once and then drifts away from `on_hand` on
+every part issued. If either is ever recreated by hand, they have to stay generated.
+
+The lesson is the boring one: a schema that lives only in a running database is one
+outage away from being lost. Anything added from here goes in these files first.
+
 ### Where the data lives
 
 The tables are in the **existing `allen-qc` Supabase project**, not a new one, and are

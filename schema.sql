@@ -1,7 +1,9 @@
 -- ============================================================
 -- Allen Company · Haul Division — Tire Wear
 -- Postgres / Supabase schema
--- Run this before seed-fleet.sql
+-- Run order: this file, then schema-shop.sql, then seed-fleet.sql
+-- and seed-shop.sql. This one has to go first — schema-shop.sql
+-- references tw_vehicles.
 --
 -- Applied to the shared Allen project (allen-qc). Tables are
 -- namespaced tw_ so they sit alongside the other apps already in
