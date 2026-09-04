@@ -25,6 +25,9 @@ const CONFIGS = {
   dump12: { label: "12-tire dump · steer + pusher + tandem", axles: [
     { n: 1, dual: false, role: "Steer" }, { n: 2, dual: false, role: "Pusher" },
     { n: 3, dual: true, role: "Drive" }, { n: 4, dual: true, role: "Drive" }] },
+  dualpush14: { label: "14-tire dump · steer + dual pusher + tandem", axles: [
+    { n: 1, dual: false, role: "Steer" }, { n: 2, dual: true, role: "Pusher" },
+    { n: 3, dual: true, role: "Drive" }, { n: 4, dual: true, role: "Drive" }] },
   quad14: { label: "14-tire · steer + 2 pushers + tandem", axles: [
     { n: 1, dual: false, role: "Steer" }, { n: 2, dual: false, role: "Pusher" },
     { n: 3, dual: false, role: "Pusher" }, { n: 4, dual: true, role: "Drive" },
