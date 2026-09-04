@@ -138,24 +138,36 @@ export async function setVehicleConfig(vehicleId, cfg) {
   );
 }
 
+const tireRow = (vehicleId, t, who) => ({
+  vehicle_id: vehicleId,
+  position: t.pos,
+  brand: t.brand || null,
+  model: t.model || null,
+  size: t.size || null,
+  tire_type: t.type,
+  wheel_material: t.wheel || null,
+  casing_id: t.casing || null,
+  mounted_date: t.onDate,
+  mounted_odometer: t.onOdo,
+  mounted_depth: t.newDepth,
+  cost: t.cost,
+  notes: t.notes || null,
+  created_by: who,
+});
+
 export async function mountTire(vehicleId, t, who) {
+  check(await supabase.from("tw_tires").insert(tireRow(vehicleId, t, who)));
+}
+
+/* Setting up a truck means mounting the same tire at eight or ten
+   positions, so the copy step sends them together. One insert rather
+   than a loop: if a position was taken while the dialog was open the
+   unique index refuses the whole batch, and nobody is left guessing
+   which half of a truck went in. */
+export async function mountTires(vehicleId, list, who) {
+  if (!list.length) return;
   check(
-    await supabase.from("tw_tires").insert({
-      vehicle_id: vehicleId,
-      position: t.pos,
-      brand: t.brand || null,
-      model: t.model || null,
-      size: t.size || null,
-      tire_type: t.type,
-      wheel_material: t.wheel || null,
-      casing_id: t.casing || null,
-      mounted_date: t.onDate,
-      mounted_odometer: t.onOdo,
-      mounted_depth: t.newDepth,
-      cost: t.cost,
-      notes: t.notes || null,
-      created_by: who,
-    })
+    await supabase.from("tw_tires").insert(list.map((t) => tireRow(vehicleId, t, who)))
   );
 }
 

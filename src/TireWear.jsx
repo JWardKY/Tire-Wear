@@ -147,6 +147,7 @@ export default function TireWear({ who, tab, onBusy }) {
   const actions = useMemo(() => ({
     setVehicleConfig: (vehId, cfg) => run(() => db.setVehicleConfig(vehId, cfg)),
     mountTire: (vehId, t) => run(() => db.mountTire(vehId, t, who)),
+    mountTires: (vehId, list) => run(() => db.mountTires(vehId, list, who)),
     pullTire: (tireId, off) => run(() => db.pullTire(tireId, off)),
     setTireNotes: (tireId, notes) => run(() => db.setTireNotes(tireId, notes)),
     saveInspection: (vehId, date, odo, entries) =>
@@ -554,8 +555,11 @@ function VehicleDetail(props) {
       {mountPos && (
         <MountDialog pos={mountPos} veh={v.num} lastOdo={lastOdo} settings={settings}
           brands={brands} busy={busy}
+          freePositions={positions.filter(
+            (p) => p.id !== mountPos.id && !activeTireAt[`${v.num}|${p.id}`])}
           onClose={() => setMountPos(null)}
-          onSave={async (t) => { await actions.mountTire(v.id, t); setMountPos(null); }} />
+          onSave={(t) => actions.mountTire(v.id, t)}
+          onSaveMany={(list) => actions.mountTires(v.id, list)} />
       )}
       {openTire && (
         /* Re-read the tire from the freshly loaded list each render, so a
@@ -776,7 +780,14 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
 }
 
 /* ── Dialogs ──────────────────────────────────────────────────── */
-function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSave }) {
+function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
+                      freePositions = [], onClose, onSave, onSaveMany }) {
+  /* Two steps. The first mounts one tire; the second offers to put the
+     same tire on the wheels still empty, which is what setting up a
+     truck actually is — one spec and a dozen tread readings. */
+  const [step, setStep] = useState("mount");   // mount | copy
+  const [spec, setSpec] = useState(null);
+  const [pick, setPick] = useState({});        // position id -> tread typed
   const [f, setF] = useState({
     brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin", wheel: "",
     newDepth: String(settings.newDepth), onDate: todayISO(),
@@ -786,6 +797,78 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSav
   const isOther = f.brand === "Other";
   const brandFinal = isOther ? f.brandOther.trim() : f.brand;
   const ok = f.onOdo !== "" && Number(f.newDepth) > 0 && brandFinal !== "";
+
+  /* Everything about the tire except where it sits and how deep it is.
+     Those two are per wheel, always. */
+  const specOf = () => ({
+    brand: brandFinal, model: f.model.trim(), size: f.size.trim(),
+    type: f.type, wheel: f.wheel, onDate: f.onDate, onOdo: Number(f.onOdo),
+    cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(),
+    notes: f.notes.trim(),
+  });
+
+  async function mountFirst() {
+    const sp = specOf();
+    await onSave({ ...sp, pos: pos.id, newDepth: Number(f.newDepth) });
+    if (freePositions.length && onSaveMany) { setSpec(sp); setStep("copy"); }
+    else onClose();
+  }
+
+  /* A copied tire needs its own tread reading. Depth is the one number
+     the whole app is built on, so an unmeasured wheel is left out rather
+     than given its neighbour's number. */
+  const chosen = freePositions.filter((p) => Number(pick[p.id]) > 0);
+
+  async function copyToChosen() {
+    await onSaveMany(chosen.map((p) => ({
+      ...spec, pos: p.id, newDepth: Number(pick[p.id]),
+    })));
+    onClose();
+  }
+
+  if (step === "copy") {
+    return (
+      <Modal title="Put the same tire on other wheels"
+        sub={`${veh} · ${spec.brand}${spec.model ? " " + spec.model : ""}${spec.size ? " · " + spec.size : ""}`}
+        onClose={onClose}>
+        <p style={{ fontSize: 13, color: C.muted, marginTop: 0, lineHeight: 1.5 }}>
+          {pos.id} is mounted. Type a tread depth beside any wheel carrying the same
+          tire and it goes on too — brand, model, size, type, wheel and the mount
+          odometer all copy across. Leave a wheel blank to skip it.
+        </p>
+        <div style={{ border: `1px solid ${C.lineSoft}`, borderRadius: 6, overflow: "hidden" }}>
+          {freePositions.map((p, i) => (
+            <div key={p.id} className="flex items-center"
+              style={{ gap: 12, padding: "8px 12px",
+                borderTop: i ? `1px solid ${C.lineSoft}` : "none" }}>
+              <span style={{ fontFamily: FM, fontWeight: 600, width: 46 }}>{p.id}</span>
+              <span style={{ color: C.muted, fontSize: 13, flex: 1 }}>
+                {p.role}{p.slot === "O" ? " outer" : p.slot === "I" ? " inner" : ""}
+              </span>
+              <input type="number" step="0.5" min="0" placeholder="tread"
+                value={pick[p.id] ?? ""}
+                onChange={(e) => setPick((q) => ({ ...q, [p.id]: e.target.value }))}
+                style={{ ...inp, fontFamily: FM, width: 96, padding: "6px 8px" }} />
+              <span style={{ color: C.muted, fontSize: 12, width: 24 }}>/32</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between items-center mt-4" style={{ gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.muted }}>
+            {chosen.length
+              ? `${chosen.length} more ${chosen.length === 1 ? "wheel" : "wheels"}`
+              : "Nothing selected"}
+          </span>
+          <div className="flex" style={{ gap: 8 }}>
+            <Btn tone="ghost" onClick={onClose}>Done</Btn>
+            <Btn disabled={busy || !chosen.length} onClick={copyToChosen}>
+              Mount {chosen.length || ""} more
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={`Mount a tire at ${pos.id}`} sub={`${veh} · ${pos.role}`} onClose={onClose}>
@@ -849,14 +932,7 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSav
       </p>
       <div className="flex justify-end mt-4" style={{ gap: 8 }}>
         <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn disabled={busy || !ok} onClick={() => onSave({
-          pos: pos.id, brand: brandFinal, model: f.model.trim(),
-          size: f.size.trim(), type: f.type, wheel: f.wheel,
-          newDepth: Number(f.newDepth),
-          onDate: f.onDate, onOdo: Number(f.onOdo),
-          cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(),
-          notes: f.notes.trim(),
-        })}>Mount tire</Btn>
+        <Btn disabled={busy || !ok} onClick={mountFirst}>Mount tire</Btn>
       </div>
     </Modal>
   );
