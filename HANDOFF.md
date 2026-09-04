@@ -1130,6 +1130,14 @@ retreaded twice produces three separate `tires` rows over its life. Use `casing_
 follow one physical casing across those rows — that is how you answer "how many turns
 are we getting out of a casing before it fails."
 
+### Aluminum or steel wheels
+
+`tw_tires.wheel_material` is `aluminum`, `steel`, or null. It is chosen from a dropdown
+at mount time, shows in the tire dialog header, and rides along in the tires CSV export
+as the `wheel` column. It is optional, so a mount is never blocked on it, and it is null
+on every tire mounted before the field existed — those stay blank until the tire is
+pulled and remounted.
+
 ### Notes on a wheel
 
 `tw_tires.notes` is free text about the tire as mounted — "sidewall plug from a road
@@ -1437,9 +1445,10 @@ Flagging these so whoever picks this up knows they are choices, not oversights.
 1. Open the truck. Confirm the axle configuration in the dropdown matches what is
    actually under it — count the tires on the diagram against the truck.
 2. Tap each empty position and mount the tire that is on it. Pick the brand from the
-   dropdown, mark it virgin or retread, and record the tread depth you measure right
-   now plus today's odometer. If the brand is not on the list, choose **Other** and type
-   it — then tell whoever owns the tool so it can be added properly.
+   dropdown, mark it virgin or retread, pick whether it is on an aluminum or a steel
+   wheel, and record the tread depth you measure right now plus today's odometer. If the
+   brand is not on the list, choose **Other** and type it — then tell whoever owns the
+   tool so it can be added properly.
 3. That mount reading is the baseline. It does not have to be a brand new tire — a
    half-worn tire recorded accurately today still produces a valid wear rate going
    forward.

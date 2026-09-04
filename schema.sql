@@ -76,6 +76,7 @@ create table if not exists tw_tires (
   size             text,
   tire_type        text not null default 'virgin'
                      check (tire_type in ('virgin','retread')),
+  wheel_material   text check (wheel_material in ('aluminum','steel')),
   casing_id        text,                            -- serial, follows a casing through retreads
   mounted_date     date not null,
   mounted_odometer integer not null check (mounted_odometer >= 0),
@@ -96,6 +97,19 @@ create table if not exists tw_tires (
     removed_odometer is null or removed_odometer >= mounted_odometer
   )
 );
+
+-- Added after the first deploy, so it has to be applied to the tables
+-- already out there as well as created above. Null means nobody recorded
+-- it, which is every tire mounted before this column existed.
+alter table tw_tires add column if not exists wheel_material text;
+do $$ begin
+  alter table tw_tires add constraint tw_wheel_material_known
+    check (wheel_material in ('aluminum','steel'));
+exception when duplicate_object then null;
+end $$;
+
+comment on column tw_tires.wheel_material is
+  'The wheel the tire is mounted on: aluminum or steel. Null on tires mounted before the field existed.';
 
 -- Only one tire may occupy a position at a time.
 create unique index if not exists tw_one_active_tire_per_position

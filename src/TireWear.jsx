@@ -76,6 +76,8 @@ const STATUS_ON_DARK = {
   good: C.goodOnDark, watch: C.watchOnDark, pull: C.pullOnDark, none: C.noneOnDark,
 };
 const STATUS_LABEL = { good: "In service", watch: "Monitor", pull: "Pull", none: "No reading" };
+/* Blank on every tire mounted before the wheel field existed. */
+const WHEEL_LABEL = { aluminum: "Aluminum", steel: "Steel" };
 
 /* ── The Tires section ────────────────────────────────────────── */
 /* The shell owns the page chrome, which tab is showing, and the Saving…
@@ -776,7 +778,7 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
 /* ── Dialogs ──────────────────────────────────────────────────── */
 function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSave }) {
   const [f, setF] = useState({
-    brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin",
+    brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin", wheel: "",
     newDepth: String(settings.newDepth), onDate: todayISO(),
     onOdo: lastOdo != null ? String(lastOdo) : "", cost: "", casing: "", notes: "",
   });
@@ -814,6 +816,13 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSav
             <option value="retread">Retread</option>
           </select>
         </Field>
+        <Field label="Wheel">
+          <select value={f.wheel} onChange={set("wheel")} style={inp}>
+            <option value="">Not recorded</option>
+            <option value="aluminum">Aluminum</option>
+            <option value="steel">Steel</option>
+          </select>
+        </Field>
         <Field label="Tread when mounted (/32)">
           <input type="number" step="0.5" value={f.newDepth} onChange={set("newDepth")}
             style={{ ...inp, fontFamily: FM }} /></Field>
@@ -842,7 +851,8 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy, onClose, onSav
         <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
         <Btn disabled={busy || !ok} onClick={() => onSave({
           pos: pos.id, brand: brandFinal, model: f.model.trim(),
-          size: f.size.trim(), type: f.type, newDepth: Number(f.newDepth),
+          size: f.size.trim(), type: f.type, wheel: f.wheel,
+          newDepth: Number(f.newDepth),
           onDate: f.onDate, onOdo: Number(f.onOdo),
           cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(),
           notes: f.notes.trim(),
@@ -876,7 +886,8 @@ function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes,
   return (
     <Modal width={620} onClose={onClose}
       title={`${tire.pos} · ${tire.brand || "Unbranded"}${tire.model ? " " + tire.model : ""}`}
-      sub={`${tire.veh} · ${tire.type === "retread" ? "Retread" : "Virgin"} · ${tire.size || "size not set"}`}>
+      sub={`${tire.veh} · ${tire.type === "retread" ? "Retread" : "Virgin"} · ${tire.size || "size not set"}${
+        WHEEL_LABEL[tire.wheel] ? ` · ${WHEEL_LABEL[tire.wheel]} wheel` : ""}`}>
       <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))" }}>
         <Stat label="Current tread" value={stats?.depth ?? "—"} unit="/32"
           color={stats ? STATUS_COLOR[stats.status] : undefined} />
@@ -1194,13 +1205,13 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
   }
 
   function exportTires() {
-    const head = ["truck", "position", "brand", "model", "size", "type", "casing",
+    const head = ["truck", "position", "brand", "model", "size", "type", "wheel", "casing",
       "mounted_date", "mounted_odo", "mounted_32nds", "current_32nds",
       "miles_run", "miles_per_32nd", "miles_per_mil", "est_miles_left", "cost", "status",
       "note"];
     const rows = tires.map((t) => {
       const s = tireStats[t.id] || {};
-      return [t.veh, t.pos, t.brand, t.model, t.size, t.type, t.casing, t.onDate, t.onOdo,
+      return [t.veh, t.pos, t.brand, t.model, t.size, t.type, t.wheel, t.casing, t.onDate, t.onOdo,
         t.newDepth, s.depth ?? "", s.miles ?? "", s.miPer32 ? Math.round(s.miPer32) : "",
         s.miPer32 ? Math.round(s.miPer32 / MILS_PER_32ND) : "",
         s.remain ? Math.round(s.remain) : "", t.cost ?? "", STATUS_LABEL[s.status] || "",
