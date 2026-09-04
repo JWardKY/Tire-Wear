@@ -1261,8 +1261,19 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
   const [draft, setDraft] = useState(settings);
   const [confirm, setConfirm] = useState(false);
   const [typed, setTyped] = useState("");
+  /* One box, one address a line — a supervisor should not have to think
+     about comma placement to be told a steer tire is down to 5/32. */
+  const [emails, setEmails] = useState((settings.alertEmails || []).join("\n"));
 
   useEffect(() => { setDraft(settings); }, [settings]);
+  useEffect(() => {
+    setEmails((settings.alertEmails || []).join("\n"));
+  }, [settings.alertEmails]);
+
+  const emailList = emails.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+  const badEmail = emailList.find((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  const emailsDirty =
+    JSON.stringify(emailList) !== JSON.stringify(settings.alertEmails || []);
 
   const edit = (k) => (e) => setDraft((p) => ({ ...p, [k]: e.target.value }));
   const commit = (k) => () => {
@@ -1337,6 +1348,33 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
               onChange={edit("newDepth")} onBlur={commit("newDepth")}
               style={{ ...inp, fontFamily: FM }} /></Field>
         </div>
+      </Card>
+
+      <Card title="Tire alerts"
+        note="Emailed when a tire reaches the pull depth above, and every Monday at 7:30 while any are still on.">
+        <Field label="Send to (one address a line)">
+          <textarea value={emails} onChange={(e) => setEmails(e.target.value)}
+            rows={3} placeholder="nobody yet — alerts are off"
+            style={{ ...inp, fontFamily: FM, resize: "vertical" }} />
+        </Field>
+        <div className="flex items-center flex-wrap mt-2" style={{ gap: 10 }}>
+          <Btn disabled={busy || !!badEmail || !emailsDirty}
+            onClick={() => actions.updateSettings({ alertEmails: emailList })}>
+            Save addresses
+          </Btn>
+          <span style={{ fontSize: 12, color: badEmail ? C.pull : C.muted }}>
+            {badEmail ? `${badEmail} does not look like an address`
+              : emailList.length
+                ? `${emailList.length} ${emailList.length === 1 ? "address" : "addresses"}`
+                : "No addresses — nothing is sent"}
+          </span>
+        </div>
+        <p style={{ fontSize: 12, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
+          A tire is reported once, when a walk-around first takes it to the pull
+          depth. It will not be reported again unless it goes back above the line
+          and wears down a second time — so the same worn tire does not arrive
+          every Monday, but a list of what is still on does.
+        </p>
       </Card>
 
       <Card title="Export" note="Comma-separated files that open straight into Excel.">

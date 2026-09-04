@@ -74,6 +74,7 @@ const toSettings = (r) => ({
   pullSteer: Number(r.pull_steer_32nds),
   pullOther: Number(r.pull_other_32nds),
   newDepth: Number(r.default_new_depth),
+  alertEmails: r.alert_emails || [],
 });
 
 /* The wear math lives in the tw_tire_wear view so the app and anything
@@ -119,7 +120,7 @@ export async function loadAll() {
     brands: brandRows.filter((b) => b.active).map((b) => b.name),
     settings: setRows.length
       ? toSettings(setRows[0])
-      : { pullSteer: 6, pullOther: 4, newDepth: 28 },
+      : { pullSteer: 6, pullOther: 4, newDepth: 28, alertEmails: [] },
   };
 }
 
@@ -225,6 +226,21 @@ export async function saveInspection(vehicleId, date, odo, entries, who) {
       { onConflict: "vehicle_id,reading_date,odometer", ignoreDuplicates: true }
     )
   );
+  nudgeTireAlerts();
+}
+
+/* Tell the server a walk-around landed, so a tire that has just reached
+   pull depth is emailed while the truck is still in the yard.
+
+   Deliberately not awaited and deliberately silent. The readings are
+   already saved by the time this runs; if the alert cannot be sent — no
+   addresses set, mail not configured yet, the function down — that is
+   not the walk-around's problem and the mechanic should never see it.
+   The Monday digest catches anything this misses. */
+function nudgeTireAlerts() {
+  try {
+    fetch("/.netlify/functions/tire-alert", { method: "POST" }).catch(() => {});
+  } catch { /* no fetch, or running under a test harness */ }
 }
 
 export async function deleteReading(id) {
@@ -251,6 +267,7 @@ export async function updateSettings(patch) {
   if (patch.pullSteer != null) cols.pull_steer_32nds = patch.pullSteer;
   if (patch.pullOther != null) cols.pull_other_32nds = patch.pullOther;
   if (patch.newDepth != null) cols.default_new_depth = patch.newDepth;
+  if (patch.alertEmails != null) cols.alert_emails = patch.alertEmails;
   cols.updated_at = new Date().toISOString();
   check(await supabase.from("tw_settings").update(cols).eq("id", true));
 }
