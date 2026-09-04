@@ -71,6 +71,38 @@ new to learn and nothing new to pay for:
 | Hosting | Netlify, deploys from `main` on push |
 | Charts | Recharts |
 
+### Tire alerts
+
+A tire is **due out** when its latest depth has reached the pull depth for its position —
+6/32 on a steer, 4/32 elsewhere, both set in Settings. `tw_tires_due_out` applies that
+rule; nothing else re-implements it.
+
+Two emails, both from `netlify/functions/lib/alerts.mjs`:
+
+- **On a walk-around.** Saving readings calls `tire-alert`, which reports any tire that
+  has *just* crossed the line. The browser sends no content and names no recipient — it
+  only says "go and look" — so the public key in the page cannot be used to send
+  arbitrary mail. Fire-and-forget: a failed alert never fails an inspection.
+- **Monday 7:30 Eastern.** `tire-alert-weekly` lists everything still due out, reported
+  or not, because a tire nobody has changed should keep asking. Netlify schedules in UTC
+  and ignores daylight saving, so it runs at 11:30 **and** 12:30 UTC and stops unless it
+  is really the 7 o'clock hour in New York.
+
+`tw_tire_alerts` holds one row per reported tire. That is what stops the same worn tire
+arriving every Monday. A later reading above the pull depth deletes the row, so a wheel
+that is changed and wears out again does alert a second time.
+
+**Sending goes through Microsoft 365** — an Entra ID app registration with the `Mail.Send`
+*application* permission, client credentials, sending as one mailbox. Four variables in
+Netlify: `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_SENDER`.
+Any missing and both senders skip quietly rather than failing.
+
+> Insist on an **application access policy** naming the sender mailbox. A `Mail.Send`
+> application permission without one can send as *anybody* in the tenant, and this
+> credential lives in a Netlify environment variable.
+
+Nobody is emailed until an address is entered in Settings. Empty list, no mail.
+
 ### Equipment that is not in Motive
 
 The haul fleet syncs from Motive, but not everything that comes through the shop is on

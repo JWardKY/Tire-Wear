@@ -176,6 +176,29 @@ create table if not exists tw_settings (
 
 insert into tw_settings (id) values (true) on conflict do nothing;
 
+-- Who hears about a tire that has reached its pull depth. Deliberately
+-- not derived from the roster: the people who want to know are not
+-- always the people who book hours, and one of them may not be on the
+-- roster at all. Empty means the alerts are off.
+alter table tw_settings
+  add column if not exists alert_emails text[] not null default '{}';
+
+
+-- One row per tire that has been reported. Without it the Monday digest
+-- names the same worn tire every week until somebody changes it, and the
+-- walk-around alert fires again on every reading. A later reading above
+-- the pull depth removes the row, so a tire that wears out a second time
+-- does alert again.
+create table if not exists tw_tire_alerts (
+  tire_id     uuid primary key references tw_tires(id) on delete cascade,
+  depth_32nds numeric(4,1) not null,
+  pull_32nds  numeric(4,1) not null,
+  sent_to     text[] not null default '{}',
+  sent_at     timestamptz not null default now()
+);
+
+create index if not exists tw_tire_alerts_sent_idx on tw_tire_alerts (sent_at desc);
+
 -- Federal minimums are 4/32 steer and 2/32 all other positions
 -- (49 CFR 393.75). Defaults above pull earlier than that on purpose.
 
@@ -230,6 +253,22 @@ select distinct
 from bounds b;
 
 
+-- Every mounted tire at or below the depth it should be pulled at, with
+-- what a person needs to act on it. The alert sender reads this rather
+-- than rebuilding the threshold rule, so the rule stays in one place.
+create or replace view tw_tires_due_out as
+select
+  a.tire_id, a.truck, a.vehicle_id, a.position, a.division,
+  a.brand, a.model, a.size, a.tire_type,
+  a.current_depth, a.pull_depth,
+  a.miles_run, a.miles_per_32nd,
+  al.sent_at as alerted_at
+from tw_active_tires a
+left join tw_tire_alerts al on al.tire_id = a.tire_id
+where a.current_depth is not null
+  and a.current_depth <= a.pull_depth;
+
+
 -- Everything a screen needs about a currently mounted tire.
 create or replace view tw_active_tires as
 select
@@ -266,8 +305,9 @@ where t.removed_date is null;
 -- Views run with the caller's rights, not the owner's. Without this a
 -- view is a hole straight through the row level security below: anon
 -- could read every tire by selecting the view instead of the table.
-alter view tw_tire_wear    set (security_invoker = true);
-alter view tw_active_tires set (security_invoker = true);
+alter view tw_tire_wear     set (security_invoker = true);
+alter view tw_active_tires  set (security_invoker = true);
+alter view tw_tires_due_out set (security_invoker = true);
 
 
 -- ── Row level security ──────────────────────────────────────
@@ -289,12 +329,14 @@ alter table tw_tires          enable row level security;
 alter table tw_tread_readings enable row level security;
 alter table tw_odometer_log   enable row level security;
 alter table tw_settings       enable row level security;
+alter table tw_tire_alerts    enable row level security;
 
 do $$
 declare t text;
 begin
   foreach t in array array['tw_vehicles','tw_tire_brands','tw_tires',
-                           'tw_tread_readings','tw_odometer_log','tw_settings']
+                           'tw_tread_readings','tw_odometer_log','tw_settings',
+                           'tw_tire_alerts']
   loop
     execute format('drop policy if exists %I on %I', t || '_authenticated_all', t);
     execute format(
