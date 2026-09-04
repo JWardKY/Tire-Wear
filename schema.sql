@@ -32,6 +32,13 @@ create extension if not exists "pgcrypto";
 --
 -- Adding one here means adding it to CONFIGS in src/TireWear.jsx as
 -- well; the diagram, the dropdown and the reports all read that.
+-- OT is equipment entered by hand rather than synced from Motive — a
+-- rental, a customer's truck in for a service. Added after the first
+-- deploy, so it alters the live table as well as the create above.
+alter table tw_vehicles drop constraint if exists tw_vehicles_division_check;
+alter table tw_vehicles add constraint tw_vehicles_division_check
+  check (division in ('DT','HT','OT'));
+
 alter table tw_vehicles drop constraint if exists tw_vehicles_axle_config_check;
 alter table tw_vehicles add constraint tw_vehicles_axle_config_check
   check (axle_config in ('dump12','dualpush14','quad14','tandem10','single6','light4'));
@@ -42,7 +49,7 @@ create table if not exists tw_vehicles (
   make              text,
   model             text,
   model_year        text,
-  division          text not null check (division in ('DT','HT')),
+  division          text not null check (division in ('DT','HT','OT')),
   axle_config       text not null default 'dump12'
                       check (axle_config in ('dump12','dualpush14','quad14',
                                              'tandem10','single6','light4')),

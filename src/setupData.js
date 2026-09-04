@@ -145,3 +145,77 @@ export async function applyCodePlan(plan) {
     deactivated: plan.deactivate.length,
   };
 }
+
+/* ── Equipment ─────────────────────────────────────────────────── */
+/* The haul fleet arrives from Motive, but not everything that comes
+   through the shop is on it — a rental, a customer's truck, a machine
+   borrowed for a week. Those get typed in here, and from that moment
+   they are ordinary units: tires, PM, defects and hours all key off
+   vehicle_id and neither know nor care where the row came from.
+
+   motive_vehicle_id stays null, which is what marks a unit as ours to
+   maintain by hand. The nightly sync matches on that id and never
+   writes to tw_vehicles at all, so nothing here is at risk of being
+   renamed or removed by it — but an odometer has to be logged by hand,
+   because Motive will not be feeding one. */
+
+export async function listVehicles() {
+  const rows = await fetchAll(
+    "tw_vehicles",
+    "id,number,make,model,model_year,division,axle_config,motive_vehicle_id,active,notes",
+    "number");
+  return rows.map((r) => ({
+    id: r.id, num: r.number, make: r.make || "", model: r.model || "",
+    year: r.model_year || "", division: r.division, cfg: r.axle_config,
+    motiveId: r.motive_vehicle_id, manual: r.motive_vehicle_id == null,
+    active: !!r.active, notes: r.notes || "",
+  }));
+}
+
+const vehicleRow = (v) => ({
+  number: v.num.trim(),
+  make: v.make?.trim() || null,
+  model: v.model?.trim() || null,
+  model_year: v.year?.trim() || null,
+  division: v.division,
+  axle_config: v.cfg,
+  notes: v.notes?.trim() || null,
+});
+
+/* The unit number is unique in the database, so a second DT-882 is
+   refused rather than quietly created. That error is worth showing as
+   it is — "already exists" is exactly what the person needs to know. */
+export async function addVehicle(v) {
+  const { error } = await supabase.from("tw_vehicles").insert(vehicleRow(v));
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error(`${v.num.trim()} is already on the list.`);
+    }
+    throw error;
+  }
+}
+
+export async function updateVehicle(id, v) {
+  const { error } = await supabase
+    .from("tw_vehicles")
+    .update({ ...vehicleRow(v), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error(`${v.num.trim()} is already on the list.`);
+    }
+    throw error;
+  }
+}
+
+/* Retiring, never deleting. Tires, defects, PM completions and time
+   entries all cascade on vehicle_id — a delete would take the unit's
+   whole history with it, silently. Inactive drops it off the boards and
+   leaves every reading it ever had intact. */
+export async function setVehicleActive(id, active) {
+  const { error } = await supabase
+    .from("tw_vehicles")
+    .update({ active, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}

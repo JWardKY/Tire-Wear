@@ -17,13 +17,15 @@ import { parseCodes, planCodes } from "./codePaste.js";
 export default function SetupSection({ who, tab, onBusy, supervisor }) {
   const [roster, setRoster] = useState([]);
   const [codes, setCodes] = useState([]);
+  const [fleet, setFleet] = useState([]);
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [r, c] = await Promise.all([setup.listRoster(), setup.listAllCostCodes()]);
-      setRoster(r); setCodes(c); setErr("");
+      const [r, c, f] = await Promise.all([
+        setup.listRoster(), setup.listAllCostCodes(), setup.listVehicles()]);
+      setRoster(r); setCodes(c); setFleet(f); setErr("");
     } catch (e) { setErr(e.message || String(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -39,8 +41,8 @@ export default function SetupSection({ who, tab, onBusy, supervisor }) {
     <div>
       {err && <div style={banner(C.pull)}>{err}</div>}
       {note && <div style={banner(C.good)}>{note}</div>}
-      {tab === "codes"
-        ? <Codes codes={codes} run={run} />
+      {tab === "codes" ? <Codes codes={codes} run={run} />
+        : tab === "equipment" ? <Equipment fleet={fleet} run={run} />
         : <Roster roster={roster} run={run} supervisor={supervisor} />}
     </div>
   );
@@ -538,6 +540,182 @@ function Codes({ codes, run }) {
                    setOne({ code: "", name: "", group: "" });
                    run(() => setup.saveCostCode(o), `${o.code} added.`); }}>
               ADD
+            </Btn>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/* ── Equipment ─────────────────────────────────────────────────────
+   The haul fleet comes from Motive and needs no screen. This is for
+   everything else that comes through the shop — a rental, a customer's
+   truck, a machine borrowed for a week — so it can carry a service, a
+   set of tires or a defect like any other unit.
+
+   Once it is in, it is in: tires, PM, hours and defects all key off
+   vehicle_id and none of them care where the row came from. The one
+   difference is the odometer, which nobody will be feeding but you.
+
+   Removing is deliberately absent. Every one of those tables cascades
+   on vehicle_id, so a delete would take the unit's history with it
+   without saying so. RETIRE takes it off the boards and keeps the lot. */
+
+const DIVISIONS = [
+  ["DT", "DT — haul fleet"],
+  ["HT", "HT — haul fleet"],
+  ["OT", "Other — rental, customer, one-off"],
+];
+const CFGS = [
+  ["dump12", "12-tire dump · steer + pusher + tandem"],
+  ["dualpush14", "14-tire dump · steer + dual pusher + tandem"],
+  ["quad14", "14-tire · steer + 2 pushers + tandem"],
+  ["tandem10", "10-tire tractor · steer + tandem drive"],
+  ["single6", "6-tire · steer + single drive"],
+  ["light4", "4-tire · light duty"],
+];
+const blankUnit = { num: "", make: "", model: "", year: "",
+                    division: "OT", cfg: "tandem10", notes: "" };
+
+function Equipment({ fleet, run }) {
+  const [form, setForm] = useState(null);   // null | {…unit} for add or edit
+  const [showAll, setShowAll] = useState(false);
+
+  /* The 134 Motive units are the noise here — somebody opening this tab
+     wants the handful they typed in themselves. */
+  const manual = fleet.filter((v) => v.manual);
+  const shown = showAll ? fleet : manual;
+  const editing = form?.id != null;
+
+  const save = async () => {
+    if (editing) await setup.updateVehicle(form.id, form);
+    else await setup.addVehicle(form);
+    setForm(null);
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between",
+                    alignItems: "center", marginBottom: 10 }}>
+        <SectionLabel>{showAll ? "All equipment" : "Added by hand"}</SectionLabel>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn tone="ghost" onClick={() => setShowAll((x) => !x)}>
+            {showAll ? `JUST THE ${manual.length} ADDED` : `SHOW ALL ${fleet.length}`}
+          </Btn>
+          <Btn onClick={() => setForm({ ...blankUnit })}>+ ADD EQUIPMENT</Btn>
+        </div>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead><tr>
+            <th style={th}>Unit</th><th style={th}>Make / model</th>
+            <th style={th}>Division</th><th style={th}>Tires</th>
+            <th style={th}>Source</th><th style={th}>In service</th>
+            <th style={th}></th>
+          </tr></thead>
+          <tbody>
+            {shown.map((v) => (
+              <tr key={v.id} style={{ opacity: v.active ? 1 : 0.55 }}>
+                <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{v.num}</td>
+                <td style={td}>
+                  {[v.make, v.model].filter(Boolean).join(" ") || "—"}
+                  {v.year && <span style={{ color: C.muted }}> · {v.year}</span>}
+                </td>
+                <td style={td}>{v.division}</td>
+                <td style={{ ...td, color: C.muted }}>
+                  {(CFGS.find(([k]) => k === v.cfg) || [null, v.cfg])[1]}
+                </td>
+                <td style={td}>
+                  {v.manual
+                    ? <span style={{ color: C.muted }}>entered here</span>
+                    : <span style={{ color: C.good }}>Motive</span>}
+                </td>
+                <td style={td}>{v.active ? "yes" : "retired"}</td>
+                <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                  <Btn tone="ghost" onClick={() => setForm({ ...v })}>EDIT</Btn>{" "}
+                  <Btn tone="ghost" onClick={() => run(
+                    () => setup.setVehicleActive(v.id, !v.active),
+                    v.active ? `${v.num} retired.` : `${v.num} back in service.`)}>
+                    {v.active ? "RETIRE" : "RESTORE"}
+                  </Btn>
+                </td>
+              </tr>
+            ))}
+            {!shown.length && (
+              <tr><td style={{ ...td, color: C.muted }} colSpan={7}>
+                Nothing added by hand yet. Everything on the tire and PM boards
+                came from Motive. Add a unit here and it works the same as any
+                other — except the odometer, which has to be logged by hand.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p style={{ color: C.muted, fontSize: 12, marginTop: 12, maxWidth: 620 }}>
+        <b>Motive is not told about anything added here</b>, and the nightly sync
+        leaves it alone — so its odometer only moves when somebody uses LOG
+        MILEAGE on the truck. PM due by miles and tire wear rates both read that
+        number, so a unit nobody logs will sit at zero miles forever.
+      </p>
+      <p style={{ color: C.muted, fontSize: 12, maxWidth: 620 }}>
+        <b>RETIRE</b> takes a unit off the boards and keeps every tire, service
+        and hour recorded against it. There is no delete: those records hang off
+        the unit, and removing it would take them too.
+      </p>
+
+      {form && (
+        <Modal title={editing ? `Edit ${form.num || "unit"}` : "Add equipment"}
+          onClose={() => setForm(null)}>
+          <Field label="Unit number">
+            <input style={{ ...inp, fontFamily: FM }} value={form.num} autoFocus
+              placeholder="RENTAL-4, CUST-882…"
+              onChange={(e) => setForm((f) => ({ ...f, num: e.target.value }))} />
+          </Field>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+            <Field label="Make">
+              <input style={inp} value={form.make}
+                onChange={(e) => setForm((f) => ({ ...f, make: e.target.value }))} />
+            </Field>
+            <Field label="Model">
+              <input style={inp} value={form.model}
+                onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} />
+            </Field>
+            <Field label="Year">
+              <input style={inp} value={form.year} placeholder="optional"
+                onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))} />
+            </Field>
+            <Field label="Division">
+              <select style={inp} value={form.division}
+                onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}>
+                {DIVISIONS.map(([k, label]) =>
+                  <option key={k} value={k}>{label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Tire layout">
+            <select style={inp} value={form.cfg}
+              onChange={(e) => setForm((f) => ({ ...f, cfg: e.target.value }))}>
+              {CFGS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label="Note (optional)">
+            <input style={inp} value={form.notes}
+              placeholder="Whose it is, why it is here"
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+          </Field>
+          <p style={{ color: C.muted, fontSize: 12 }}>
+            The tire layout decides which wheel positions exist on the diagram.
+            It can be changed later from the truck's own screen if it turns out
+            wrong.
+          </p>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <Btn tone="ghost" onClick={() => setForm(null)}>CANCEL</Btn>
+            <Btn disabled={!form.num.trim()}
+              onClick={() => run(save, editing ? "Saved." : `${form.num.trim()} added.`)}>
+              {editing ? "SAVE" : "ADD"}
             </Btn>
           </div>
         </Modal>
