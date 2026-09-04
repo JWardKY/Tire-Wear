@@ -106,6 +106,7 @@ export const SECTIONS = [
     blurb: (tab) =>
       tab === "roster" ? "The roster, the PINs, and who can open this tab"
       : tab === "codes" ? "The cost codes everything else books against"
+      : tab === "equipment" ? "Anything Motive does not know about — rentals, customer trucks, one-offs"
       : tab === "cards" ? "Every card, clocked hours against booked hours"
       : tab === "log" ? "The audit trail — append only, and nothing here can edit it"
       : "Where the shop's hours went, by mechanic, by unit and by cost code",
@@ -116,6 +117,7 @@ export const SECTIONS = [
       ["log", "Work log"],
       ["roster", "Mechanics"],
       ["codes", "Cost codes"],
+      ["equipment", "Equipment"],
     ],
     Component: SupervisorSection,
   },

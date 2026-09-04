@@ -71,6 +71,30 @@ new to learn and nothing new to pay for:
 | Hosting | Netlify, deploys from `main` on push |
 | Charts | Recharts |
 
+### Equipment that is not in Motive
+
+The haul fleet syncs from Motive, but not everything that comes through the shop is on
+it — a rental, a customer's truck in for a service, something borrowed for a week.
+**Supervisor → Equipment** adds those by hand, and from that moment they are ordinary
+units: tires, PM, defects and hours all key off `vehicle_id` and none of them care where
+the row came from.
+
+Three things to know about a hand-added unit:
+
+- **`motive_vehicle_id` is null**, which is what marks it as yours to maintain. The
+  nightly sync matches on that id and never writes to `tw_vehicles` at all, so nothing
+  it does can rename or remove one.
+- **The odometer only moves when somebody uses LOG MILEAGE.** Motive will not be feeding
+  it. PM due-by-miles and tire wear rates both read that number, so a unit nobody logs
+  sits at zero miles forever.
+- **Division `OT`** keeps it out of DT and HT reporting. Note that a PM program with
+  `applies_to` null still applies to it — and all twelve programs are currently null, so
+  a new unit picks up all twelve. Scope a program to `DT` or `HT` if it should not.
+
+There is no delete, only RETIRE. `tw_tires`, `tw_defects`, `tw_pm_completions` and
+`tw_time_entries` all cascade on `vehicle_id`, so removing a unit would take its whole
+history with it silently. Inactive drops it off the boards and keeps everything.
+
 ### Standing the database up from scratch
 
 Four files, in this order:
