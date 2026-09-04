@@ -21,12 +21,20 @@ create extension if not exists "pgcrypto";
 --   3RO 3RI       dual axle, right outer / right inner
 --   3LI 3LO       dual axle, left inner  / left outer
 --
---   dump12   axle1 single (steer), axle2 single (pusher),
---            axles 3-4 dual (drive)              = 12 tires
---   quad14   steer + 2 pushers + tandem drive    = 14 tires
---   tandem10 steer + tandem drive                = 10 tires
---   single6  steer + single drive axle           =  6 tires
---   light4   front + rear, all singles           =  4 tires
+--   dump12     axle1 single (steer), axle2 single (pusher),
+--              axles 3-4 dual (drive)            = 12 tires
+--   dualpush14 the same truck with a DUAL pusher on
+--              axle 2 — 2RO/2RI/2LI/2LO          = 14 tires
+--   quad14     steer + 2 pushers + tandem drive  = 14 tires
+--   tandem10   steer + tandem drive              = 10 tires
+--   single6    steer + single drive axle         =  6 tires
+--   light4     front + rear, all singles         =  4 tires
+--
+-- Adding one here means adding it to CONFIGS in src/TireWear.jsx as
+-- well; the diagram, the dropdown and the reports all read that.
+alter table tw_vehicles drop constraint if exists tw_vehicles_axle_config_check;
+alter table tw_vehicles add constraint tw_vehicles_axle_config_check
+  check (axle_config in ('dump12','dualpush14','quad14','tandem10','single6','light4'));
 
 create table if not exists tw_vehicles (
   id                uuid primary key default gen_random_uuid(),
@@ -36,7 +44,8 @@ create table if not exists tw_vehicles (
   model_year        text,
   division          text not null check (division in ('DT','HT')),
   axle_config       text not null default 'dump12'
-                      check (axle_config in ('dump12','quad14','tandem10','single6','light4')),
+                      check (axle_config in ('dump12','dualpush14','quad14',
+                                             'tandem10','single6','light4')),
   motive_vehicle_id bigint unique,                  -- for odometer sync
   active            boolean not null default true,
   notes             text,
