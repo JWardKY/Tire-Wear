@@ -31,7 +31,7 @@ const KINDS = [
   ["parts", "Parts"], ["pm", "Services"], ["tires", "Tires"], ["order", "Orders"],
 ];
 
-export default function WorkSection({ who, tab, onBusy }) {
+export default function WorkSection({ who, tab, onBusy, focus, onClearFocus }) {
   const [err, setErr] = useState("");
   const run = useCallback(async (fn) => {
     onBusy?.(true); setErr("");
@@ -45,14 +45,15 @@ export default function WorkSection({ who, tab, onBusy }) {
                             borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
       {tab === "history"
         ? <History />
-        : <Orders who={who} run={run} setErr={setErr} />}
+        : <Orders who={who} run={run} setErr={setErr}
+            focusWo={focus?.wo || null} onClearFocus={onClearFocus} />}
     </div>
   );
 }
 
 /* ── Work orders ───────────────────────────────────────────────── */
 
-function Orders({ who, run, setErr }) {
+function Orders({ who, run, setErr, focusWo, onClearFocus }) {
   const [wos, setWos] = useState([]);
   const [roster, setRoster] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -91,6 +92,21 @@ function Orders({ who, run, setErr }) {
     () => [...wos].sort((a, b) =>
       (PRIORITY[a.priority] ?? 9) - (PRIORITY[b.priority] ?? 9) ||
       b.wo.localeCompare(a.wo)), [wos]);
+
+  /* Arrived from somebody tapping a job on their own worklist. The row
+     opens itself rather than leaving them to find one number in sixty,
+     and the filter widens if the order is not in the current one — a
+     job somebody was sent to and cannot see reads as a bug. */
+  useEffect(() => {
+    if (!focusWo || !wos.length) return;
+    const hit = wos.find((w) => w.wo === focusWo);
+    if (hit) { setOpen(hit.id); onClearFocus?.(); }
+    else if (filter !== "all") setFilter("all");
+    /* Widened as far as it goes and still not there. Clearing rather
+       than retrying every render: a focus that cannot be satisfied is
+       finished, not pending. */
+    else onClearFocus?.();
+  }, [focusWo, wos, filter, onClearFocus]);
 
   return (
     <>
