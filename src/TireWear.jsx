@@ -37,6 +37,11 @@ const CONFIGS = {
     { n: 3, dual: true, role: "Drive" }] },
   single6: { label: "6-tire · steer + single drive", axles: [
     { n: 1, dual: false, role: "Steer" }, { n: 2, dual: true, role: "Drive" }] },
+  /* A trailer has no steer axle, so nothing here matches the ^1[LR]$
+     test that picks the steer pull depth — every wheel is held to the
+     "all other tires" threshold, which is right. */
+  trailer8: { label: "8-tire trailer · two axles, all duals", axles: [
+    { n: 1, dual: true, role: "Trailer" }, { n: 2, dual: true, role: "Trailer" }] },
   light4: { label: "4-tire · light duty", axles: [
     { n: 1, dual: false, role: "Front" }, { n: 2, dual: false, role: "Rear" }] },
 };

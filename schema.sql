@@ -29,6 +29,7 @@ create extension if not exists "pgcrypto";
 --   tandem10   steer + tandem drive              = 10 tires
 --   single6    steer + single drive axle         =  6 tires
 --   light4     front + rear, all singles         =  4 tires
+--   trailer8   two axles, duals on both, no steer =  8 tires
 --
 -- Adding one here means adding it to CONFIGS in src/TireWear.jsx as
 -- well; the diagram, the dropdown and the reports all read that.
@@ -41,7 +42,8 @@ alter table tw_vehicles add constraint tw_vehicles_division_check
 
 alter table tw_vehicles drop constraint if exists tw_vehicles_axle_config_check;
 alter table tw_vehicles add constraint tw_vehicles_axle_config_check
-  check (axle_config in ('dump12','dualpush14','quad14','tandem10','single6','light4'));
+  check (axle_config in ('dump12','dualpush14','quad14','tandem10',
+                         'single6','light4','trailer8'));
 
 create table if not exists tw_vehicles (
   id                uuid primary key default gen_random_uuid(),
@@ -52,7 +54,8 @@ create table if not exists tw_vehicles (
   division          text not null check (division in ('DT','HT','OT')),
   axle_config       text not null default 'dump12'
                       check (axle_config in ('dump12','dualpush14','quad14',
-                                             'tandem10','single6','light4')),
+                                             'tandem10','single6','light4',
+                                             'trailer8')),
   motive_vehicle_id bigint unique,                  -- for odometer sync
   active            boolean not null default true,
   notes             text,
