@@ -49,7 +49,7 @@ function clearUnlock() {
   try { sessionStorage.removeItem(UNLOCK_KEY); } catch { /* not essential */ }
 }
 
-export default function TimecardSection({ who, tab, onBusy }) {
+export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFocus }) {
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -106,6 +106,23 @@ export default function TimecardSection({ who, tab, onBusy }) {
   const total = useMemo(
     () => entries.reduce((a, e) => a + e.hours, 0), [entries]);
 
+  /* Arrived here from a job on My jobs. The entry opens with the truck
+     and the work order already on it, and the focus is cleared the
+     moment it is used — a prefill that outlived the tap would put the
+     last job's number on the next entry somebody typed. */
+  useEffect(() => {
+    if (!focus?.bookHours || !unlocked) return;
+    const b = focus.bookHours;
+    setEditing({
+      vehId: b.vehId || "",
+      unit: b.vehId ? "" : (b.unit || ""),
+      workOrder: b.workOrder || "",
+      note: b.title || "",
+      date,
+    });
+    onClearFocus?.();
+  }, [focus, unlocked, date, onClearFocus]);
+
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading your timecard…</div>;
 
   /* My jobs sits behind the PIN with the rest of the personal tabs. It
@@ -121,7 +138,13 @@ export default function TimecardSection({ who, tab, onBusy }) {
     }
     return (
       <Body err={err}>
-        <MyJobs me={unlocked} onBusy={onBusy} />
+        <MyJobs me={unlocked} onBusy={onBusy} go={go}
+          /* Hands the job to the Today tab rather than opening a dialog
+             here: the hours belong on the timecard, and a mechanic
+             should end up looking at the day they just added to. */
+          onBookHours={(j) => go?.("timecard", "today", {
+            bookHours: { vehId: j.vehId, unit: j.unit, workOrder: j.wo, title: j.title },
+          })} />
       </Body>
     );
   }

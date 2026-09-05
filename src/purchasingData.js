@@ -393,6 +393,8 @@ export async function myWork(mechanicId) {
     id: w.id, wo: w.wo_number, kind: w.kind, unit: w.unit_number || "",
     title: w.title, detail: w.detail || "", priority: w.priority,
     state: w.state, vehId: w.vehicle_id, at: w.created_at,
+    assignedAt: w.assigned_at, startedAt: w.started_at,
+    sourceKey: w.source_key,
   }));
 }
 

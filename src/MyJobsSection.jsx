@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { C, FD } from "./theme.js";
-import { fmtDate, Btn, SectionLabel, inp, th, td } from "./ui.jsx";
+import { C, FD, FM } from "./theme.js";
+import { fmtDate, nf, Btn, Modal, SectionLabel, th, td } from "./ui.jsx";
 import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
 import * as setup from "./setupData.js";
@@ -28,7 +28,7 @@ const PRIO_COLOUR = (p) => (p === "now" ? "pull" : p === "today" ? "watch" : "mu
 /* Handed the signed-in mechanic rather than sniffing it out of
    localStorage: this lives inside the timecard now, behind the PIN,
    which is where somebody's own work belongs. */
-export default function MyJobsSection({ me, onBusy }) {
+export default function MyJobsSection({ me, onBusy, onBookHours, go }) {
   const [jobs, setJobs] = useState([]);
   const [defects, setDefects] = useState([]);
   const [pm, setPm] = useState([]);
@@ -36,6 +36,7 @@ export default function MyJobsSection({ me, onBusy }) {
   const [pmOverdueOnly, setPmOverdueOnly] = useState(false);
   const [err, setErr] = useState("");
   const [ready, setReady] = useState(false);
+  const [openJob, setOpenJob] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,8 +85,15 @@ export default function MyJobsSection({ me, onBusy }) {
       <div style={{ display: "grid", gap: 7, margin: "8px 0 26px",
                     gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,260px),1fr))" }}>
         {jobs.map((j) => (
-          <div key={j.id} style={{ background: C.card, borderRadius: 6, padding: "11px 13px",
-                                   border: `1px solid ${j.priority === "now" ? C.pull : C.line}` }}>
+          /* The whole card is the target, not a link buried in it: this
+             is read on a tablet with gloves on, and a mechanic wanting
+             to know what a job actually is should not have to find a
+             six-pixel chevron. */
+          <button key={j.id} onClick={() => setOpenJob(j)}
+            title="What is on this job"
+            style={{ background: C.card, borderRadius: 6, padding: "11px 13px", width: "100%",
+                     textAlign: "left", cursor: "pointer", font: "inherit", color: C.ink,
+                     border: `1px solid ${j.priority === "now" ? C.pull : C.line}` }}>
             <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: C.muted }}>{j.wo}</span>
               <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase",
@@ -100,7 +108,10 @@ export default function MyJobsSection({ me, onBusy }) {
             {j.detail && (
               <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{j.detail}</div>
             )}
-          </div>
+            <div style={{ fontSize: 11.5, color: C.green600, marginTop: 6 }}>
+              {j.state === "in progress" && j.startedAt ? "started · " : ""}tap for what is on it
+            </div>
+          </button>
         ))}
         {me && !jobs.length && (
           <div style={{ color: C.muted, fontSize: 13.5 }}>
@@ -108,6 +119,13 @@ export default function MyJobsSection({ me, onBusy }) {
           </div>
         )}
       </div>
+
+      {openJob && (
+        <JobDialog j={openJob} me={me} go={go}
+          onClose={() => setOpenJob(null)}
+          onStart={() => run(async () => { await buy.startWork(openJob.id); setOpenJob(null); })}
+          onBookHours={() => { setOpenJob(null); onBookHours?.(openJob); }} />
+      )}
 
       {/* ── Open DVIR defects ── */}
       <div className="flex flex-wrap items-center justify-between" style={{ gap: 8, marginBottom: 8 }}>
@@ -202,6 +220,134 @@ export default function MyJobsSection({ me, onBusy }) {
         </table>
       </div>
     </div>
+  );
+}
+
+/* ── One job, opened ───────────────────────────────────────────────
+   What the card could not hold: where the job came from, what has
+   already gone onto it, and the two things a mechanic standing at the
+   truck actually wants to do next — start the clock on it, or look at
+   the order itself.
+
+   Nothing here is new information. It is the same work order the
+   foreman's board shows and the same parts and hours ledger; the point
+   is that somebody holding a wrench should not have to leave their own
+   worklist and go hunting through sixty rows to read it. */
+function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
+  const [lines, setLines] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    buy.workOrderLines(j.wo)
+      .then((r) => { if (live) setLines(r); })
+      .catch((e) => { if (live) setErr(e.message || String(e)); });
+    return () => { live = false; };
+  }, [j.wo]);
+
+  const fromDefect = j.kind === "defect";
+
+  return (
+    <Modal title={j.wo} sub={`${j.unit || "shop job"} · ${j.title}`}
+      onClose={onClose} width={620}>
+
+      <div className="flex flex-wrap" style={{ gap: 10, marginBottom: 12 }}>
+        <Tag tone={PRIO_COLOUR(j.priority)}>{PRIO_LABEL[j.priority]}</Tag>
+        <Tag tone="muted">{j.state}</Tag>
+        <Tag tone="muted">
+          {fromDefect ? "from a DVIR defect"
+            : j.kind === "pm" ? "from a service interval" : "opened by hand"}
+        </Tag>
+      </div>
+
+      {j.detail && (
+        <p style={{ fontSize: 13.5, lineHeight: 1.55, margin: "0 0 12px" }}>{j.detail}</p>
+      )}
+
+      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.7, marginBottom: 14 }}>
+        <div>Opened {fmtDate(String(j.at || "").slice(0, 10))}</div>
+        {j.assignedAt && <div>Put on you {fmtDate(String(j.assignedAt).slice(0, 10))}</div>}
+        <div>
+          {j.startedAt
+            ? `Started ${fmtDate(String(j.startedAt).slice(0, 10))}`
+            : "Not started"}
+        </div>
+      </div>
+
+      {/* What has gone onto it. */}
+      <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginBottom: 14 }}>
+        {err ? <span style={{ color: C.pull, fontSize: 12.5 }}>{err}</span>
+         : !lines ? <span style={{ color: C.muted, fontSize: 12.5 }}>loading…</span>
+         : !lines.parts.length && !lines.hours.length ? (
+            <span style={{ color: C.muted, fontSize: 12.5 }}>
+              Nothing on this job yet — no parts issued to it and no hours booked
+              against it.
+            </span>
+          ) : (
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap", fontSize: 12.5 }}>
+            {lines.parts.length > 0 && (
+              <div>
+                <div style={{ fontFamily: FD, fontWeight: 700, color: C.green900 }}>Parts</div>
+                {lines.parts.map((p) => (
+                  <div key={p.id} style={{ color: C.muted, lineHeight: 1.7 }}>
+                    <span style={{ fontFamily: FM, color: C.ink }}>{nf(p.qty)} × {p.num}</span>
+                    {p.name ? ` ${p.name}` : ""}
+                    {p.cost != null ? ` · $${nf(p.cost, 2)}` : ""}
+                  </div>
+                ))}
+                <div style={{ marginTop: 4, fontWeight: 700 }}>
+                  ${nf(lines.partsCost, 2)}
+                  {lines.partsWithoutCost > 0 && (
+                    <span style={{ color: C.muted, fontWeight: 400 }}>
+                      {" "}· {lines.partsWithoutCost} with no cost on file
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {lines.hours.length > 0 && (
+              <div>
+                <div style={{ fontFamily: FD, fontWeight: 700, color: C.green900 }}>Hours</div>
+                {lines.hours.map((h) => (
+                  <div key={h.id} style={{ color: C.muted, lineHeight: 1.7 }}>
+                    <span style={{ color: C.ink }}>{nf(h.hours, 2)} h</span>
+                    {h.who ? ` · ${h.who}` : ""}{h.costCode ? ` · ${h.costCode}` : ""}
+                  </div>
+                ))}
+                <div style={{ marginTop: 4, fontWeight: 700 }}>{nf(lines.hoursTotal, 2)} h</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: "0 0 12px" }}>
+        Booking hours opens your timecard with this truck and {j.wo} already filled in,
+        so the time lands on the job rather than on a number somebody has to remember.
+        {fromDefect && " Finishing the truck is still marked repaired on the Defects tab, by whoever fixed it."}
+      </p>
+
+      <div className="flex flex-wrap justify-end" style={{ gap: 8 }}>
+        <Btn tone="ghost" onClick={onClose}>CLOSE</Btn>
+        {go && (
+          <Btn tone="ghost" onClick={() => { onClose(); go("work", "orders", { wo: j.wo }); }}>
+            OPEN THE WORK ORDER
+          </Btn>
+        )}
+        {!j.startedAt && <Btn tone="ghost" onClick={onStart}>START IT</Btn>}
+        <Btn onClick={onBookHours}>BOOK HOURS</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function Tag({ tone, children }) {
+  return (
+    <span style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.05em",
+      textTransform: "uppercase", padding: "3px 8px", borderRadius: 4,
+      border: `1px solid ${C[tone] || C.muted}`, color: C[tone] || C.muted }}>
+      {children}
+    </span>
   );
 }
 

@@ -268,6 +268,17 @@ one fault is paperwork that has stopped meaning anything.
 onto the defect, so the two screens agree. Priority follows the defect — unsafe is
 `now`, major is `today`.
 
+**A mechanic opens their own job from their own worklist.** The cards under
+*Assigned to me* on Timecard → My jobs are buttons. Tapping one shows where the job
+came from, when it was put on them, whether it has been started, and the parts and
+hours already on it — the same `workOrderLines` the foreman's board uses, so there is
+one answer to "what is on this job" rather than two. From there, BOOK HOURS hands the
+job to the Today tab through the shell's `go(section, tab, focus)` and the entry opens
+with the truck and the WO number already filled in; OPEN THE WORK ORDER hands it to
+the Work orders board, which expands that row. Both clear the focus the moment it is
+used — a prefill that outlived the tap would put the last job's number on the next
+entry somebody typed.
+
 **A job does not have to come from a defect.** NEW WORK ORDER opens one directly, for
 the work that never gets written up on a DVIR — a scheduled swap, something a foreman
 decided on, a rental or a customer's truck. `createWorkOrder` generates its own source
