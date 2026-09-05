@@ -47,6 +47,13 @@ body { -webkit-text-size-adjust: 100%; }
    drops out and the page sets in black on white. */
 @media print {
   .no-print { display: none !important; }
+  /* The mirror of no-print: a heading the screen does not need but a
+     sheet of paper does, or it comes out of the printer anonymous. */
+  .print-only { display: block !important; }
+  /* The shell paints the app's paper grey. On actual paper that is a
+     whole page of toner for nothing, so the sheet goes back to white
+     and the cards keep their own. */
+  #root > div { background: #fff !important; }
   body { background: #fff !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   button, select, textarea, input { break-inside: avoid; }

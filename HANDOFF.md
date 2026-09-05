@@ -737,6 +737,36 @@ already drifted — one wrote `type:"New"` where the database only accepts
 poisons the brand comparison the tool exists to produce. If a mechanic screen
 needs to record tread, it calls this section's code, not a copy of it.
 
+### The Help tab, and the handout
+
+`HelpSection.jsx` is how to use this, written for the person holding the wrench. It is
+one page rather than sub-tabs for two reasons: somebody looking a thing up wants to
+search the page, not guess which of six tabs it is filed under, and the shop wanted
+paper — PRINT THIS gives the whole guide, which sub-tabs would have cut into pieces.
+
+**One source, so the wall cannot drift from the app.** The PDF handed round the shop is
+printed from this page, not written separately. Regenerate it by building with
+placeholder Supabase credentials (the Help page needs no data, but `supabase.js` throws
+on import without them), serving `dist`, and driving Chromium at the Help tab:
+
+    VITE_SUPABASE_URL=https://placeholder.invalid \
+    VITE_SUPABASE_ANON_KEY=placeholder npm run build
+    npx vite preview --port 4173
+    # then page.pdf() against http://localhost:4173 with the Help tab open
+
+Two gotchas that cost time the first go: the nav labels are uppercased by CSS, so a
+Playwright locator matching `HELP` finds nothing — the DOM still says `Help`. And the
+placeholder database is unreachable by design, so `waitUntil: "networkidle"` never
+settles; use `domcontentloaded`.
+
+`.print-only` is the mirror of `.no-print`: a heading the screen does not need but a
+sheet of paper does, or the handout comes out of the printer anonymous. Print also
+forces `#root > div` white, because the app's paper grey is a page of toner for nothing.
+
+**Everything on that page is a statement about how the app actually behaves.** If a
+screen changes, this changes with it. An instruction sheet that is wrong is worse than
+none, because somebody follows it.
+
 ### Layout of the code
 
 | File | What it is |
