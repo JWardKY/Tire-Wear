@@ -55,15 +55,24 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [defects, setDefects] = useState([]);
+  const [dvirs, setDvirs] = useState(new Map());
   const [vehicles, setVehicles] = useState([]);
   const [adding, setAdding] = useState(false);
   const [repairing, setRepairing] = useState(null);
   const [q, setQ] = useState("");
 
   const reload = useCallback(async () => {
-    const [d, v] = await Promise.all([shop.listDefects(), shop.listVehicles()]);
+    /* The Motive side is read alongside, not instead of: if that table
+       cannot be read the board still works, it just stops saying what
+       Motive has been told. */
+    const [d, v, dv] = await Promise.all([
+      shop.listDefects(),
+      shop.listVehicles(),
+      shop.listDefectDvirs().catch(() => new Map()),
+    ]);
     setDefects(d);
     setVehicles(v);
+    setDvirs(dv);
   }, []);
 
   useEffect(() => {
@@ -161,7 +170,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
         {FOCUS[focus] && <FocusChip label={FOCUS[focus].label} count={shown.length}
           onClear={onClearFocus} />}
 
-        {tab === "repaired" && shown.length > 0 && <AwaitingClose rows={shown} />}
+        {tab === "repaired" && shown.length > 0 && <AwaitingClose rows={shown} dvirs={dvirs} />}
         {tab === "closed" && shown.length > 0 && <ClosedNote />}
 
         {shown.length === 0 ? (
@@ -169,7 +178,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
         ) : (
           <div className="grid gap-2">
             {shown.map((d) => (
-              <DefectRow key={d.id} d={d} who={who} busy={busy}
+              <DefectRow key={d.id} d={d} who={who} busy={busy} dvir={dvirs.get(d.id)}
                 onClaim={() => run(() => shop.claimDefect(d.id, who))}
                 onRelease={() => run(() => shop.releaseDefect(d.id))}
                 onRepair={() => setRepairing(d)}
@@ -247,7 +256,7 @@ function Badge({ tone, children }) {
   );
 }
 
-function DefectRow({ d, who, busy, onClaim, onRelease, onRepair, onReopen, onPriority }) {
+function DefectRow({ d, who, busy, dvir, onClaim, onRelease, onRepair, onReopen, onPriority }) {
   const age = daysOld(d.firstReported);
   const mine = d.claimedBy && who && d.claimedBy.toLowerCase() === who.toLowerCase();
   const repaired = d.state === "repaired";
@@ -310,6 +319,8 @@ function DefectRow({ d, who, busy, onClaim, onRelease, onRepair, onReopen, onPri
               {d.repairNote}
             </div>
           )}
+
+          {repaired && dvir && <MotiveLine dvir={dvir} />}
         </div>
 
         <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
@@ -451,16 +462,16 @@ function RepairDialog({ d, busy, onClose, onSave }) {
   );
 }
 
-/* ── Repaired, waiting to be closed in Motive ─────────────────────
-   Jason's rule 1, and the one place this system deliberately does not
-   act. Motive is the DOT record. A mechanic marking a defect repaired
-   takes it off his queue and does not close the DVIR — only Motive can
-   do that, and nothing here writes back to Motive.
+/* ── Repaired, and what Motive has been told ──────────────────────
+   Jason's rule 1 used to be that nothing here writes back to Motive.
+   That changed: marking a defect repaired now sends the repair to the
+   DVIR, with the mechanic's name and note on it.
 
-   So these rows are not finished work, they are a list of things
-   somebody still has to close in Motive. Left alone they sit forever,
-   which is why the count and the oldest wait are stated plainly rather
-   than left for somebody to notice. */
+   What did not change is that Motive stays the record. This app never
+   claims a DVIR is closed — it says what it sent and when, and a row
+   whose send has not landed is shown as not landed rather than quietly
+   counted as done. Somebody still signs the DVIR in Motive; a signature
+   is a person's, and nothing here forges one. */
 
 export function daysWaiting(d) {
   if (!d.repairedAt) return null;
@@ -469,19 +480,63 @@ export function daysWaiting(d) {
   return Math.max(0, Math.floor((Date.now() - then.getTime()) / 86400000));
 }
 
-function AwaitingClose({ rows }) {
+/* One line under a repaired defect saying where the write-back got to.
+   Three states, and the failure is the one that has to be visible:
+   silence on a failed send is how a fault ends up open in Motive and
+   finished here. */
+function MotiveLine({ dvir }) {
+  const done = dvir.sent >= dvir.total && dvir.total > 0;
+  const failed = dvir.failed > 0;
+  const tone = failed ? C.pull : done ? C.good : C.muted;
+  return (
+    <div style={{ fontFamily: FM, fontSize: 11, color: tone, marginTop: 4 }}>
+      {failed
+        ? `Motive would not take this${dvir.error ? ` — ${dvir.error}` : ""}`
+        : done
+          ? `sent to Motive${dvir.by ? ` as ${dvir.by}` : ""}`
+          : dvir.sent > 0
+            ? `sent to Motive on ${dvir.sent} of ${dvir.total} DVIRs`
+            : "not sent to Motive yet"}
+    </div>
+  );
+}
+
+function AwaitingClose({ rows, dvirs }) {
   const waits = rows.map(daysWaiting).filter((n) => n != null);
   const oldest = waits.length ? Math.max(...waits) : 0;
   const stale = waits.filter((n) => n >= 7).length;
 
+  const seen = rows.map((r) => dvirs?.get(r.id)).filter(Boolean);
+  const sent = seen.filter((v) => v.total > 0 && v.sent >= v.total).length;
+  const failed = seen.filter((v) => v.failed > 0).length;
+  /* Repairs we hold that Motive has not been told about, for whatever
+     reason — the switch is off, a send has not run yet, a defect
+     imported before any of this existed. Counted rather than assumed. */
+  const unsent = rows.length - sent - failed;
+
   return (
-    <div style={{ background: C.card, border: `1px solid ${stale ? C.watch : C.line}`,
-      borderLeft: `4px solid ${stale ? C.watch : C.line}`,
+    <div style={{ background: C.card, border: `1px solid ${stale || failed ? C.watch : C.line}`,
+      borderLeft: `4px solid ${failed ? C.pull : stale ? C.watch : C.line}`,
       borderRadius: 8, padding: "12px 16px", marginBottom: 12 }}>
       <div className="flex flex-wrap items-baseline" style={{ gap: 14 }}>
         <span style={{ fontFamily: FD, fontSize: 15, fontWeight: 700, color: C.green900 }}>
-          {rows.length} repaired, still open in Motive
+          {rows.length} repaired
         </span>
+        {sent > 0 && (
+          <span style={{ fontFamily: FM, fontSize: 13, color: C.muted }}>
+            {sent} sent to Motive
+          </span>
+        )}
+        {unsent > 0 && (
+          <span style={{ fontFamily: FM, fontSize: 13, color: C.muted }}>
+            {unsent} not sent
+          </span>
+        )}
+        {failed > 0 && (
+          <span style={{ fontSize: 13, color: C.pull, fontWeight: 700 }}>
+            {failed} Motive refused
+          </span>
+        )}
         {oldest > 0 && (
           <span style={{ fontFamily: FM, fontSize: 13,
             color: oldest >= 7 ? C.pull : C.muted, fontWeight: oldest >= 7 ? 700 : 400 }}>
@@ -496,10 +551,10 @@ function AwaitingClose({ rows }) {
       </div>
       <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", maxWidth: 760,
         lineHeight: 1.55 }}>
-        Marking a defect repaired takes it off the mechanic's list. It does not close
-        the DVIR — Motive is the DOT record and nothing here writes back to it. These
-        drop off the list once a sync stops seeing them, so somebody has to close them
-        in Motive.
+        Marking a defect repaired takes it off the mechanic’s list and sends the repair
+        to the Motive DVIR under the name of whoever fixed it. It does not sign the
+        DVIR — a signature is a person’s, and somebody still signs it in Motive. These
+        drop off this list once a sync stops seeing the fault.
       </p>
     </div>
   );
@@ -520,10 +575,10 @@ function ClosedNote() {
       <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", maxWidth: 760,
         lineHeight: 1.55 }}>
         These dropped off because a sync stopped seeing them, which is the only way a
-        defect closes here — nothing in this app writes back to Motive. Who repaired
-        it and what they wrote is kept. If the same fault comes back it arrives as a
-        new defect with its own number rather than reopening this one, so the record
-        of the first repair stays intact.
+        defect closes here — this app tells Motive a fault was repaired, but only
+        Motive closes a DVIR. Who repaired it and what they wrote is kept. If the same
+        fault comes back it arrives as a new defect with its own number rather than
+        reopening this one, so the record of the first repair stays intact.
       </p>
     </div>
   );

@@ -2338,5 +2338,76 @@ create policy "tw_work_orders_auth_all" on tw_work_orders for all to authenticat
 -- columns. Writes are not granted at all — they go through the
 -- SECURITY DEFINER functions above.
 revoke all on tw_mechanics from anon, authenticated;
-grant select (id, name, email, emp_no, role, active, pin_set, locked_until, created_at)
+grant select (id, name, email, emp_no, role, active, pin_set, locked_until,
+              created_at, motive_user_id)
   on tw_mechanics to anon, authenticated;
+
+
+-- ── Telling Motive a defect was repaired ────────────────────
+-- Last, because it hangs off tw_defects and tw_mechanics.
+--
+-- A defect_key already carries the two numbers Motive needs to be told
+-- about a repair: motive:<log_id>:<part_id>, where part_id is the
+-- inspected part on the DVIR. What it cannot carry is the same fault
+-- written up on a second morning — the sync folds those into one row so
+-- the shop sees one job. This table keeps every DVIR a fault appeared
+-- on, so marking it fixed here can close all of them there.
+
+create table if not exists tw_defect_dvirs (
+  id uuid primary key default gen_random_uuid(),
+  defect_id uuid not null references tw_defects(id) on delete cascade,
+  log_id bigint not null,
+  part_id bigint not null,
+  -- The id /v2/inspection_reports/{id} addresses, which is NOT log_id.
+  -- Looked up on first use and kept.
+  report_id bigint,
+  unit_number text not null,
+  reported_on date,
+  -- What Motive currently holds from us, not what we wish it held. null
+  -- means never sent, and it is stamped only after Motive answers 2xx —
+  -- so a failed write leaves the row pending rather than claiming a
+  -- repair was certified when it was not.
+  sent_status text,
+  sent_at timestamptz,
+  -- Who it went out as. Kept here because a reopen has to be able to
+  -- withdraw a repair under the same name that claimed it, and by then
+  -- the defect's own repaired_by has been cleared.
+  sent_by text,
+  attempts integer not null default 0,
+  last_error text,
+  created_at timestamptz not null default now(),
+  constraint tw_defect_dvirs_unique unique (log_id, part_id),
+  constraint tw_defect_dvirs_sent_status_check
+    check (sent_status is null or sent_status in ('repaired','open','no_repair_needed')),
+  constraint tw_defect_dvirs_sent_is_complete
+    check ((sent_status is null) = (sent_at is null)),
+  constraint tw_defect_dvirs_attempts_check check (attempts >= 0)
+);
+
+create index if not exists tw_defect_dvirs_defect_idx on tw_defect_dvirs (defect_id);
+create index if not exists tw_defect_dvirs_pending_idx on tw_defect_dvirs (sent_status, attempts);
+
+alter table tw_defect_dvirs enable row level security;
+drop policy if exists "tw_defect_dvirs_anon_all" on tw_defect_dvirs;
+create policy "tw_defect_dvirs_anon_all" on tw_defect_dvirs for all to anon using (true) with check (true);
+drop policy if exists "tw_defect_dvirs_auth_all" on tw_defect_dvirs;
+create policy "tw_defect_dvirs_auth_all" on tw_defect_dvirs for all to authenticated using (true) with check (true);
+
+-- The mechanic as Motive knows them. Optional: without it the write-back
+-- sends the name alone, which is right but less precise. Deliberately
+-- not matched on name automatically — Dylan/Dillon and Isaah/Isiaih are
+-- the same people spelled two ways, and a fuzzy match that got one
+-- wrong would put the wrong name on a federal record.
+alter table tw_mechanics add column if not exists motive_user_id bigint;
+
+-- Re-runnable backfill for a database that already holds defects.
+insert into tw_defect_dvirs (defect_id, log_id, part_id, unit_number, reported_on)
+select d.id,
+       split_part(d.defect_key, ':', 2)::bigint,
+       split_part(d.defect_key, ':', 3)::bigint,
+       d.unit_number,
+       d.first_reported
+  from tw_defects d
+ where d.source = 'motive'
+   and d.defect_key ~ '^motive:[0-9]+:[0-9]+$'
+on conflict (log_id, part_id) do nothing;
