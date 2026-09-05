@@ -183,7 +183,14 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
                     ))}
                   </select>
                 </td>
-                <td style={td}>{w.state}</td>
+                <td style={td}>
+                  {w.state}
+                  {w.holdReason && (
+                    <div style={{ color: C.watch, fontSize: 12, fontWeight: 600 }}>
+                      {w.holdReason}
+                    </div>
+                  )}
+                </td>
                 <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                   {w.state !== "done" && (
                     <>

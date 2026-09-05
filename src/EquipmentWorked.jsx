@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { C, FD, FM } from "./theme.js";
 import { nf, Btn, Field, SectionLabel, inp, linkBtn } from "./ui.jsx";
 import * as time from "./timeData.js";
+import * as buy from "./purchasingData.js";
 
 /* ── Equipment worked ─────────────────────────────────────────────
    A mechanic's day, one unit at a time. This is the shape the shop
@@ -78,6 +79,15 @@ const blank = () => ({
   hoursTyped: false,
   costCode: "",
   workOrder: "",
+  /* The work order as a row, not just its number. Set only when the
+     card was started from a job on somebody's worklist, and it is what
+     lets saving the hours also say whether the job is finished. A
+     hand-typed WO number stays what it always was: text. */
+  woId: "",
+  /* "" until asked, then "done" or "hold". Only ever asked on a card
+     that carries a woId. */
+  jobOutcome: "",
+  holdReason: "",
   jobLocation: "",
   workTypes: [],
   workPerformed: "",
@@ -86,6 +96,14 @@ const blank = () => ({
   stints: [],
   runningAt: null,
 });
+
+/* Has anybody put anything on this card. Module level because both the
+   seed effect and the save path need it, and they sit either side of
+   the component's own helpers. */
+const isFilled = (c) =>
+  c.vehId || c.shopWork || c.costCode || c.hours || c.workPerformed
+    || c.workTypes.length || c.parts.length || c.seconds || c.runningAt
+    || c.jobLocation;
 
 const hms = (sec) => {
   const s = Math.max(0, Math.floor(sec));
@@ -126,7 +144,7 @@ function readDraft(mechanicId, date) {
   }
 }
 
-export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts, onSaved, onErr }) {
+export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts, seed, onSeedUsed, onSaved, onErr }) {
   const [cards, setCards] = useState(() => readDraft(mechanic.id, date) || [blank()]);
   const [restored, setRestored] = useState(
     () => !!readDraft(mechanic.id, date));
@@ -158,6 +176,31 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
       else localStorage.removeItem(key);
     } catch { /* storage full or blocked — the form still works */ }
   }, [cards, mechanic.id, date]);
+
+  /* Started from a job on My jobs. The clock is already running when
+     the card appears, because the mechanic pressed Start on the job and
+     then walked to the truck — asking them to press Start again here
+     would lose the walk and read as the button not having worked.
+
+     A blank card is replaced rather than added to, so pressing Start on
+     a job does not leave an empty card sitting above it. */
+  useEffect(() => {
+    if (!seed) return;
+    setCards((cs) => {
+      if (cs.some((c) => c.woId === seed.woId)) return cs;   // already on the form
+      const card = {
+        ...blank(),
+        vehId: seed.vehId || "",
+        workOrder: seed.wo || "",
+        woId: seed.woId || "",
+        workPerformed: seed.title || "",
+        runningAt: new Date().toISOString(),
+      };
+      const used = cs.filter(isFilled);
+      return used.length ? [...used, card] : [card];
+    });
+    onSeedUsed?.();
+  }, [seed, onSeedUsed]);
 
   const anyRunning = cards.some((c) => c.runningAt);
   useEffect(() => {
@@ -212,11 +255,12 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
      database says the same thing in tw_time_needs_a_home. */
   const homed = (c) => !!c.vehId || (!!c.shopWork && !!c.shop);
   const ready = (c) => homed(c) && c.costCode
-    && Number(c.hours) > 0 && Number(c.hours) <= 24;
-  const filled = (c) =>
-    c.vehId || c.shopWork || c.costCode || c.hours || c.workPerformed
-      || c.workTypes.length || c.parts.length || c.seconds || c.runningAt
-      || c.jobLocation;
+    && Number(c.hours) > 0 && Number(c.hours) <= 24
+    /* A card started from a job has to say what happened to the job.
+       It is one tap, and the alternative is an order that sits looking
+       untouched while somebody has actually spent the afternoon on it. */
+    && (!c.woId || c.jobOutcome === "done" || c.jobOutcome === "hold");
+  const filled = isFilled;
 
   const live = cards.filter(filled);
   const canSave = live.length > 0 && live.every(ready) && !cards.some((c) => c.runningAt);
@@ -235,6 +279,8 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     if (!bad.costCode) return "Choose what to charge the time to.";
     if (!Number(bad.hours)) return "Put the hours on it — the clock fills them in when you stop.";
     if (Number(bad.hours) > 24) return "That is more than twenty-four hours.";
+    if (bad.woId && !bad.jobOutcome)
+      return `Say whether ${bad.workOrder || "the job"} is finished — either way the hours save.`;
     return null;
   })();
   const totalHours = live.reduce((a, c) => a + (Number(c.hours) || 0), 0);
@@ -269,6 +315,24 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
           who: mechanic.name,
         }, mechanic.id);
         saved += 1;
+
+        /* The job's own outcome, after the hours are in. Deliberately
+           after: a work order that will not update is worth telling
+           somebody about, and it is never worth losing an afternoon's
+           hours over. */
+        if (c.woId) {
+          try {
+            if (c.jobOutcome === "done") {
+              await buy.closeWorkOrder(c.woId, c.workPerformed.trim() || null, mechanic.name);
+            } else if (c.jobOutcome === "hold") {
+              await buy.holdWorkOrder(c.woId, c.holdReason.trim() || "Not finished");
+            }
+          } catch (e) {
+            failed.push(
+              `the hours are saved but ${c.workOrder || "the work order"} did not update — `
+              + (e.message || String(e)));
+          }
+        }
       } catch (e) {
         failed.push(e.message || String(e));
       }
@@ -354,6 +418,82 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
           {saving ? "Saving…" : "Save timecard"}
         </Btn>
       </div>
+    </div>
+  );
+}
+
+/* ── What happened to the job ─────────────────────────────────────
+   Only on a card started from somebody's worklist, and the one question
+   the shop could not answer before: the mechanic stopped, but is the
+   truck fixed?
+
+   Both answers let them save and go home. That is the point — a system
+   that only accepts "finished" teaches people to either lie or leave
+   the hours off the books, and the second is worse. "Not finished" is a
+   real answer with a reason on it, and the order stays open saying so
+   instead of looking like one nobody has touched. */
+function JobOutcome({ c, onPatch }) {
+  const pick = (v) => onPatch({
+    jobOutcome: v,
+    /* Choosing finished drops a reason typed a moment earlier, rather
+       than carrying it into a close where it means nothing. */
+    holdReason: v === "done" ? "" : c.holdReason,
+  });
+
+  return (
+    <div style={{ marginTop: 12, background: C.paper, borderRadius: 8, padding: "12px 14px" }}>
+      <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
+                    textTransform: "uppercase", color: C.muted, marginBottom: 7 }}>
+        {c.workOrder} — where did you get to
+      </div>
+
+      <div className="flex flex-wrap" style={{ gap: 6 }}>
+        {[["done", "Finished it"], ["hold", "Not finished"]].map(([v, label]) => {
+          const on = c.jobOutcome === v;
+          const tone = v === "done" ? C.green700 : C.watch;
+          return (
+            <button key={v} onClick={() => pick(v)}
+              style={{ fontFamily: FD, fontSize: 13, fontWeight: 600, letterSpacing: "0.04em",
+                       textTransform: "uppercase", padding: "7px 14px", borderRadius: 999,
+                       cursor: "pointer", border: `1px solid ${on ? tone : C.line}`,
+                       background: on ? tone : "#fff", color: on ? "#fff" : C.muted }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {c.jobOutcome === "hold" && (
+        <div style={{ marginTop: 10 }}>
+          <div className="flex flex-wrap" style={{ gap: 6, marginBottom: 8 }}>
+            {buy.HOLD_REASONS.map((r) => {
+              const on = c.holdReason === r;
+              return (
+                <button key={r} onClick={() => onPatch({ holdReason: r })}
+                  style={{ fontFamily: FD, fontSize: 12.5, letterSpacing: "0.03em",
+                           padding: "5px 11px", borderRadius: 999, cursor: "pointer",
+                           border: `1px solid ${on ? C.watch : C.line}`,
+                           background: on ? C.watch : "#fff", color: on ? "#fff" : C.muted }}>
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+          <input value={c.holdReason}
+            onChange={(e) => onPatch({ holdReason: e.target.value })}
+            placeholder="or say it in your own words"
+            style={{ ...inp, maxWidth: 460 }} />
+        </div>
+      )}
+
+      <p style={{ fontSize: 12, color: C.muted, margin: "9px 0 0", lineHeight: 1.5 }}>
+        {c.jobOutcome === "done"
+          ? "The work order closes when you save. Your hours and any parts stay on it."
+          : c.jobOutcome === "hold"
+            ? "The work order stays open with that on it, and it is still yours tomorrow. Your hours save either way."
+            : "Either answer saves your hours and lets you clock out. This is only about the order."}
+        {c.jobOutcome === "done" && " Marking the truck repaired is still done on the Defects tab."}
+      </p>
     </div>
   );
 }
@@ -525,7 +665,16 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
 
         <Field label="Work order">
           <input value={c.workOrder} onChange={(e) => onPatch({ workOrder: e.target.value })}
-            placeholder="optional" style={{ ...inp, fontFamily: FM }} />
+            placeholder="optional" style={{ ...inp, fontFamily: FM }}
+            /* Started from a job, so the number is the job's. Editing it
+               here would leave woId pointing at one order and the text
+               at another, and the outcome would land on the wrong one. */
+            readOnly={!!c.woId} />
+          {c.woId && (
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+              Started from your jobs.
+            </div>
+          )}
         </Field>
 
         {/* Payroll charges a road call against the job it was for, so the
@@ -539,6 +688,8 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
           </Field>
         )}
       </div>
+
+      {c.woId && <JobOutcome c={c} onPatch={onPatch} />}
 
       <div style={{ marginTop: 12 }}>
         <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
