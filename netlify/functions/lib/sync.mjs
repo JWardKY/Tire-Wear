@@ -9,8 +9,8 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   fetchVehicleOdometers, fetchInspectionDefects, fetchRawVehicles,
-  fetchRawInspections,
-  planOdometer, planDefects, planClosures, compareOdometers,
+  fetchRawInspections, fetchInspectionParts,
+  planOdometer, planDefects, planClosuresFromParts, compareOdometers,
   todayISO, WHICH_ODOMETER,
 } from "./motive.mjs";
 
@@ -78,6 +78,18 @@ export async function rawSample({ motiveKey }, what, since, { n, status } = {}) 
   /* Bounded: this returns whole DVIRs, and one is forty-odd checklist
      lines. Enough to see a field's shape and how its values vary. */
   const count = Math.min(Math.max(Number(n) || 2, 1), 25);
+  /* The v2 feed closing runs on, without the forty-odd clean checklist
+     lines per report. Proves the key can call v2 and shows the part
+     statuses that are actually coming back. */
+  if (what === "parts") {
+    const parts = await fetchInspectionParts(motiveKey, since || daysAgo(14),
+                                             status || "with_defects");
+    const defectsOnly = [...parts.values()].filter((p) => p.type === "minor" || p.type === "major");
+    const seen = {};
+    for (const p of defectsOnly) seen[p.status || "(none)"] = (seen[p.status || "(none)"] || 0) + 1;
+    return { partsSeen: parts.size, defectParts: defectsOnly.length,
+             statusSeen: seen, sample: defectsOnly.slice(0, count) };
+  }
   return what === "defects"
     ? await fetchRawInspections(motiveKey, since || daysAgo(14), count, status || "with_defects")
     : await fetchRawVehicles(motiveKey, count);
@@ -142,23 +154,34 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
   ]);
 
   /* There used to be a second read here, asking for status=open. Motive
-     answers 400 to that — see planClosures — and because it ran before
-     any write, it took the whole defect import down with it, not just
-     closing. Nothing about closing may ever be able to do that again,
-     so importing no longer depends on anything closing needs. */
+     answers 400 to that — see planClosuresFromParts — and because it ran
+     before any write, it took the whole defect import down with it, not
+     just closing. Nothing about closing may ever be able to do that
+     again, so importing does not depend on anything closing needs, and
+     the read that closing DOES need is wrapped below. */
   const plan = planDefects(fromMotive, vehicles, existing);
 
-  /* What the DVIRs themselves say their state is. This is the signal
-     closing should run on, and it is already here — reporting the
-     distribution is how it gets verified before anything acts on it. */
+  /* What the DVIRs themselves say. Kept for the record; closing does not
+     run on it, because a report can read "resolved" while the defect on
+     it is still open. */
   const reportStates = {};
   for (const d of fromMotive)
     reportStates[d.reportStatus || "(none)"] = (reportStates[d.reportStatus || "(none)"] || 0) + 1;
 
-  /* Still planned, never applied: the fences stay exercised and the
-     numbers stay visible on a dry run. Fed the whole feed, so it plans
-     no closures — every defect we hold is still in it. */
-  const closing = planClosures(fromMotive, existing, { since: start });
+  /* The per-part statuses closing actually runs on, and the one read in
+     this function that is allowed to fail. If v2 is unreachable, the key
+     cannot call it, or the shape changes, the import above still lands
+     and closing simply does not happen this run. That is the lesson from
+     the status=open bug, made structural rather than remembered. */
+  let parts = new Map();
+  let partsError = null;
+  try { parts = await fetchInspectionParts(motiveKey, start); }
+  catch (e) { partsError = String(e?.message || e).slice(0, 300); }
+
+  const links = partsError ? [] : await all(
+    db, "tw_defect_dvirs", "defect_id,log_id,part_id", "defect_id");
+  const closing = planClosuresFromParts(parts, links, existing);
+
   const out = {
     since: start,
     motiveReturned: fromMotive.length,
@@ -176,15 +199,14 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
     sample: plan.create.slice(0, 5).map((r) => ({
       unit: r.unit_number, category: r.category, safety: r.safety, on: r.first_reported,
     })),
-    /* The DVIR states behind the defects in this window. Closing stays
-       off until these are understood — a fault whose report has left
-       "open" is the thing to close on. */
     reportStates,
-    closingIsOff:
-      "status=open is not a filter Motive accepts, so nothing closes. "
-      + "reportStates is the signal to rebuild this on.",
-    wouldClose: 0,
-    plannedCloseIfItRan: closing.close.length,
+    /* Non-null means closing did not even get to look this run. */
+    partsError,
+    partsSeen: closing.partsSeen,
+    /* Every part status the feed actually returned. A value nobody has
+       thought about shows up here before it decides anything. */
+    partStatuses: closing.statusSeen,
+    wouldClose: closing.close.length,
     wouldCloseRepaired: closing.close.filter((c) => c.wasRepaired).length,
     closeCandidates: closing.candidates,
     /* Non-null means the guard tripped and nothing will be closed. It is
@@ -192,7 +214,8 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
        before you ever pass write=1. */
     closeRefused: closing.refused,
     closeSample: closing.close.slice(0, 5).map((c) => ({
-      unit: c.unit_number, category: c.category, wasRepaired: c.wasRepaired,
+      unit: c.unit_number, category: c.category,
+      motiveSays: c.motiveStatus, wasRepaired: c.wasRepaired,
     })),
   };
   if (!write) return { dryRun: true, ...out };
@@ -226,12 +249,7 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
      them. */
   let closed = 0;
   const closedAt = new Date().toISOString();
-  /* Off at the write, not only by what planClosures happens to return.
-     A comment saying "nothing closes" that the code does not enforce is
-     one careless edit away from being false, and the thing it would get
-     wrong is marking an out-of-service truck resolved. */
-  const CLOSING_IS_VERIFIED = false;
-  for (const c of (CLOSING_IS_VERIFIED ? closing.close : [])) {
+  for (const c of closing.close) {
     const { error } = await db.from("tw_defects")
       .update({ state: "closed", closed_at: closedAt, updated_at: closedAt })
       .eq("id", c.id)
@@ -248,7 +266,8 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
       unit_number: c.unit_number,
       summary: `${c.unit_number} — ${c.category || "defect"} closed in Motive`
         + (c.wasRepaired ? ", after being repaired here" : ", without being repaired here"),
-      detail: { defect_key: c.defect_key, was_repaired: c.wasRepaired, since: start },
+      detail: { defect_key: c.defect_key, was_repaired: c.wasRepaired,
+                motive_status: c.motiveStatus, log_id: c.logId, since: start },
     });
     /* The log is a record, not a gate: a defect really is closed in
        Motive whether or not we managed to note it. */

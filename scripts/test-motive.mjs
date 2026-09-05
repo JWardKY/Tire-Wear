@@ -7,7 +7,7 @@
 
    Run:  node scripts/test-motive.mjs
 */
-import { planOdometer, planDefects, planClosures, planResolve, pickPending, CLOSE_GUARD }
+import { planOdometer, planDefects, planClosuresFromParts, planResolve, pickPending, CLOSE_GUARD }
   from "../netlify/functions/lib/motive.mjs";
 import { compareOdometers } from "../netlify/functions/lib/motive.mjs";
 import { makeChecks, report } from "./_testkit.mjs";
@@ -371,92 +371,139 @@ const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
 }
 
 
-/* ── Closing a defect when Motive stops reporting it ──────────────
+/* ── Closing a defect when Motive says it is dealt with ───────────
    Jason's rule 1. The whole risk here is closing something that is
    actually still open on a truck, so most of these are about refusing
    to act rather than acting. */
 {
-  const SINCE = "2026-08-01";
-  const base = (over = {}) => ({
+  const def = (over = {}) => ({
     id: "d1", defect_key: "motive:1:1", unit_number: "DT-882",
     category: "Brakes", note: "grinding", state: "open", source: "motive",
     first_reported: "2026-08-10", last_reported: "2026-08-10", ...over,
   });
+  const link = (defectId, logId, partId) =>
+    ({ defect_id: defectId, log_id: logId, part_id: partId });
+  const feed = (entries) => new Map(entries.map(([k, v]) => [k, v]));
 
-  /* Still in the feed: nothing happens. */
+  /* The one that made this rule what it is: HT-1373 report 10954864043
+     comes back "resolved" while its defect part is still "open". */
   {
-    const p = planClosures([{ key: "motive:1:1" }], [base()], { since: SINCE });
-    is(p.close.length, 0, "a defect Motive still reports open is left alone");
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "open", hasMechanic: false }]]),
+      [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 0, "a part Motive still calls open is left alone");
     is(p.candidates, 1, "but it was considered");
+    is(p.statusSeen.open, 1, "and the status it actually returned is reported");
   }
 
-  /* Gone from the feed, with something else still there so the guard
-     does not trip. */
   {
-    const rows = [base(), base({ id: "d2", defect_key: "motive:2:2" })];
-    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
-    is(p.close.length, 1, "a defect Motive no longer reports is closed");
-    is(p.close[0].id, "d1", "the right one");
-    is(p.close[0].wasRepaired, false, "and it says it was not repaired here");
-    is(p.refused, null, "with no refusal");
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "repaired", hasMechanic: true }]]),
+      [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 1, "a part Motive no longer calls open closes the defect");
+    is(p.close[0].motiveStatus, "repaired", "saying what Motive called it");
   }
 
-  /* A repaired one closing is the loop finishing, and is called out. */
   {
-    const rows = [base({ state: "repaired" }), base({ id: "d2", defect_key: "motive:2:2" })];
-    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
-    is(p.close.length, 1, "a repaired defect closes when Motive drops it");
-    is(p.close[0].wasRepaired, true, "and is reported as the repair loop finishing");
+    /* The rule is positive: anything but open means dealt with, so a
+       value nobody has seen yet still works. */
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "some_value_nobody_has_seen", hasMechanic: false }]]),
+      [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 1, "an unseen status is dealt with, not still open forever");
   }
 
-  /* The three fences. */
   {
-    const rows = [base({ source: "manual", defect_key: "manual:DT-882:1" }),
-                  base({ id: "d2", defect_key: "motive:2:2" })];
-    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
-    is(p.close.length, 0, "a hand-logged defect is never closed by Motive's silence");
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "good", hasMechanic: false }]]),
+      [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 0, "a defect part coming back 'good' is a contradiction, not a repair");
   }
+
   {
-    const rows = [base({ last_reported: "2026-07-02" }),
-                  base({ id: "d2", defect_key: "motive:2:2" })];
-    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
-    is(p.close.length, 0,
-       "a defect last reported before the window is not a candidate — the feed " +
-       "would not show it even if it were wide open");
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "good", hasMechanic: true }]]),
+      [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 1, "unless a mechanic's details are on it, which is a real sign-off");
   }
+
   {
-    const rows = [base({ state: "closed" }), base({ id: "d2", defect_key: "motive:2:2" })];
-    const p = planClosures([{ key: "motive:2:2" }], rows, { since: SINCE });
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: null, hasMechanic: false }]]),
+      [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 0, "no status means no opinion");
+  }
+
+  {
+    /* Absence closes nothing. This is the whole difference from the
+       version that read a feed and closed what was missing from it. */
+    const p = planClosuresFromParts(feed([]), [link("d1", 1, 1)], [def()]);
+    is(p.close.length, 0, "a part the feed did not return closes nothing");
+    is(p.partsSeen, 0, "and the empty feed is visible in the numbers");
+  }
+
+  {
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "repaired", hasMechanic: true }]]),
+      [link("d1", 1, 1)], [def({ source: "manual" })]);
+    is(p.close.length, 0, "a hand-logged defect is never closed by Motive");
+    is(p.candidates, 0, "and is not even a candidate");
+  }
+
+  {
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "repaired", hasMechanic: true }]]),
+      [link("d1", 1, 1)], [def({ state: "closed" })]);
     is(p.close.length, 0, "an already-closed defect is not closed twice");
   }
 
-  /* The guards. An empty feed is a broken feed, not a fixed fleet. */
   {
-    const p = planClosures([], [base()], { since: SINCE });
-    is(p.close.length, 0, "an empty open feed closes nothing");
-    truthy(/came back empty/.test(p.refused || ""), "and says why in words");
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "repaired", hasMechanic: true }]]),
+      [link("d1", 1, 1)], [def({ state: "repaired" })]);
+    is(p.close.length, 1, "a repaired defect closes when Motive agrees");
+    truthy(p.close[0].wasRepaired, "and is reported as the repair loop finishing");
   }
+
+  {
+    /* One fault, three mornings. Somebody dealt with it on one of them. */
+    const p = planClosuresFromParts(
+      feed([["1:1", { status: "open", hasMechanic: false }],
+            ["2:2", { status: "repaired", hasMechanic: true }],
+            ["3:3", { status: "open", hasMechanic: false }]]),
+      [link("d1", 1, 1), link("d1", 2, 2), link("d1", 3, 3)], [def()]);
+    is(p.close.length, 1, "one DVIR being dealt with finishes the job the shop sees");
+    is(p.close[0].logId, 2, "and it says which report said so");
+  }
+
   {
     const many = Array.from({ length: 10 }, (_, i) =>
-      base({ id: `d${i}`, defect_key: `motive:${i}:${i}` }));
-    const p = planClosures([{ key: "motive:0:0" }], many, { since: SINCE });
+      def({ id: `d${i}`, defect_key: `motive:${i}:${i}` }));
+    const links = many.map((d, i) => link(d.id, i, i));
+    const all = feed(many.map((_, i) => [`${i}:${i}`, { status: "repaired", hasMechanic: true }]));
+    const p = planClosuresFromParts(all, links, many);
     is(p.close.length, 0, "closing nearly everything at once is refused");
-    truthy(/guard/.test(p.refused || ""), "and named as the guard tripping");
+    truthy(/feed problem/.test(p.refused || ""), "and named as the guard tripping");
   }
+
   {
-    /* Below the ratio: a normal week's repairs go through. */
     const many = Array.from({ length: 10 }, (_, i) =>
-      base({ id: `d${i}`, defect_key: `motive:${i}:${i}` }));
-    const feed = many.slice(3).map((d) => ({ key: d.defect_key }));
-    const p = planClosures(feed, many, { since: SINCE });
+      def({ id: `d${i}`, defect_key: `motive:${i}:${i}` }));
+    const links = many.map((d, i) => link(d.id, i, i));
+    const three = feed([0, 1, 2].map((i) => [`${i}:${i}`, { status: "repaired", hasMechanic: true }]));
+    const p = planClosuresFromParts(three, links, many);
     is(p.close.length, 3, "three of ten closing is a normal week and goes through");
     is(p.refused, null, "no refusal");
   }
+
   {
-    /* A small run is not held to the ratio: two of two is fine when
-       two is all there was. */
-    const rows = [base(), base({ id: "d2", defect_key: "motive:2:2" })];
-    const p = planClosures([{ key: "motive:9:9" }], rows, { since: SINCE });
+    /* A small run is not held to the ratio: two of two is fine when two
+       is all there was. */
+    const two = [def(), def({ id: "d2", defect_key: "motive:2:2" })];
+    const links = [link("d1", 1, 1), link("d2", 2, 2)];
+    const all = feed([["1:1", { status: "repaired", hasMechanic: true }],
+                      ["2:2", { status: "repaired", hasMechanic: true }]]);
+    const p = planClosuresFromParts(all, links, two);
     is(p.close.length, 2, "a tiny fleet-wide clear-out is not blocked by the ratio");
     truthy(CLOSE_GUARD.minToApplyRatio > 2, "because the ratio only applies above a floor");
   }
