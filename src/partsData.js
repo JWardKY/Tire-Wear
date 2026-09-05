@@ -33,6 +33,7 @@ const toPart = (r) => ({
   cost: r.unit_cost == null ? null : Number(r.unit_cost),
   tags: r.tags || "",
   tracked: r.tracked,
+  active: r.active !== false,
   state: r.stock_state,
   suggested: r.suggested_order == null ? null : Number(r.suggested_order),
 });

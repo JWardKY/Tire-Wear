@@ -268,6 +268,24 @@ one fault is paperwork that has stopped meaning anything.
 onto the defect, so the two screens agree. Priority follows the defect — unsafe is
 `now`, major is `today`.
 
+**A job does not have to come from a defect.** NEW WORK ORDER opens one directly, for
+the work that never gets written up on a DVIR — a scheduled swap, something a foreman
+decided on, a rental or a customer's truck. `createWorkOrder` generates its own source
+key, `manual:<base36 time>`, which no sync will ever match: a sync looks up its own
+kind and key, so a hand-made order cannot be renumbered, reopened or closed by one.
+Same trick `addDefect` uses for a fault the shop found itself. The unit is a dropdown
+over `tw_vehicles`, so equipment added under Setup is pickable here; blank is allowed
+and means it, because a shelving build is real work somebody should be able to number.
+
+**Parts and hours find an order by its number, and always did.** `tw_part_txns.work_order`
+and `tw_time_entries.work_order` are text columns that predate any of this, so a part
+issued against WO-26-0027 by somebody typing the number counts exactly the same as one
+issued from the PARTS button on the board. The button only fills in the number and the
+truck for you, then calls the same `partsData.move` the Inventory screen does — same
+ledger, same trigger moving `on_hand`. Tapping a WO number expands what has gone onto
+it, with a parts total from `unit_cost`; lines with no cost on file are left out of the
+total and counted separately, rather than silently treated as free.
+
 Closing a work order does **not** mark the defect repaired. Those are different acts by
 different people: the work order is the shop's paperwork, the repair is the mechanic's
 statement that the truck is fixed.

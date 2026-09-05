@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { C, FD } from "./theme.js";
-import { fmtDate, toCSV, Btn, Field, Modal, SectionLabel, inp, th, td, tdNum } from "./ui.jsx";
+import { fmtDate, nf, toCSV, Btn, Field, Modal, SectionLabel, inp, th, td, tdNum } from "./ui.jsx";
 import * as buy from "./purchasingData.js";
 import * as setup from "./setupData.js";
+import * as parts from "./partsData.js";
 
 /* ── Work ─────────────────────────────────────────────────────────
    Two views over the same shop.
@@ -11,6 +12,12 @@ import * as setup from "./setupData.js";
    be put on. Opening one is idempotent, so the board can ask for a
    number on every load without a truck collecting four of them for one
    fault.
+
+   A job does not have to come from a defect. Plenty of shop work never
+   gets written up on a DVIR — a scheduled swap, something a foreman
+   decided on, work on a truck that is not even ours. NEW WORK ORDER
+   opens one directly, and from there it is the same numbered job as any
+   other: assign it, issue parts to it, book hours against it.
 
    Work history is every event, from a view over the real tables rather
    than an audit log somebody has to remember to write to. A hand-kept
@@ -48,17 +55,26 @@ export default function WorkSection({ who, tab, onBusy }) {
 function Orders({ who, run, setErr }) {
   const [wos, setWos] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [filter, setFilter] = useState("live");
   const [closing, setClosing] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [issuing, setIssuing] = useState(null);
+  const [open, setOpen] = useState(null);
+  /* Bumped after a part is issued. Lines is keyed on it, so a row that
+     was already expanded refetches instead of showing the shelf as it
+     was a moment ago. */
+  const [linesNonce, setLinesNonce] = useState(0);
   const [synced, setSynced] = useState(null);
 
   const load = useCallback(async () => {
     const states = filter === "all" ? null
       : filter === "live" ? ["open", "in progress"] : [filter];
-    const [w, r] = await Promise.all([
-      buy.listWorkOrders(states), setup.listRoster(),
+    const [w, r, v] = await Promise.all([
+      buy.listWorkOrders(states), setup.listRoster(), setup.listVehicles(),
     ]);
     setWos(w); setRoster(r.filter((m) => m.active));
+    setVehicles(v.filter((x) => x.active));
   }, [filter]);
 
   useEffect(() => { load(); }, [load]);
@@ -91,6 +107,7 @@ function Orders({ who, run, setErr }) {
             <option value="all">Everything</option>
           </select>
           <Btn tone="ghost" onClick={sync}>NUMBER THE OPEN DEFECTS</Btn>
+          <Btn onClick={() => setCreating(true)}>NEW WORK ORDER</Btn>
         </div>
       </div>
 
@@ -111,8 +128,16 @@ function Orders({ who, run, setErr }) {
           </tr></thead>
           <tbody>
             {shown.map((w) => (
-              <tr key={w.id}>
-                <td style={{ ...td, fontFamily: "monospace" }}>{w.wo}</td>
+              <React.Fragment key={w.id}>
+              <tr>
+                <td style={{ ...td, fontFamily: "monospace" }}>
+                  <button onClick={() => setOpen(open === w.id ? null : w.id)}
+                    title="Parts and hours on this order"
+                    style={{ background: "none", border: 0, padding: 0, cursor: "pointer",
+                             font: "inherit", color: C.green700, textDecoration: "underline" }}>
+                    {w.wo}
+                  </button>
+                </td>
                 <td style={td}>{w.unit}</td>
                 <td style={td}>
                   {w.title}
@@ -143,12 +168,22 @@ function Orders({ who, run, setErr }) {
                   </select>
                 </td>
                 <td style={td}>{w.state}</td>
-                <td style={{ ...td, textAlign: "right" }}>
+                <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                   {w.state !== "done" && (
-                    <Btn tone="ghost" onClick={() => setClosing(w)}>DONE</Btn>
+                    <>
+                      <Btn tone="ghost" onClick={() => setIssuing(w)}>PARTS</Btn>
+                      {" "}
+                      <Btn tone="ghost" onClick={() => setClosing(w)}>DONE</Btn>
+                    </>
                   )}
                 </td>
               </tr>
+              {open === w.id && (
+                <tr><td colSpan={7} style={{ ...td, background: C.paper }}>
+                  <Lines key={`${w.id}:${linesNonce}`} wo={w.wo} />
+                </td></tr>
+              )}
+              </React.Fragment>
             ))}
             {!shown.length && (
               <tr><td style={{ ...td, color: C.muted }} colSpan={7}>
@@ -160,11 +195,31 @@ function Orders({ who, run, setErr }) {
         </table>
       </div>
 
-      <p style={{ color: C.muted, fontSize: 12, marginTop: 12, maxWidth: 640 }}>
+      <p style={{ color: C.muted, fontSize: 12, marginTop: 12, maxWidth: 680 }}>
         Nobody on the roster yet means nothing to assign to — add mechanics under
-        Setup. Closing a work order here does not mark the defect repaired; that
-        is done on the Defects tab, by whoever actually fixed it.
+        Setup. Tap a WO number to see the parts and hours on it. Closing a work
+        order here does not mark a defect repaired; that is done on the Defects
+        tab, by whoever actually fixed it.
       </p>
+
+      {creating && (
+        <NewOrderDialog vehicles={vehicles} roster={roster}
+          onClose={() => setCreating(false)}
+          onSave={(info) => run(async () => {
+            await buy.createWorkOrder(info, who);
+            setCreating(false); await load();
+          })} />
+      )}
+
+      {issuing && (
+        <IssuePartsDialog w={issuing} who={who}
+          onClose={() => setIssuing(null)}
+          onDone={() => {
+            setOpen(issuing.id);
+            setLinesNonce((n) => n + 1);
+            setIssuing(null);
+          }} />
+      )}
 
       {closing && (
         <CloseDialog w={closing} onClose={() => setClosing(null)}
@@ -174,6 +229,259 @@ function Orders({ who, run, setErr }) {
           })} />
       )}
     </>
+  );
+}
+
+/* ── A job somebody decided on ─────────────────────────────────── */
+
+/* The unit is a dropdown over the equipment list rather than a typed
+   number, so a work order lands on the same truck the tires, services
+   and hours do. Anything not in Motive — a rental, a customer's truck —
+   gets added under Setup → Equipment first and then appears here.
+
+   Blank is allowed and means it. Not every job is a truck: a shelving
+   build or a yard tidy is real work somebody should be able to number
+   and book hours against. */
+function NewOrderDialog({ vehicles, roster, onClose, onSave }) {
+  const [f, setF] = useState({
+    vehId: "", title: "", detail: "", priority: "normal", assignTo: "",
+  });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const veh = vehicles.find((v) => v.id === f.vehId);
+  const ready = f.title.trim().length > 0;
+
+  return (
+    <Modal title="New work order" onClose={onClose} width={560}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <Field label="Unit">
+          <select style={inp} value={f.vehId} onChange={set("vehId")}>
+            <option value="">No unit — shop job</option>
+            {vehicles.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.num}{v.manual ? " (not in Motive)" : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Priority">
+          <select style={inp} value={f.priority} onChange={set("priority")}>
+            <option value="normal">Normal</option>
+            <option value="today">Today</option>
+            <option value="now">Now</option>
+          </select>
+        </Field>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="What needs doing">
+            <input style={inp} value={f.title} autoFocus onChange={set("title")}
+              placeholder="Replace the drive-side mirror" />
+          </Field>
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Detail">
+            <input style={inp} value={f.detail} onChange={set("detail")}
+              placeholder="optional" />
+          </Field>
+        </div>
+        <Field label="Put someone on it">
+          <select style={inp} value={f.assignTo} onChange={set("assignTo")}>
+            <option value="">— nobody yet —</option>
+            {roster.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <p style={{ fontSize: 12.5, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
+        This gets its own number off the same run as every other work order. It is
+        not tied to a defect, so no sync will ever renumber it or close it — only
+        somebody here can.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+        <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+        <Btn disabled={!ready} onClick={() => onSave({
+          vehId: f.vehId || null,
+          unit: veh ? veh.num : null,
+          title: f.title.trim(),
+          detail: f.detail.trim() || null,
+          priority: f.priority,
+          assignTo: f.assignTo ? roster.find((m) => m.id === f.assignTo) : null,
+        })}>OPEN IT</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Parts onto a work order ───────────────────────────────────── */
+
+/* This issues stock the same way the Inventory screen does — same
+   function, same ledger, same trigger moving on_hand. The only thing it
+   adds is filling in the work order number and the truck for you,
+   instead of somebody typing WO-1043 into a box and getting a digit
+   wrong. */
+function IssuePartsDialog({ w, who, onClose, onDone }) {
+  const [all, setAll] = useState(null);
+  const [q, setQ] = useState("");
+  const [pick, setPick] = useState(null);
+  const [qty, setQty] = useState("1");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    parts.listParts()
+      .then((rows) => setAll(rows.filter((p) => p.active !== false)))
+      .catch((e) => setErr(e.message || String(e)));
+  }, []);
+
+  const hits = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!all || !s) return [];
+    return all.filter((p) =>
+      `${p.num} ${p.name}`.toLowerCase().includes(s)).slice(0, 12);
+  }, [all, q]);
+
+  const n = Number(qty);
+  const save = async () => {
+    setBusy(true); setErr("");
+    try {
+      await parts.move(pick.id, "issue", n,
+        { vehId: w.vehId || null, workOrder: w.wo, note: note || null }, who);
+      onDone();
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`Issue parts to ${w.wo}`}
+      sub={`${w.unit || "shop job"} · ${w.title}`} onClose={onClose} width={560}>
+      {err && <div style={{ background: C.pull, color: "#fff", padding: "8px 12px",
+                            borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
+
+      <Field label="Find a part">
+        <input style={inp} value={q} autoFocus onChange={(e) => { setQ(e.target.value); setPick(null); }}
+          placeholder={all ? "part number or description" : "loading the shelf…"} />
+      </Field>
+
+      {!pick && hits.map((p) => (
+        <button key={p.id} onClick={() => { setPick(p); setQ(`${p.num} — ${p.name}`); }}
+          style={{ display: "block", width: "100%", textAlign: "left", cursor: "pointer",
+                   background: C.card, border: `1px solid ${C.line}`, borderRadius: 6,
+                   padding: "7px 10px", marginBottom: 4, font: "inherit", fontSize: 13 }}>
+          <b style={{ fontFamily: "monospace" }}>{p.num}</b> {p.name}
+          <span style={{ color: C.muted }}>
+            {" · "}{nf(p.available)} on the shelf{p.shop ? ` · ${p.shop}` : ""}
+          </span>
+        </button>
+      ))}
+
+      {pick && (
+        <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 4 }}>
+          <Field label={`How many (${pick.uom || "each"})`}>
+            <input type="number" min="1" step="1" style={inp} value={qty}
+              onChange={(e) => setQty(e.target.value)} />
+          </Field>
+          <Field label="On hand after">
+            <div style={{ padding: "8px 0", fontWeight: 600,
+              color: pick.onHand - n < 0 ? C.pull : C.ink }}>
+              {nf(pick.onHand)} → {nf(pick.onHand - n)}
+            </div>
+          </Field>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Field label="Note">
+              <input style={inp} value={note} onChange={(e) => setNote(e.target.value)}
+                placeholder="optional" />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      {pick && n > pick.available && (
+        <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600, lineHeight: 1.5 }}>
+          That is more than the {nf(pick.available)} available. It will still go
+          through — the shelf is the truth and the count should follow it — but
+          check the bin.
+        </p>
+      )}
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+        <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+        <Btn disabled={!pick || !(n > 0) || busy} onClick={save}>ISSUE</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── What has gone onto an order ───────────────────────────────── */
+
+/* Parts and hours found by the order's number, which is how they were
+   already being recorded — a part issued against WO-1043 by somebody
+   typing the number counts here exactly the same as one issued from the
+   button above. */
+function Lines({ wo }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    buy.workOrderLines(wo)
+      .then((r) => { if (live) setD(r); })
+      .catch((e) => { if (live) setErr(e.message || String(e)); });
+    return () => { live = false; };
+  }, [wo]);
+
+  if (err) return <span style={{ color: C.pull, fontSize: 12.5 }}>{err}</span>;
+  if (!d) return <span style={{ color: C.muted, fontSize: 12.5 }}>loading…</span>;
+  if (!d.parts.length && !d.hours.length)
+    return (
+      <span style={{ color: C.muted, fontSize: 12.5 }}>
+        Nothing on this order yet. <b>PARTS</b> issues stock to it, and hours
+        booked against {wo} on the Hours tab land here too.
+      </span>
+    );
+
+  return (
+    <div style={{ display: "flex", gap: 32, flexWrap: "wrap", fontSize: 12.5 }}>
+      {d.parts.length > 0 && (
+        <div>
+          <div style={{ fontFamily: FD, fontWeight: 700, color: C.green900, marginBottom: 4 }}>
+            Parts
+          </div>
+          {d.parts.map((p) => (
+            <div key={p.id} style={{ color: C.muted, lineHeight: 1.7 }}>
+              <span style={{ fontFamily: "monospace", color: C.ink }}>{nf(p.qty)} × {p.num}</span>
+              {p.name ? ` ${p.name}` : ""}
+              {p.cost != null ? ` · $${nf(p.cost, 2)}` : ""}
+              {p.who ? ` · ${p.who}` : ""}
+            </div>
+          ))}
+          <div style={{ marginTop: 4, fontWeight: 700, color: C.ink }}>
+            ${nf(d.partsCost, 2)}
+            {d.partsWithoutCost > 0 && (
+              <span style={{ color: C.muted, fontWeight: 400 }}>
+                {" "}· {d.partsWithoutCost} with no cost on file, not counted
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      {d.hours.length > 0 && (
+        <div>
+          <div style={{ fontFamily: FD, fontWeight: 700, color: C.green900, marginBottom: 4 }}>
+            Hours
+          </div>
+          {d.hours.map((h) => (
+            <div key={h.id} style={{ color: C.muted, lineHeight: 1.7 }}>
+              <span style={{ color: C.ink }}>{nf(h.hours, 2)} h</span>
+              {h.who ? ` · ${h.who}` : ""}{h.costCode ? ` · ${h.costCode}` : ""}
+            </div>
+          ))}
+          <div style={{ marginTop: 4, fontWeight: 700, color: C.ink }}>
+            {nf(d.hoursTotal, 2)} h
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
