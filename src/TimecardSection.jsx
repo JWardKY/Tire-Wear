@@ -61,6 +61,7 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
   const [codes, setCodes] = useState([]);
   const [parts, setParts] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [seedJob, setSeedJob] = useState(null);
   const [changingPin, setChangingPin] = useState(false);
 
   useEffect(() => {
@@ -111,6 +112,12 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
      moment it is used — a prefill that outlived the tap would put the
      last job's number on the next entry somebody typed. */
   useEffect(() => {
+    if (!focus?.startJob || !unlocked) return;
+    setSeedJob(focus.startJob);
+    onClearFocus?.();
+  }, [focus, unlocked, onClearFocus]);
+
+  useEffect(() => {
     if (!focus?.bookHours || !unlocked) return;
     const b = focus.bookHours;
     setEditing({
@@ -144,6 +151,12 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
              should end up looking at the day they just added to. */
           onBookHours={(j) => go?.("timecard", "today", {
             bookHours: { vehId: j.vehId, unit: j.unit, workOrder: j.wo, title: j.title },
+          })}
+          /* Start goes to the Today tab too, but as a running clock on
+             the equipment card rather than a filled-in entry: the point
+             of Start is that the time is happening now. */
+          onStartJob={(j) => go?.("timecard", "today", {
+            startJob: { woId: j.id, wo: j.wo, vehId: j.vehId, unit: j.unit, title: j.title },
           })} />
       </Body>
     );
@@ -202,6 +215,7 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
 
       <EquipmentWorked mechanic={unlocked} date={date}
         vehicles={vehicles} codes={codes} parts={parts}
+        seed={seedJob} onSeedUsed={() => setSeedJob(null)}
         onErr={setErr}
         onSaved={async () => {
           await loadDay().catch((e) => setErr(e.message));

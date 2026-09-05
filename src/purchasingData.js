@@ -339,6 +339,7 @@ export async function listWorkOrders(states) {
     detail: w.detail || "", priority: w.priority, state: w.state,
     assignedTo: w.assigned_to, assignedName: w.assigned_name || "",
     completedAt: w.completed_at, completionNote: w.completion_note || "",
+    holdReason: w.hold_reason || "", holdSince: w.hold_since,
     at: w.created_at,
   }));
 }
@@ -357,9 +358,39 @@ export async function closeWorkOrder(id, note, who) {
   check(await supabase.from("tw_work_orders").update({
     state: "done", completed_at: new Date().toISOString(),
     completed_by: who, completion_note: note || null,
+    /* A finished order is not waiting on anything. The database says the
+       same thing in tw_wo_done_is_not_held; clearing it here is what
+       keeps a close from tripping that. */
+    hold_reason: null, hold_since: null,
     updated_at: new Date().toISOString(),
   }).eq("id", id));
 }
+
+/* Stopped work without finishing. The hours are already saved and the
+   mechanic can clock out — this is the order saying why it is still
+   open, so tomorrow it does not read as one nobody has touched.
+
+   Passing no reason lifts the hold, which is what happens when somebody
+   picks the job back up. */
+export async function holdWorkOrder(id, reason) {
+  const now = new Date().toISOString();
+  check(await supabase.from("tw_work_orders").update({
+    hold_reason: reason || null,
+    hold_since: reason ? now : null,
+    updated_at: now,
+  }).eq("id", id));
+}
+
+/* What a mechanic can say about a job they are leaving unfinished.
+   Free text is allowed underneath; this is the list that makes the
+   common answer one tap. */
+export const HOLD_REASONS = [
+  "Waiting on parts",
+  "Waiting on an outside shop",
+  "Ran out of time",
+  "Needs another set of hands",
+  "Truck went back out",
+];
 
 /* ── Work history ──────────────────────────────────────────────── */
 
@@ -394,6 +425,7 @@ export async function myWork(mechanicId) {
     title: w.title, detail: w.detail || "", priority: w.priority,
     state: w.state, vehId: w.vehicle_id, at: w.created_at,
     assignedAt: w.assigned_at, startedAt: w.started_at,
+    holdReason: w.hold_reason || "", holdSince: w.hold_since,
     sourceKey: w.source_key,
   }));
 }

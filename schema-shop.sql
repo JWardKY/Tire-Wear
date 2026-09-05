@@ -277,6 +277,11 @@ create table if not exists tw_work_orders (
   completed_at timestamptz,
   completed_by text,
   completion_note text,
+  -- Stopped without being finished, and why. The mechanic's hours are
+  -- already saved and they can clock out; this is the order saying it is
+  -- still open on purpose rather than because nobody has touched it.
+  hold_reason text,
+  hold_since timestamptz,
   created_by text,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
@@ -692,6 +697,24 @@ do $do$ begin
 end $do$;
 do $do$ begin
   if not exists (select 1 from pg_constraint
+                  where conname = 'tw_wo_hold_is_complete' and conrelid = 'tw_work_orders'::regclass) then
+    alter table tw_work_orders add constraint tw_wo_hold_is_complete
+      CHECK (((hold_reason IS NULL) = (hold_since IS NULL)));
+  end if;
+end $do$;
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_wo_done_is_not_held' and conrelid = 'tw_work_orders'::regclass) then
+    -- A finished order is not waiting on anything. closeWorkOrder clears
+    -- the hold in the same statement; this stops the two disagreeing.
+    alter table tw_work_orders add constraint tw_wo_done_is_not_held
+      CHECK ((state <> 'done'::text) OR (hold_reason IS NULL));
+  end if;
+end $do$;
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
                   where conname = 'tw_wo_done_is_complete' and conrelid = 'tw_work_orders'::regclass) then
     alter table tw_work_orders add constraint tw_wo_done_is_complete CHECK (((state <> 'done'::text) OR (completed_at IS NOT NULL)));
   end if;
@@ -915,6 +938,7 @@ create index if not exists tw_work_log_type_idx ON public.tw_work_log USING btre
 create index if not exists tw_work_log_unit_idx ON public.tw_work_log USING btree (unit_number, occurred_at DESC);
 create index if not exists tw_work_log_who_idx ON public.tw_work_log USING btree (mechanic_id, occurred_at DESC);
 create index if not exists tw_work_orders_state ON public.tw_work_orders USING btree (state);
+create index if not exists tw_work_orders_held ON public.tw_work_orders USING btree (hold_since DESC) WHERE (hold_reason IS NOT NULL);
 create unique index if not exists tw_work_orders_source ON public.tw_work_orders USING btree (kind, source_key);
 
 
@@ -2411,3 +2435,7 @@ select d.id,
  where d.source = 'motive'
    and d.defect_key ~ '^motive:[0-9]+:[0-9]+$'
 on conflict (log_id, part_id) do nothing;
+
+-- Re-runnable for a database that already holds work orders.
+alter table tw_work_orders add column if not exists hold_reason text;
+alter table tw_work_orders add column if not exists hold_since timestamptz;

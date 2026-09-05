@@ -28,7 +28,7 @@ const PRIO_COLOUR = (p) => (p === "now" ? "pull" : p === "today" ? "watch" : "mu
 /* Handed the signed-in mechanic rather than sniffing it out of
    localStorage: this lives inside the timecard now, behind the PIN,
    which is where somebody's own work belongs. */
-export default function MyJobsSection({ me, onBusy, onBookHours, go }) {
+export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go }) {
   const [jobs, setJobs] = useState([]);
   const [defects, setDefects] = useState([]);
   const [pm, setPm] = useState([]);
@@ -108,6 +108,11 @@ export default function MyJobsSection({ me, onBusy, onBookHours, go }) {
             {j.detail && (
               <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{j.detail}</div>
             )}
+            {j.holdReason && (
+              <div style={{ fontSize: 11.5, color: C.watch, fontWeight: 700, marginTop: 5 }}>
+                {j.holdReason}
+              </div>
+            )}
             <div style={{ fontSize: 11.5, color: C.green600, marginTop: 6 }}>
               {j.state === "in progress" && j.startedAt ? "started · " : ""}tap for what is on it
             </div>
@@ -123,7 +128,15 @@ export default function MyJobsSection({ me, onBusy, onBookHours, go }) {
       {openJob && (
         <JobDialog j={openJob} me={me} go={go}
           onClose={() => setOpenJob(null)}
-          onStart={() => run(async () => { await buy.startWork(openJob.id); setOpenJob(null); })}
+          onStart={() => run(async () => {
+            await buy.startWork(openJob.id);
+            const j = openJob;
+            setOpenJob(null);
+            /* Straight to a running clock on the timecard. Pressing
+               Start and being left on the same list, with nothing
+               visibly counting, reads as the button not having worked. */
+            onStartJob?.(j);
+          })}
           onBookHours={() => { setOpenJob(null); onBookHours?.(openJob); }} />
       )}
 
@@ -258,6 +271,7 @@ function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
           {fromDefect ? "from a DVIR defect"
             : j.kind === "pm" ? "from a service interval" : "opened by hand"}
         </Tag>
+        {j.holdReason && <Tag tone="watch">{j.holdReason}</Tag>}
       </div>
 
       {j.detail && (
@@ -272,6 +286,11 @@ function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
             ? `Started ${fmtDate(String(j.startedAt).slice(0, 10))}`
             : "Not started"}
         </div>
+        {j.holdSince && (
+          <div style={{ color: C.watch }}>
+            Left {fmtDate(String(j.holdSince).slice(0, 10))} — {j.holdReason}
+          </div>
+        )}
       </div>
 
       {/* What has gone onto it. */}
@@ -322,9 +341,12 @@ function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
       </div>
 
       <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: "0 0 12px" }}>
-        Booking hours opens your timecard with this truck and {j.wo} already filled in,
-        so the time lands on the job rather than on a number somebody has to remember.
-        {fromDefect && " Finishing the truck is still marked repaired on the Defects tab, by whoever fixed it."}
+        {j.startedAt ? "Back on it" : "Start it"} puts a running clock on your timecard
+        with this truck and {j.wo} on it. When you stop, it asks whether the job is
+        finished — either answer saves your hours and lets you clock out.
+        Booking hours instead just opens an entry with the same details, for time you
+        have already spent.
+        {fromDefect && " Marking the truck repaired is still done on the Defects tab, by whoever fixed it."}
       </p>
 
       <div className="flex flex-wrap justify-end" style={{ gap: 8 }}>
@@ -334,8 +356,8 @@ function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
             OPEN THE WORK ORDER
           </Btn>
         )}
-        {!j.startedAt && <Btn tone="ghost" onClick={onStart}>START IT</Btn>}
-        <Btn onClick={onBookHours}>BOOK HOURS</Btn>
+        <Btn tone="ghost" onClick={onBookHours}>BOOK HOURS</Btn>
+        <Btn onClick={onStart}>{j.startedAt ? "BACK ON IT" : "START IT"}</Btn>
       </div>
     </Modal>
   );

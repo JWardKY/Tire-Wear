@@ -268,6 +268,35 @@ one fault is paperwork that has stopped meaning anything.
 onto the defect, so the two screens agree. Priority follows the defect — unsafe is
 `now`, major is `today`.
 
+**Start puts a clock on it.** START IT on a job stamps `started_at` and hands the job
+to the Today tab as a **running** equipment card — the truck, the WO number and the
+job's title already on it, clock counting. Pressing Start and being left on the same
+list with nothing visibly counting reads as the button not having worked, and the walk
+to the truck is real time.
+
+The card carries `woId`, not just the WO text, which is what lets saving the hours also
+say what happened to the job. A seeded card's WO number is read-only: editing it would
+leave `woId` pointing at one order and the text at another, and the outcome would land
+on the wrong one.
+
+**Both answers let somebody clock out.** A card with a `woId` must say *Finished it* or
+*Not finished* before it saves — one tap, and it is the question the shop could not
+answer before: the mechanic stopped, but is the truck fixed? *Finished* closes the
+order. *Not finished* takes a reason (`HOLD_REASONS`, or their own words) and writes
+`hold_reason` / `hold_since`, so the order stays open **saying so** rather than looking
+like one nobody has touched. It shows on the job card, in the job dialog and in the
+State column of the foreman's board.
+
+A system that only accepts "finished" teaches people to either lie or leave the hours
+off the books, and the second is worse. Hence: the hours save either way, and the
+outcome is applied *after* `saveCard` — a work order that will not update is worth
+telling somebody about and never worth losing an afternoon's hours over.
+
+Two constraints keep the hold honest: `tw_wo_hold_is_complete` ties `hold_reason` and
+`hold_since` together in both directions, and `tw_wo_done_is_not_held` refuses a hold on
+a finished order. `closeWorkOrder` clears the hold in the same statement, which is what
+keeps a close from tripping the second one.
+
 **A mechanic opens their own job from their own worklist.** The cards under
 *Assigned to me* on Timecard → My jobs are buttons. Tapping one shows where the job
 came from, when it was put on them, whether it has been started, and the parts and
