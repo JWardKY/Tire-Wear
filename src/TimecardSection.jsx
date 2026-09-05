@@ -49,7 +49,7 @@ function clearUnlock() {
   try { sessionStorage.removeItem(UNLOCK_KEY); } catch { /* not essential */ }
 }
 
-export default function TimecardSection({ who, tab, onBusy }) {
+export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFocus }) {
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -106,6 +106,26 @@ export default function TimecardSection({ who, tab, onBusy }) {
   const total = useMemo(
     () => entries.reduce((a, e) => a + e.hours, 0), [entries]);
 
+  /* Arrived from My jobs → BOOK HOURS. The order already knows its truck
+     and its number, so the entry opens with both filled in rather than
+     asking a mechanic to retype a WO number they were just looking at.
+
+     It waits for the PIN. Landing on the gate would otherwise burn the
+     hand-off — focus cleared, dialog never shown — and the tap would
+     look like it did nothing. */
+  useEffect(() => {
+    if (!focus?.addHours || tab !== "today" || !unlocked) return;
+    const a = focus.addHours;
+    setEditing({
+      vehId: a.vehId || "",
+      unit: a.unit || "",
+      workOrder: a.workOrder || "",
+      note: a.note || "",
+      date,
+    });
+    onClearFocus?.();
+  }, [focus, tab, unlocked, date, onClearFocus]);
+
   if (!ready) return <div style={{ padding: 40, color: C.muted }}>Loading your timecard…</div>;
 
   /* My jobs sits behind the PIN with the rest of the personal tabs. It
@@ -121,7 +141,7 @@ export default function TimecardSection({ who, tab, onBusy }) {
     }
     return (
       <Body err={err}>
-        <MyJobs me={unlocked} onBusy={onBusy} />
+        <MyJobs me={unlocked} onBusy={onBusy} go={go} />
       </Body>
     );
   }

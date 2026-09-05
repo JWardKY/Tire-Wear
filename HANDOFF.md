@@ -503,6 +503,23 @@ the same data as Defects and PM, scoped to them. A mechanic
 standing at a truck wants their own three jobs, not the shop's sixty; the Defects tab
 is the right view for a foreman and the wrong one for whoever is holding the wrench.
 
+**A job card is a way in, not a notice.** Tapping one opens the order in full —
+including what is already booked against it in parts and hours, which is what decides
+whether you are starting a job or finishing somebody else's afternoon — and offers the
+two things a mechanic wants next. **BOOK HOURS** lands on Today with the work order and
+its truck already filled in; **OPEN WORK ORDER** shows that one order on the Work orders
+tab. Both were several taps and a hand-typed WO number away before, and a hand-typed WO
+number is exactly where the wrong number gets typed.
+
+Three things about the hand-off. It rides the same `go(section, tab, focus)` channel the
+Now board already uses, so this added no second navigation mechanism. The hours end
+**waits for the PIN** — firing on the gate would spend the focus on a dialog nobody ever
+saw, and the tap would look like it did nothing. And the Work orders end **widens its
+state filter before narrowing to the one order**, because the tap says which job and a
+state filter that happened to exclude it would answer with an empty table and no reason
+why; if the order genuinely is not on the board, the whole board is shown and the chip
+says so rather than showing nothing.
+
 **My history** is the shop-wide history narrowed to one name, plus their closed
 shifts.
 

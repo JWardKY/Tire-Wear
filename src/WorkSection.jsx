@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { C, FD } from "./theme.js";
-import { fmtDate, nf, toCSV, Btn, Field, Modal, SectionLabel, inp, th, td, tdNum } from "./ui.jsx";
+import { fmtDate, nf, toCSV, Btn, Field, Modal, SectionLabel, inp, linkBtn, th, td, tdNum } from "./ui.jsx";
 import * as buy from "./purchasingData.js";
 import * as setup from "./setupData.js";
 import * as parts from "./partsData.js";
@@ -31,7 +31,7 @@ const KINDS = [
   ["parts", "Parts"], ["pm", "Services"], ["tires", "Tires"], ["order", "Orders"],
 ];
 
-export default function WorkSection({ who, tab, onBusy }) {
+export default function WorkSection({ who, tab, onBusy, focus, onClearFocus }) {
   const [err, setErr] = useState("");
   const run = useCallback(async (fn) => {
     onBusy?.(true); setErr("");
@@ -45,14 +45,15 @@ export default function WorkSection({ who, tab, onBusy }) {
                             borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
       {tab === "history"
         ? <History />
-        : <Orders who={who} run={run} setErr={setErr} />}
+        : <Orders who={who} run={run} setErr={setErr}
+            focus={focus} onClearFocus={onClearFocus} />}
     </div>
   );
 }
 
 /* ── Work orders ───────────────────────────────────────────────── */
 
-function Orders({ who, run, setErr }) {
+function Orders({ who, run, setErr, focus, onClearFocus }) {
   const [wos, setWos] = useState([]);
   const [roster, setRoster] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -79,6 +80,16 @@ function Orders({ who, run, setErr }) {
 
   useEffect(() => { load(); }, [load]);
 
+  /* Arrived here by tapping a job on My jobs. Widen the filter before
+     narrowing to the one order — the tap says which job, and a state
+     filter that happens to exclude it would answer with an empty table
+     and no reason why. */
+  useEffect(() => {
+    if (!focus?.woId) return;
+    setFilter("all");
+    setOpen(focus.woId);
+  }, [focus]);
+
   /* Every open defect gets a number the first time this is opened.
      Idempotent, so running it again costs nothing and changes nothing. */
   const sync = () => run(async () => {
@@ -87,10 +98,17 @@ function Orders({ who, run, setErr }) {
     await load();
   });
 
-  const shown = useMemo(
-    () => [...wos].sort((a, b) =>
+  const shown = useMemo(() => {
+    const sorted = [...wos].sort((a, b) =>
       (PRIORITY[a.priority] ?? 9) - (PRIORITY[b.priority] ?? 9) ||
-      b.wo.localeCompare(a.wo)), [wos]);
+      b.wo.localeCompare(a.wo));
+    /* Only narrow if the order is actually here. A tap that lands on a
+       filtered-out or deleted order should show the board, not nothing. */
+    if (focus?.woId && sorted.some((w) => w.id === focus.woId)) {
+      return sorted.filter((w) => w.id === focus.woId);
+    }
+    return sorted;
+  }, [wos, focus]);
 
   return (
     <>
@@ -110,6 +128,10 @@ function Orders({ who, run, setErr }) {
           <Btn onClick={() => setCreating(true)}>NEW WORK ORDER</Btn>
         </div>
       </div>
+
+      {focus?.wo && (
+        <FocusChip wo={focus.wo} shown={shown.length} onClear={onClearFocus} />
+      )}
 
       {synced && (
         <div style={{ background: C.good, color: "#fff", padding: "8px 12px",
@@ -180,7 +202,7 @@ function Orders({ who, run, setErr }) {
               </tr>
               {open === w.id && (
                 <tr><td colSpan={7} style={{ ...td, background: C.paper }}>
-                  <Lines key={`${w.id}:${linesNonce}`} wo={w.wo} />
+                  <WorkOrderLines key={`${w.id}:${linesNonce}`} wo={w.wo} />
                 </td></tr>
               )}
               </React.Fragment>
@@ -418,7 +440,7 @@ function IssuePartsDialog({ w, who, onClose, onDone }) {
    already being recorded — a part issued against WO-1043 by somebody
    typing the number counts here exactly the same as one issued from the
    button above. */
-function Lines({ wo }) {
+export function WorkOrderLines({ wo }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
 
@@ -481,6 +503,28 @@ function Lines({ wo }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FocusChip({ wo, shown, onClear }) {
+  return (
+    <div className="flex flex-wrap items-center"
+      style={{ gap: 10, background: C.card, border: `1px solid ${C.line}`,
+        borderLeft: `4px solid ${C.green700}`, borderRadius: 8,
+        padding: "10px 14px", marginBottom: 12 }}>
+      <span style={{ fontFamily: FD, fontSize: 13.5, fontWeight: 700,
+        letterSpacing: "0.04em", textTransform: "uppercase", color: C.green900 }}>
+        {wo}
+      </span>
+      <span style={{ fontSize: 13, color: C.muted }}>
+        {shown === 1
+          ? "you tapped this on My jobs"
+          : "no longer on the board — showing every work order instead"}
+      </span>
+      <button onClick={onClear} style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
+        Show all
+      </button>
     </div>
   );
 }
