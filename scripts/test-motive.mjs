@@ -7,7 +7,7 @@
 
    Run:  node scripts/test-motive.mjs
 */
-import { planOdometer, planDefects, planClosures, CLOSE_GUARD }
+import { planOdometer, planDefects, planClosures, planResolve, pickPending, CLOSE_GUARD }
   from "../netlify/functions/lib/motive.mjs";
 import { compareOdometers } from "../netlify/functions/lib/motive.mjs";
 import { makeChecks, report } from "./_testkit.mjs";
@@ -477,5 +477,160 @@ const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
   is(p.bump.length, 0, "a new report of a closed fault does not reopen the closed row");
   is(p.create.length, 1, "it is a new defect instead");
 }
+
+/* ── Telling Motive a defect was repaired ─────────────────────── */
+
+/* A pending row as runResolve builds them: one DVIR a fault was written
+   up on, joined to the defect the shop holds. */
+const pend = (over = {}) => ({
+  linkId: "l1", logId: 2426508359, partId: 5708807065, reportId: 10955122615,
+  unit: "DT-867", reportedOn: "2026-09-04", motiveVehicleId: 1251772,
+  defectKey: "motive:2426508359:5708807065", category: "Other",
+  state: "repaired", source: "motive", want: "repaired",
+  repairedBy: "Alex Oswald", repairNote: "Recharged the system", sentBy: null,
+  ...over,
+});
+
+{
+  const p = planResolve([pend()], { mechanics: new Map([["Alex Oswald", 16956760]]) });
+  is(p.calls.length, 1, "one report, one PUT");
+  const c = p.calls[0];
+  is(c.reportId, 10955122615, "addressed by the report id, not the log id");
+  is(c.defect_statuses.length, 1, "one defect_statuses entry");
+  const st = c.defect_statuses[0];
+  is(st.status, "repaired", "sent as repaired");
+  is(st.mechanic_id, 16956760, "with the mechanic's Motive id when we have one");
+  is(st.mechanic_name, "Alex Oswald", "and always their name");
+  is(st.mechanic_note, "Recharged the system", "carrying what they wrote");
+  is(st.resolved_defects.length, 1, "against one inspected part");
+  is(st.resolved_defects[0], 5708807065, "the part id out of the defect key");
+}
+
+{
+  /* The guard that matters most: this writes to a federal record. */
+  const p = planResolve([
+    pend({ linkId: "a", state: "open" }),
+    pend({ linkId: "b", state: "claimed", partId: 2 }),
+    pend({ linkId: "c", source: "manual", partId: 3 }),
+    pend({ linkId: "d", repairedBy: null, partId: 4 }),
+    pend({ linkId: "e", partId: null }),
+  ]);
+  is(p.calls.length, 0, "nothing unrepaired, unattributed or not Motive's is ever sent");
+  is(p.skipped.length, 5, "and every one of them is reported rather than dropped");
+  truthy(p.skipped.some((x) => x.why === "not a Motive defect"),
+         "a hand-logged defect is not Motive's to be told about");
+  truthy(p.skipped.some((x) => x.why.includes("nobody is recorded")),
+         "a repair with no mechanic on it certifies nothing");
+}
+
+{
+  /* Two mechanics, one DVIR. Neither gets credited with the other's work. */
+  const p = planResolve([
+    pend({ linkId: "a", partId: 11, repairedBy: "Alex Oswald", repairNote: "Belt" }),
+    pend({ linkId: "b", partId: 22, repairedBy: "Tyler Coffey", repairNote: "Mirror" }),
+    pend({ linkId: "c", partId: 33, repairedBy: "Alex Oswald", repairNote: "Belt" }),
+  ], { mechanics: new Map() });
+  is(p.calls.length, 1, "still one PUT, because it is one report");
+  is(p.calls[0].defect_statuses.length, 2, "but a defect_statuses entry each");
+  const alex = p.calls[0].defect_statuses.find((x) => x.mechanic_name === "Alex Oswald");
+  is(alex.resolved_defects.length, 2, "the two he fixed are grouped together");
+  truthy(!("mechanic_id" in alex),
+         "and no Motive id is invented for a mechanic nobody has mapped");
+}
+
+{
+  const p = planResolve([
+    pend({ linkId: "a", logId: 1, partId: 11 }),
+    pend({ linkId: "b", logId: 2, partId: 22 }),
+  ]);
+  is(p.calls.length, 2, "a fault written up on two DVIRs is sent to both");
+}
+
+{
+  /* Withdrawing a repair we already certified. */
+  const p = planResolve([pend({
+    want: "open", state: "open", repairedBy: null, repairNote: null,
+    sentBy: "Alex Oswald",
+  })]);
+  is(p.calls.length, 1, "a reopened defect goes back to Motive");
+  const st = p.calls[0].defect_statuses[0];
+  is(st.status, "open", "as open, not repaired");
+  is(st.mechanic_name, "Alex Oswald",
+     "under the name that claimed the repair, kept on the link after the defect cleared it");
+  truthy(st.mechanic_note.includes("still present"), "saying why it is back");
+}
+
+{
+  const p = planResolve([pend({ want: "open", state: "repaired", sentBy: "Alex Oswald" })]);
+  is(p.calls.length, 0, "a defect repaired again before the reopen went out is not withdrawn");
+}
+
+{
+  const p = planResolve([pend({ repairNote: "   " })]);
+  is(p.calls[0].defect_statuses[0].mechanic_note, "Repaired",
+     "an empty note still says something rather than going out blank");
+}
+
+{
+  const many = Array.from({ length: 40 }, (_, i) =>
+    pend({ linkId: `l${i}`, logId: 1000 + i, partId: i + 1 }));
+  is(planResolve(many, { limit: 25 }).calls.length, 25, "the batch is capped");
+}
+
+/* ── Which links have drifted from what the shop holds ────────── */
+
+{
+  const D = new Map([
+    ["d1", { id: "d1", source: "motive", state: "repaired", repaired_by: "Alex Oswald" }],
+    ["d2", { id: "d2", source: "motive", state: "open" }],
+    ["d3", { id: "d3", source: "motive", state: "closed" }],
+    ["d4", { id: "d4", source: "manual", state: "repaired", repaired_by: "Alex Oswald" }],
+  ]);
+  const L = [
+    { id: "a", defect_id: "d1", sent_status: null, attempts: 0 },
+    { id: "b", defect_id: "d1", sent_status: "repaired", attempts: 0 },
+    { id: "c", defect_id: "d2", sent_status: "repaired", attempts: 0 },
+    { id: "d", defect_id: "d2", sent_status: null, attempts: 0 },
+    { id: "e", defect_id: "d3", sent_status: null, attempts: 0 },
+    { id: "f", defect_id: "d4", sent_status: null, attempts: 0 },
+    { id: "g", defect_id: "d1", sent_status: null, attempts: 3 },
+    { id: "h", defect_id: "missing", sent_status: null, attempts: 0 },
+  ];
+  const got = pickPending(L, D);
+  const ids = got.map((x) => x.link.id).sort().join(",");
+  is(ids, "a,c", "only the two that have actually drifted");
+  is(got.find((x) => x.link.id === "a").want, "repaired", "a repair nobody has sent yet");
+  is(got.find((x) => x.link.id === "c").want, "open",
+     "and a repair Motive holds that the shop has put back on the queue");
+  truthy(!got.some((x) => x.link.id === "b"),
+         "a repair already sent is not sent again");
+  truthy(!got.some((x) => x.link.id === "d"),
+         "an open defect Motive was never told about needs no correction");
+  truthy(!got.some((x) => x.link.id === "e"), "a closed defect is finished business");
+  truthy(!got.some((x) => x.link.id === "f"), "a hand-logged defect is not Motive's");
+  truthy(!got.some((x) => x.link.id === "g"), "a link that has failed its attempts stops trying");
+  truthy(!got.some((x) => x.link.id === "h"), "a link with no defect behind it is ignored, not crashed on");
+}
+
+/* ── Which DVIRs a repair gets sent to ────────────────────────── */
+
+{
+  const d = (key, note, date) => ({
+    key, motiveVehicleId: 101, unit: "DT-882", date, where: null,
+    category: "Other", note, area: null, unsafe: false, reportStatus: "open",
+  });
+  const p = planDefects([
+    d("motive:900:9001", "AC quit", "2026-08-25"),
+    d("motive:901:9002", "AC quit", "2026-08-26"),
+    d("motive:902:9003", "AC quit", "2026-08-27"),
+  ], VEH, []);
+  is(p.create.length, 1, "one fault written up three mornings is still one job");
+  is(p.links.length, 3, "but all three DVIRs are recorded");
+  is(p.links[0].part_id, 9001, "with the inspected-part id parsed back out of the key");
+  is(p.links[2].log_id, 902, "and the report it was written up on");
+  truthy(p.links.every((l) => l.owner_key === "motive:900:9001"),
+         "all pointing at the one defect the shop sees");
+}
+
 
 report(state, true);

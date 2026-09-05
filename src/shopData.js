@@ -97,6 +97,18 @@ export async function releaseDefect(id) {
   );
 }
 
+/* Motive is the DOT record, and a defect the shop has fixed should not
+   sit "open" on it. The function reads the repair back out of the
+   database itself — nothing about which defect, whose name, or what note
+   is sent from here, because this call goes out over a public URL.
+   Fire and forget: the repair is already saved, and the nightly sweep
+   retries anything that does not land. */
+function nudgeMotiveResolve() {
+  try {
+    fetch("/.netlify/functions/motive-resolve", { method: "POST" }).catch(() => {});
+  } catch { /* no fetch, or running under a test harness */ }
+}
+
 export async function repairDefect(id, r, who) {
   check(
     await supabase.from("tw_defects")
@@ -111,6 +123,7 @@ export async function repairDefect(id, r, who) {
       })
       .eq("id", id)
   );
+  nudgeMotiveResolve();
 }
 
 /* Back to open, and the repair details go with it — leaving a repaired_by
@@ -132,6 +145,37 @@ export async function reopenDefect(id) {
       /* Never a closed one — see above. */
       .neq("state", "closed")
   );
+  /* The same nudge, because reopening is the direction that matters
+     most: if we have already told Motive this was repaired, that claim
+     has to be withdrawn. The write-back works out which way to go by
+     comparing what we hold against what Motive was last told. */
+  nudgeMotiveResolve();
+}
+
+/* What Motive has been told, per defect. Read-only, and only used to
+   show it — nothing in the app decides anything from this. */
+export async function listDefectDvirs() {
+  const rows = await fetchAll(
+    "tw_defect_dvirs",
+    "defect_id,log_id,sent_status,sent_at,sent_by,attempts,last_error"
+  );
+  const byDefect = new Map();
+  for (const r of rows) {
+    if (!byDefect.has(r.defect_id))
+      byDefect.set(r.defect_id, { total: 0, sent: 0, failed: 0, error: "", by: "", at: null });
+    const d = byDefect.get(r.defect_id);
+    d.total += 1;
+    if (r.sent_status === "repaired") {
+      d.sent += 1;
+      d.by = d.by || r.sent_by || "";
+      if (!d.at || r.sent_at > d.at) d.at = r.sent_at;
+    }
+    if (r.attempts >= 3 && r.sent_status !== "repaired") {
+      d.failed += 1;
+      d.error = d.error || r.last_error || "";
+    }
+  }
+  return byDefect;
 }
 
 export async function setDefectPriority(id, priority) {

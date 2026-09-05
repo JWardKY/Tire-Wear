@@ -11,12 +11,17 @@
    Add write=1 to actually write.
 
    Query:
-     what=odometer | defects | both   (default both)
+     what=odometer | defects | both | resolve   (default both)
      field=odometer | true_odometer   (which Motive number to believe)
      since=YYYY-MM-DD                 (defects: how far back, default 14d)
      write=1                          (with the token: actually write)
      raw=1                            (what Motive actually sent)
      n=1..25                          (raw: how many, default 2)
+     limit=1..100                     (resolve: how many DVIRs at most.
+                                       limit=1 with write=1 is how the
+                                       first live write-back gets proved
+                                       on one defect before the switch is
+                                       left on)
      status=...                       (raw: which filter to ask Motive for.
                                        It takes all, with_defects,
                                        with_no_defects, with_signature_missing,
@@ -25,6 +30,7 @@
                                        how the status=open bug was found)
 */
 import { env, runOdometer, runDefects, rawSample } from "./lib/sync.mjs";
+import { env as resolveEnv, runResolve } from "./lib/resolve.mjs";
 
 /* Compare without leaking the answer in how long it takes. */
 function timingSafeEqual(a, b) {
@@ -65,6 +71,14 @@ export default async (req) => {
       out.odometer = await runOdometer(ctx, { write: wants, field: q.get("field") });
     if (what === "defects" || what === "both")
       out.defects = await runDefects(ctx, { write: wants, since: q.get("since") });
+    /* Not in "both": this one writes to Motive, and a habit of running
+       the sync with write=1 should never quietly certify a repair on a
+       DOT record. It has to be asked for by name. */
+    if (what === "resolve")
+      out.resolve = await runResolve(resolveEnv(), {
+        write: wants,
+        limit: Math.min(Math.max(Number(q.get("limit")) || 25, 1), 100),
+      });
   } catch (e) {
     return json(502, { ...out, error: e.message });
   }

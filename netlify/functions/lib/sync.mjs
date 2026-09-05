@@ -168,6 +168,10 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
     cleanChecklistLines: fromMotive.checklistLines ?? null,
     wouldCreate: plan.create.length,
     wouldBump: plan.bump.length,
+    /* One per DVIR a fault appears on. Higher than wouldCreate whenever
+       the same fault was written up on more than one inspection, which
+       is the normal case for anything that stays broken for a week. */
+    wouldLinkDvirs: plan.links.length,
     alreadyHave: plan.already.length,
     sample: plan.create.slice(0, 5).map((r) => ({
       unit: r.unit_number, category: r.category, safety: r.safety, on: r.first_reported,
@@ -208,6 +212,14 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
       .update({ ...cols, updated_at: new Date().toISOString() }).eq("id", id);
     if (error) throw error;
   }
+
+  /* Which DVIRs each fault sits on, so a repair can be sent back to all
+     of them. Written after the defects themselves, because a link needs
+     the row it points at to exist; keyed on (log_id, part_id) so a rerun
+     adds nothing. A failure here is logged rather than thrown: the
+     defects are already imported, and a missing link costs a write-back,
+     not a repair record. */
+  const linked = await writeDvirLinks(db, plan.links);
   /* Closing last, so a failure here cannot stop new defects landing.
      Only state and closed_at are written: repaired_by and repair_note
      are the record of who fixed it, and closing does not get to touch
@@ -243,7 +255,44 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
     if (logErr) console.warn("work log write failed:", logErr.message);
   }
 
-  return { dryRun: false, ...out, created, bumped: plan.bump.length, closed };
+  return { dryRun: false, ...out, created, bumped: plan.bump.length, linked, closed };
+}
+
+async function writeDvirLinks(db, links) {
+  if (!links.length) return 0;
+  const byKey = new Map();
+  for (const l of links) byKey.set(l.owner_key, null);
+
+  /* PostgREST caps an `in` list by URL length long before it caps rows,
+     so the ids come back in batches. */
+  const keys = [...byKey.keys()];
+  for (let i = 0; i < keys.length; i += 100) {
+    const { data, error } = await db.from("tw_defects")
+      .select("id,defect_key").in("defect_key", keys.slice(i, i + 100));
+    if (error) { console.warn("dvir link lookup failed:", error.message); return 0; }
+    for (const r of data || []) byKey.set(r.defect_key, r.id);
+  }
+
+  const rows = links
+    .filter((l) => byKey.get(l.owner_key))
+    .map((l) => ({
+      defect_id: byKey.get(l.owner_key),
+      log_id: l.log_id,
+      part_id: l.part_id,
+      unit_number: l.unit_number,
+      reported_on: l.reported_on,
+    }));
+
+  let written = 0;
+  for (let i = 0; i < rows.length; i += 200) {
+    const { data, error } = await db.from("tw_defect_dvirs")
+      .upsert(rows.slice(i, i + 200),
+              { onConflict: "log_id,part_id", ignoreDuplicates: true })
+      .select("id");
+    if (error) { console.warn("dvir link write failed:", error.message); return written; }
+    written += data?.length ?? 0;
+  }
+  return written;
 }
 
 function daysAgo(n) {

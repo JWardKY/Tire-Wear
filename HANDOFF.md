@@ -842,9 +842,12 @@ dropdown on the vehicle screen is there for exactly this.
 
 ### Defects, and the state Motive owns
 
-Jason's rule 1: **nothing in this system closes a DVIR.** A mechanic marking a
-defect repaired takes it off their queue and does not touch Motive. Only a Motive
-sync may close one, and that is enforced rather than merely intended:
+Jason's rule 1: **nothing in this system closes a DVIR.** That still holds, and it
+is narrower than it sounds. Since the write-back below, marking a defect repaired
+does tell Motive the defect was repaired — with the mechanic's name and note on
+it. What it never does is close or sign the DVIR: closing is Motive's, and a
+signature is a person's. Only a Motive sync may close a defect here, and that is
+enforced rather than merely intended:
 
 - `state` is `open | claimed | repaired | closed`, and a check constraint ties
   `state = 'closed'` to `closed_at` being set, both directions.
@@ -940,6 +943,76 @@ and the plain dry run reports `reportStates` alongside the import numbers:
 The planning logic is pure and covered by `scripts/test-motive.mjs`, which needs
 no key — including a guard that the feed can only ever ask Motive for a status it
 accepts. That check is the one that would have caught this before it shipped.
+
+### Telling Motive a defect was repaired
+
+The other direction, and the only place this app writes to somebody else's system
+of record. A mechanic marks a defect repaired; the DVIR gets a `defect_statuses`
+update saying that inspected part is `repaired`, by whom, with their note.
+
+**Why the asymmetry in care.** Reading Motive wrong puts bad data on our screens,
+somebody notices, we fix it. Writing Motive wrong puts a false repair
+certification on a federal inspection record, nobody notices, and that record is
+what an auditor reads. Everything below follows from that.
+
+**The switch.** Nothing is sent unless `MOTIVE_WRITEBACK` is exactly `on` in the
+Netlify environment. Not a dry-run flag that defaults to writing — a variable
+somebody has to set, so the first live write is a decision rather than a deploy's
+side effect. With it unset, every path still runs and reports the exact payload it
+would have sent.
+
+**The ids, and the one that is not obvious.** A `defect_key` is
+`motive:<log_id>:<part_id>`. The part id is what `resolved_defects` wants — checked
+against a live DVIR, where our stored `motive:2426508359:5708807065` matched the
+inspected part `5708807065` exactly. The report id is *not* `log_id`: the same
+report is `log_id` 2426508359 and `id` 10955122615, and `/v2/inspection_reports/{id}`
+wants the second. Defects imported before this existed only carry the first, so
+`findReportId` looks it up from the day's reports and caches it on the row.
+
+**One fault, many DVIRs.** The sync deliberately folds a fault reported eight
+mornings running into one job, so the board shows one row. Telling Motive it is
+fixed means telling all eight reports. `tw_defect_dvirs` keeps every DVIR a fault
+appeared on; without it only the report that opened the row would ever be closed.
+Repeats folded in *before* this table existed were never recorded and cannot be
+recovered — the backfill can only reach the opening report of each defect.
+
+**Reopening.** If a defect goes back on the queue after we told Motive it was
+fixed, the claim is withdrawn: the same parts go back to `open` under the same
+name that certified them. `sent_by` lives on the link precisely because the
+defect's own `repaired_by` is cleared on reopen, and a correction should carry the
+signature of the claim it withdraws.
+
+**What is deliberately not done.**
+
+- No signature. `mechanic_signature_url` is produced when a person signs in
+  Motive. Nothing here forges one, and the repaired tab says so.
+- No report-level status. With Defect Level Resolution enabled — which this fleet
+  has, every inspected part comes back with its own `status` and a
+  `mechanic_details` slot — Motive answers 400 to a report-level status on a PUT.
+- No fuzzy mechanic matching. `tw_mechanics.motive_user_id` is a stored mapping,
+  seeded only from exact first+last matches against Motive's user list. Josh vs
+  Joshua Sawyers, Isiaih vs Isaah Deer and Dillon vs Dylan Barnes are almost
+  certainly the same people, and are left null for a person to confirm; the
+  payload falls back to the app's name, which is right either way.
+
+**The one thing not verified against a live response.** Motive's developer docs
+are unreachable from the build environment, so the request envelope — whether the
+body is wrapped in `inspection_report` or flat — is the single guess in here. A
+400 or 422 retries once unwrapped and the result reports which shape Motive took;
+a rejected request changed nothing, so the retry cannot double-apply. Prove it on
+one defect before leaving the switch on:
+
+    curl -X POST -H "X-Sync-Token: $SYNC_TOKEN" \
+      ".../.netlify/functions/motive-sync?what=resolve&limit=1&write=1"
+
+Without `write=1` that reports the payloads and sends nothing. `what=resolve` is
+deliberately not part of `what=both`: a habit of running the sync with `write=1`
+should never quietly certify a repair.
+
+**Retries.** Three attempts per link, then it stops and the error is visible on
+the defect. The app nudges `/.netlify/functions/motive-resolve` when a repair is
+saved — POST, no input, everything read back out of the database, same shape as
+the tire alert — and the nightly sweep picks up whatever did not land.
 
 ### Defects
 

@@ -270,6 +270,22 @@ export function planDefects(fromMotive, vehicles, existing) {
   }
 
   const create = [], bump = [], already = [];
+  /* Every DVIR a fault was written up on, not just the one that opened
+     the row. A fault reported eight mornings running is eight separate
+     Motive defects on eight separate reports; the board rightly shows
+     one job, but telling Motive it is fixed means telling all eight.
+     Without this only the first would ever be closed. */
+  const links = [];
+  const link = (ownerKey, d, unit, date) => {
+    const [, logId, partId] = d.key.split(":");
+    links.push({
+      owner_key: ownerKey,
+      log_id: Number(logId),
+      part_id: Number(partId),
+      unit_number: unit,
+      reported_on: date,
+    });
+  };
 
   for (const d of fromMotive) {
     if (seenKeys.has(d.key)) { already.push(d.key); continue; }
@@ -284,6 +300,7 @@ export function planDefects(fromMotive, vehicles, existing) {
        database. There is no id to update yet, so fold the repeat into the
        pending insert instead of emitting an UPDATE against a null id. */
     if (open && open.id == null) {
+      link(open.defect_key, d, unit, date);
       open.report_count = (open.report_count || 1) + 1;
       if (date > open.last_reported) open.last_reported = date;
       if (date < open.first_reported) open.first_reported = date;
@@ -292,6 +309,7 @@ export function planDefects(fromMotive, vehicles, existing) {
     }
 
     if (open) {
+      link(open.defect_key, d, unit, date);
       bump.push({
         id: open.id,
         unit,
@@ -330,11 +348,12 @@ export function planDefects(fromMotive, vehicles, existing) {
       created_by: "motive-sync",
     };
     create.push(row);
+    link(d.key, d, unit, date);
     /* The same object, not a copy: a repeat later in this run folds into
        the row that is about to be inserted. */
     openIdx.set(faultOf(unit, d.category, d.note), row);
   }
-  return { create, bump, already };
+  return { create, bump, already, links };
 }
 
 /* What counts as "the same fault reported again".
@@ -436,3 +455,230 @@ export function planClosures(openFromMotive, existing, { since, guard = CLOSE_GU
 }
 
 export { MotiveError, WHICH_ODOMETER };
+
+/* ── Telling Motive a defect was repaired ─────────────────────────
+   The other direction, and the one that writes to somebody else's
+   system of record. A DVIR is the DOT document; what goes back on it is
+   a mechanic's certification that a fault was fixed, so the fences here
+   are about never certifying something a person did not.
+
+   What Motive accepts is a `defect_statuses` block: mechanic details
+   plus `resolved_defects`, a list of inspected-part ids, and a status of
+   open, repaired or no_repair_needed. The part ids are the ones we
+   already store — a defect_key of motive:2426508359:5708807065 carries
+   the report's log_id and the inspected-part id, and 5708807065 is
+   exactly what resolved_defects wants. That was checked against a live
+   DVIR rather than assumed.
+
+   What is NOT done here:
+
+   - The report-level status is never sent. With Defect Level Resolution
+     enabled Motive answers 400 to it, and this fleet has it enabled
+     (every inspected part comes back with its own status and a
+     mechanic_details slot). Resolving parts is the whole job.
+
+   - No signature. mechanic_signature_url is produced when a person
+     signs in Motive; nothing here forges one. This records who repaired
+     the fault and what they wrote, which is what the app actually
+     knows. */
+
+const RESOLVE_STATUS = "repaired";
+
+/* Motive's docs are not reachable from the build environment, so the
+   request envelope is the one thing here that was not verified against a
+   live response. Their other update endpoints wrap the body in the
+   resource name, so that is the default; a 400 or 422 retries once
+   unwrapped and the result says which shape Motive took. A rejected
+   request changed nothing, so the retry cannot double-apply. */
+async function putJSON(path, key, body) {
+  const res = await fetch(new URL(BASE + path), {
+    method: "PUT",
+    headers: {
+      "X-API-Key": key,
+      "X-Metric-Units": "false",
+      "content-type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  return { ok: res.ok, status: res.status, text: (await res.text()).slice(0, 500) };
+}
+
+export async function putDefectStatuses(key, reportId, defectStatuses) {
+  const inner = { defect_statuses: defectStatuses };
+  let r = await putJSON(`/v2/inspection_reports/${reportId}`, key,
+                        { inspection_report: inner });
+  let shape = "wrapped";
+  if (!r.ok && (r.status === 400 || r.status === 422)) {
+    const flat = await putJSON(`/v2/inspection_reports/${reportId}`, key, inner);
+    if (flat.ok) { r = flat; shape = "flat"; }
+    else r = { ...r, text: `${r.text} | unwrapped retry: ${flat.status} ${flat.text}` };
+  }
+  return { ...r, shape };
+}
+
+/* Finding the id the update endpoint wants.
+
+   A report has two: log_id, which is what a defect_key was built from,
+   and id, which is what /v2/inspection_reports/{id} addresses. They are
+   different numbers on the same report — 2426508359 and 10955122615 on
+   the DVIR this was checked against. Defects imported before this
+   existed only carry log_id, so it is looked up: the day's reports for
+   that one vehicle, matched on log_id. One extra GET per report, and the
+   answer is cached on the row afterwards. */
+export async function findReportId(key, { motiveVehicleId, date, logId }) {
+  if (!date || !logId) return null;
+
+  const match = (d) => {
+    for (const w of d.inspection_reports || []) {
+      const r = w.inspection_report || w;
+      if (String(r.log_id) === String(logId)) return r.id ?? null;
+    }
+    return null;
+  };
+
+  /* Narrowed to the one vehicle when we can. Whether Motive wants
+     vehicle_ids repeated or comma-joined is not something the docs here
+     could settle, so a filter that silently matches nothing falls
+     through to the unfiltered day rather than reporting "no such
+     report". Slower, and right either way. */
+  if (motiveVehicleId) {
+    const d = await motive("/v2/inspection_reports", key, {
+      vehicle_ids: [motiveVehicleId],
+      start_date: date, end_date: date, status: "all",
+      per_page: 100, page_no: 1,
+    });
+    const hit = match(d);
+    if (hit) return hit;
+  }
+
+  for (let page = 1; page <= 20; page++) {
+    const d = await motive("/v2/inspection_reports", key, {
+      start_date: date, end_date: date, status: "all",
+      per_page: 100, page_no: page,
+    });
+    const hit = match(d);
+    if (hit) return hit;
+    if ((d.inspection_reports || []).length < 100) return null;
+  }
+  return null;
+}
+
+/* Which DVIR links have drifted from what the shop holds.
+
+   Kept as a plain function over two lists rather than a PostgREST
+   embedded filter. The query it replaces would have been one round trip,
+   but `!inner` with a filter on the embedded table is a shape nothing
+   else in this codebase uses and that nothing here can exercise — and
+   the failure mode of getting it subtly wrong is sending the wrong
+   defect to a federal record. Two small reads and a join in memory is
+   the same answer, provably. */
+export function pickPending(links, defectsById, { maxAttempts = 3 } = {}) {
+  const out = [];
+  for (const l of links) {
+    if ((l.attempts || 0) >= maxAttempts) continue;
+    const d = defectsById.get(l.defect_id);
+    if (!d || d.source !== "motive") continue;
+
+    /* Never sent, and the shop says it is fixed. */
+    if (!l.sent_status && d.state === "repaired") { out.push({ link: l, defect: d, want: "repaired" }); continue; }
+    /* We told Motive it was fixed and it is back on the queue. */
+    if (l.sent_status === "repaired" && (d.state === "open" || d.state === "claimed"))
+      out.push({ link: l, defect: d, want: "open" });
+    /* Everything else agrees, or is closed, and is left alone. */
+  }
+  return out;
+}
+
+/* What to send, worked out without touching the network so it can be
+   tested and so a dry run shows the exact payload.
+
+   Two directions, because both are true statements about a truck:
+
+     repaired — the app holds the fault as fixed, and Motive has not been
+                told yet.
+     open     — we told Motive it was fixed and the shop has since put it
+                back on the queue. Leaving "repaired" standing on the
+                DVIR after that is the one outcome worth more than a bit
+                of extra code: it is a federal record saying a fault was
+                certified fixed when the people who would know say it
+                is not.
+
+   One PUT per report, because that is what the endpoint addresses.
+   Inside it, one defect_statuses entry per (mechanic, note, status)
+   pair: two mechanics who fixed two faults on the same DVIR each get
+   their own name against their own parts rather than one being credited
+   with both. */
+export function planResolve(pending, { mechanics = new Map(), limit = 25 } = {}) {
+  const calls = [];
+  const skipped = [];
+  const byReport = new Map();
+
+  for (const p of pending) {
+    /* Belt and braces. runResolve already asks the database for exactly
+       these, but this is the last point before a write to a DOT record,
+       and a query that quietly widened is not something to find out
+       about afterwards. */
+    if (p.source !== "motive") { skipped.push({ ...p, why: "not a Motive defect" }); continue; }
+    if (!p.partId || !p.logId) { skipped.push({ ...p, why: "no Motive ids" }); continue; }
+    if (p.want === "repaired") {
+      if (p.state !== "repaired") { skipped.push({ ...p, why: `state is ${p.state}` }); continue; }
+      if (!p.repairedBy) { skipped.push({ ...p, why: "nobody is recorded as having repaired it" }); continue; }
+    } else if (p.want === "open") {
+      if (p.state === "repaired") { skipped.push({ ...p, why: "repaired again before the reopen was sent" }); continue; }
+    } else {
+      skipped.push({ ...p, why: `not a status this sends: ${p.want}` });
+      continue;
+    }
+
+    if (!byReport.has(p.logId)) byReport.set(p.logId, []);
+    byReport.get(p.logId).push(p);
+  }
+
+  for (const [logId, rows] of byReport) {
+    if (calls.length >= limit) break;
+    const groups = new Map();
+    for (const p of rows) {
+      /* On a reopen the repair details are gone from the defect — the
+         app clears them, because leaving a repaired_by on something that
+         is not repaired would be a lie. The name that went to Motive is
+         kept on the link instead, so the correction carries the same
+         signature as the claim it withdraws. */
+      const who = p.want === "open" ? (p.sentBy || p.repairedBy || "Shop") : p.repairedBy;
+      const note = p.want === "open"
+        ? "Reopened in the shop — the fault is still present."
+        : ((p.repairNote || "").trim() || "Repaired");
+      const gk = `${p.want}|${who}|${note}`;
+      if (!groups.has(gk)) {
+        groups.set(gk, {
+          /* Sent when we know it. Most of the shop are Motive users, but
+             the names do not always match — Dylan/Dillon, Isaah/Isiaih —
+             so this is a stored mapping rather than a fuzzy match on a
+             name, which would credit the wrong person. */
+          ...(mechanics.get(who) ? { mechanic_id: mechanics.get(who) } : {}),
+          mechanic_name: who,
+          mechanic_note: note,
+          status: p.want,
+          resolved_defects: [],
+        });
+      }
+      groups.get(gk).resolved_defects.push(p.partId);
+    }
+    calls.push({
+      logId,
+      reportId: rows[0].reportId || null,
+      motiveVehicleId: rows[0].motiveVehicleId || null,
+      unit: rows[0].unit,
+      date: rows[0].reportedOn,
+      /* Carried per link, because one PUT can be half repairs and half
+         reopens and each row has to be stamped with what it actually
+         said. */
+      links: rows.map((r) => ({ id: r.linkId, want: r.want, by: r.want === "open"
+        ? (r.sentBy || r.repairedBy || "Shop") : r.repairedBy })),
+      defect_statuses: [...groups.values()],
+    });
+  }
+  return { calls, skipped };
+}
+
+export { RESOLVE_STATUS };
