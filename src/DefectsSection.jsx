@@ -463,15 +463,16 @@ function RepairDialog({ d, busy, onClose, onSave }) {
 }
 
 /* ── Repaired, and what Motive has been told ──────────────────────
-   Jason's rule 1 used to be that nothing here writes back to Motive.
-   That changed: marking a defect repaired now sends the repair to the
-   DVIR, with the mechanic's name and note on it.
+   Jason's rule 1 used to be that nothing here touches Motive at all.
+   That changed twice: marking a defect repaired now sends the repair to
+   the DVIR with the mechanic's name and note on it, and a defect closes
+   here when Motive stops calling it open.
 
    What did not change is that Motive stays the record. This app never
-   claims a DVIR is closed — it says what it sent and when, and a row
-   whose send has not landed is shown as not landed rather than quietly
-   counted as done. Somebody still signs the DVIR in Motive; a signature
-   is a person's, and nothing here forges one. */
+   decides on its own that a fault is finished — it says what it sent and
+   when, and a row whose send has not landed is shown as not landed
+   rather than quietly counted as done. Somebody still signs the DVIR in
+   Motive; a signature is a person's, and nothing here forges one. */
 
 export function daysWaiting(d) {
   if (!d.repairedAt) return null;
@@ -554,7 +555,7 @@ function AwaitingClose({ rows, dvirs }) {
         Marking a defect repaired takes it off the mechanic’s list and sends the repair
         to the Motive DVIR under the name of whoever fixed it. It does not sign the
         DVIR — a signature is a person’s, and somebody still signs it in Motive. These
-        drop off this list once a sync stops seeing the fault.
+        drop off this list once Motive says the fault is dealt with.
       </p>
     </div>
   );
@@ -574,10 +575,11 @@ function ClosedNote() {
       </div>
       <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", maxWidth: 760,
         lineHeight: 1.55 }}>
-        These dropped off because a sync stopped seeing them, which is the only way a
-        defect closes here — this app tells Motive a fault was repaired, but only
-        Motive closes a DVIR. Who repaired it and what they wrote is kept. If the same
-        fault comes back it arrives as a new defect with its own number rather than
+        These closed because Motive stopped calling the defect open — whether somebody
+        resolved it in the Motive app or the repair went up from here. That is the only
+        way a defect closes: Motive owns whether a fault is dealt with, and this board
+        only ever agrees with it. Who repaired it and what they wrote is kept. If the
+        same fault comes back it arrives as a new defect with its own number rather than
         reopening this one, so the record of the first repair stays intact.
       </p>
     </div>

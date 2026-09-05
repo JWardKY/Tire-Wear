@@ -15,7 +15,10 @@
      field=odometer | true_odometer   (which Motive number to believe)
      since=YYYY-MM-DD                 (defects: how far back, default 14d)
      write=1                          (with the token: actually write)
-     raw=1                            (what Motive actually sent)
+     raw=1                            (what Motive actually sent. With
+                                       what=parts this is the v2 feed
+                                       closing runs on, summarised —
+                                       which proves the key can call v2)
      n=1..25                          (raw: how many, default 2)
      limit=1..100                     (resolve: how many DVIRs at most.
                                        limit=1 with write=1 is how the

@@ -153,10 +153,10 @@ export async function fetchInspectionDefects(key, sinceISO, status = "with_defec
         /* Motive's own word for it. The report-level status is about the
            paperwork being signed off, not about the truck. */
         unsafe: type === "major",
-        /* The DVIR's own state, carried through so closing a defect can
-           be driven by something Motive actually says rather than by a
-           fault's absence from a second feed. Not yet acted on: see
-           planClosures. */
+        /* The DVIR's own paperwork state. Kept for the dry run's
+           reportStates, and deliberately NOT what closing runs on — a
+           report can read "resolved" while the defect on it is still
+           open. See planClosuresFromParts. */
         reportStatus: r.status || null,
         /* Deliberately not kept: picture_url is a signed S3 link that
            expires in fifteen minutes, so storing it would save a dead
@@ -165,6 +165,48 @@ export async function fetchInspectionDefects(key, sinceISO, status = "with_defec
     }
   }
   out.checklistLines = checklistLines;
+  return out;
+}
+
+/* The state of every inspected part, which is what says whether a fault
+   has been dealt with in Motive.
+
+   This reads /v2, not the /v1 feed the import uses, because v1 hands
+   back a report-level `defects` array and v2 hands back `inspected_parts`
+   with a `status` on each one. That per-part status is the whole point:
+   the report's own status is not it. A live example — HT-1373 on
+   2026-09-04, report 10954864043 — comes back with status "resolved"
+   while its one defect part, "Check engine and wrench light is on", is
+   still "open". Closing on the report status would have marked that
+   fault dealt with while the truck still had it.
+
+   Asked for as with_defects: a report that had a defect still has one
+   after the defect is resolved, so the resolution shows up here. If
+   Motive ever moves resolved reports out of that feed, parts stop being
+   seen and nothing closes — which is the safe way for this to break. */
+export async function fetchInspectionParts(key, sinceISO, status = "with_defects") {
+  const rows = await motiveAll(
+    "/v2/inspection_reports", key,
+    { start_date: sinceISO, status },
+    (d) => d.inspection_reports || []
+  );
+  const out = new Map();
+  for (const w of rows) {
+    const r = w.inspection_report || w;
+    const logId = r.log_id ?? r.id;
+    for (const part of r.inspected_parts || []) {
+      out.set(`${logId}:${part.id}`, {
+        logId,
+        partId: part.id,
+        reportId: r.id ?? null,
+        status: part.status || null,
+        type: (part.type || "").toLowerCase(),
+        /* Filled in when a mechanic actually records a resolution.
+           Unambiguous where a bare status is not. */
+        hasMechanic: part.mechanic_details != null,
+      });
+    }
+  }
   return out;
 }
 
@@ -370,86 +412,117 @@ const faultOf = (unit, category, note) =>
 
 
 /* ── Closing a defect ─────────────────────────────────────────────
-   Jason's rule 1, and the most dangerous thing in this file.
+   Jason's rule 1 stands: Motive owns whether a fault is dealt with, and
+   this only ever agrees with Motive. What changed is that there is now a
+   signal worth agreeing with.
 
-   Nothing here closes a DVIR. Motive is the DOT record; a mechanic
-   marking a defect repaired takes it off their queue and does not touch
-   Motive.
+   The first attempt read a second feed, `status=open`, and closed
+   anything missing from it. That feed does not exist — `open` is a value
+   the report-level status FIELD takes, not a value the status FILTER
+   accepts, and Motive answers 400. The live dry run caught it.
 
-   This was built to read a second feed, `status=open`, and close
-   anything missing from it. That feed does not exist: Motive answers
-   400, because `open` is a value the report-level status *field* takes,
-   not a value the status *filter* accepts. The first live dry run said
-   so, which is what a dry run is for. Nothing had run against it yet.
+   The rebuild after that was going to use the report-level status from
+   the feed we already fetch. That is also wrong, and it took a live
+   report to see why: report 10954864043 on HT-1373 comes back with
+   status "resolved" while the defect on it is still "open". A report's
+   status is about the report. A defect's status is on the part.
 
-   So closing is off until the signal is verified. runDefects reports
-   the distribution of report statuses it actually sees, which is the
-   observation needed to turn it back on — the with_defects feed already
-   carries each report's status, so the right version of this needs no
-   second call at all. What is below still runs on a dry run so the
-   fences stay exercised and testable; nothing reaches it in write mode.
+   So closing now reads the per-part status out of the v2 feed, and it is
+   a POSITIVE rule — Motive says this part is no longer open — rather
+   than the absence-inference it started as. Absence closes nothing:
+   a part we did not see stays open here, so a broken feed, a bad key or
+   a changed parameter can only ever fail to close, never over-close.
 
-   Absence is weak evidence, so it is fenced three ways:
+   Four fences, and each one guards a different way of being wrong:
 
-   1. **Only inside the window.** The feed is date-bounded. A defect last
-      reported before `since` would not appear even if it were still wide
-      open, so it is never a candidate. Widening the lookback widens what
-      can be closed, deliberately.
+   1. **Only Motive's own.** A hand-logged defect is not Motive's to
+      close.
 
-   2. **Only Motive's own.** A hand-logged defect has no business being
-      closed by something Motive did or did not say.
+   2. **Only parts we actually saw, with a status we actually got.** No
+      part in the feed, or a null status, means no opinion, means leave
+      it alone.
 
-   3. **An empty or collapsed feed closes nothing.** If the feed comes
-      back empty while we hold open defects in the window, the
-      overwhelmingly likely explanation is a bad key, a changed
-      parameter, or an outage — not that the whole fleet was fixed at
-      once. Same for a run that would close most of what we hold. Both
-      refuse and say why, because the failure mode is marking real
-      out-of-service faults as resolved.
+   3. **"good" is not "repaired".** A part we imported as a defect coming
+      back "good" is a contradiction, not a repair — most likely the
+      record changed shape under us. It closes only if a mechanic's
+      details are attached, which is somebody actually signing off.
+      Every other non-open value (repaired, resolved, corrected,
+      no_repair_needed, harmless, and whatever Motive adds next) means
+      dealt with. Stated as a positive rule about `open` rather than a
+      list of closed-states to match, because the next unseen value would
+      otherwise read as still open forever.
+
+   4. **A collapsed run refuses.** Closing more than 80% of candidates at
+      once, above a floor of four, looks like a feed problem rather than
+      a week's repairs.
 
    Closing never touches repaired_by or repair_note. Who fixed it and
    what they wrote is the record; closing only says Motive agrees. */
 
 export const CLOSE_GUARD = { maxRatio: 0.8, minToApplyRatio: 4 };
 
-export function planClosures(openFromMotive, existing, { since, guard = CLOSE_GUARD } = {}) {
-  const stillOpen = new Set(openFromMotive.map((d) => d.key));
+/* `parts` is the map from fetchInspectionParts, keyed "<log_id>:<part_id>".
+   `links` are our tw_defect_dvirs rows — every DVIR each fault was
+   written up on. `defects` are the rows the shop holds.
 
-  /* Candidates: ours, from Motive, not already closed, and last heard of
-     inside the window this feed actually covers. */
-  const candidates = existing.filter((d) =>
-    d.source === "motive"
-    && d.state !== "closed"
-    && (!since || String(d.last_reported || "") >= since));
+   A fault is closed when ANY of its DVIRs says Motive is done with it.
+   The shop sees one job; the moment somebody deals with it in Motive,
+   that job is finished here, whether or not the older write-ups of the
+   same fault were each resolved individually. An older report left open
+   cannot drag it back: planDefects never matches a repeat against a
+   closed row, so a genuine recurrence arrives as a new defect with its
+   own key — which is what an auditor should read. */
+export function planClosuresFromParts(parts, links, defects, { guard = CLOSE_GUARD } = {}) {
+  const byId = new Map(defects.map((d) => [d.id, d]));
+  const statusSeen = {};
+  const dealtWith = new Map();
 
-  const close = candidates.filter((d) => !stillOpen.has(d.defect_key));
-  const ratio = candidates.length ? close.length / candidates.length : 0;
+  for (const l of links) {
+    const part = parts.get(`${l.log_id}:${l.part_id}`);
+    if (!part) continue;
+    const status = (part.status || "").toLowerCase();
+    /* Counted for every part we looked at, so a value nobody has thought
+       about is visible in a dry run before it ever matters. */
+    statusSeen[status || "(none)"] = (statusSeen[status || "(none)"] || 0) + 1;
+    if (!status || status === "open") continue;
+    if (status === "good" && !part.hasMechanic) continue;
+    if (!dealtWith.has(l.defect_id))
+      dealtWith.set(l.defect_id, { status, hasMechanic: part.hasMechanic, logId: l.log_id });
+  }
 
-  const refuse =
-    openFromMotive.length === 0 && candidates.length > 0
-      ? `The open feed came back empty while ${candidates.length} defect(s) are `
-        + `open in the window. That is a broken feed far more often than a fixed `
-        + `fleet, so nothing was closed.`
-    : close.length >= guard.minToApplyRatio && ratio > guard.maxRatio
-      ? `This would close ${close.length} of ${candidates.length} defects `
-        + `(${Math.round(ratio * 100)}%), over the ${Math.round(guard.maxRatio * 100)}% `
-        + `guard. That looks like a feed problem rather than a week's repairs, `
-        + `so nothing was closed.`
-    : null;
-
-  return {
-    close: refuse ? [] : close.map((d) => ({
+  const candidates = defects.filter((d) => d.source === "motive" && d.state !== "closed");
+  const close = [];
+  for (const d of candidates) {
+    const hit = dealtWith.get(d.id);
+    if (!hit) continue;
+    close.push({
       id: d.id,
       defect_key: d.defect_key,
       unit_number: d.unit_number,
       category: d.category,
+      motiveStatus: hit.status,
+      logId: hit.logId,
       /* Reported separately because they mean different things: a
          repaired one closing is the loop finishing, an open one closing
          means somebody dealt with it outside this system. */
       wasRepaired: d.state === "repaired",
-    })),
+    });
+  }
+
+  const ratio = candidates.length ? close.length / candidates.length : 0;
+  const refuse =
+    close.length >= guard.minToApplyRatio && ratio > guard.maxRatio
+      ? `This would close ${close.length} of ${candidates.length} defects `
+        + `(${Math.round(ratio * 100)}%), over the ${Math.round(guard.maxRatio * 100)}% `
+        + `guard. That looks like a feed problem rather than a week's repairs, `
+        + `so nothing was closed.`
+      : null;
+
+  return {
+    close: refuse ? [] : close,
     candidates: candidates.length,
-    stillOpen: close.length ? candidates.length - close.length : candidates.length,
+    partsSeen: parts.size,
+    statusSeen,
     refused: refuse,
   };
 }

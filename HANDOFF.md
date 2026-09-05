@@ -842,12 +842,13 @@ dropdown on the vehicle screen is there for exactly this.
 
 ### Defects, and the state Motive owns
 
-Jason's rule 1: **nothing in this system closes a DVIR.** That still holds, and it
-is narrower than it sounds. Since the write-back below, marking a defect repaired
-does tell Motive the defect was repaired — with the mechanic's name and note on
-it. What it never does is close or sign the DVIR: closing is Motive's, and a
-signature is a person's. Only a Motive sync may close a defect here, and that is
-enforced rather than merely intended:
+Jason's rule 1: **Motive owns whether a fault is dealt with.** Two things have
+been built on top of that and neither weakens it. Marking a defect repaired sends
+the repair to the DVIR with the mechanic's name on it; and when Motive stops
+calling a defect open — by that write-back, or because somebody resolved it in the
+Motive app — the defect closes here. What this system never does is decide on its
+own that a fault is finished, and it never signs a DVIR: a signature is a person's.
+No screen can close a defect, and that is enforced rather than merely intended:
 
 - `state` is `open | claimed | repaired | closed`, and a check constraint ties
   `state = 'closed'` to `closed_at` being set, both directions.
@@ -858,18 +859,22 @@ enforced rather than merely intended:
 - `planDefects` skips repaired *and* closed rows when matching a repeat report, so
   a later report of the same fault can never drag a finished one back and lose
   `repaired_by` / `repair_note`.
+- Closing is driven only by `planClosuresFromParts`, off a positive statement from
+  Motive. Nothing in the app calls it.
 
 `scripts/test-shop.mjs` holds all of that against the live database.
 
-**Closing is OFF, and here is the whole story.** It was built to read a second
-feed, `/v1/inspection_reports?status=open`, and close anything missing from it.
-That value came from Jason's `dvir-open.mjs` and his README, not from a response
-anybody had looked at. The first live dry run — the one this section told you to
-run — answered:
+**Closing is ON, and here is the whole story — two wrong signals before the
+right one.**
+
+*Attempt one.* It read a second feed, `/v1/inspection_reports?status=open`, and
+closed anything missing from it. That value came from Jason's `dvir-open.mjs` and
+his README, not from a response anybody had looked at. The first live dry run
+answered:
 
     Motive 400 on /v1/inspection_reports: {"error_message":"status does not have a valid value"}
 
-`open` is not a filter Motive accepts. Probed against Allen's own account, the
+`open` is not a filter Motive accepts. Probed against Allen's own account, the v1
 endpoint takes exactly these seven and refuses everything else:
 
     all · with_defects · with_no_defects · with_signature_missing
@@ -879,13 +884,17 @@ The trap is that a *report* carries a `status` field whose value genuinely is
 `open`. That is the DVIR's own state, not a filter.
 
 **That bug was not merely inert.** The failing read ran before any write, so it
-threw and took the whole defect import with it — nothing created, nothing
-bumped. It was caught the same day it merged, six hours before the nightly would
-have run on it.
+threw and took the whole defect import with it — nothing created, nothing bumped.
+It was caught the same day it merged, six hours before the nightly would have run
+on it. The structural fix is in `runDefects` now, not just the memory of it: the
+import happens first, and the one read closing needs is wrapped in a try/catch
+that reports `partsError` and closes nothing. A closing problem can never take
+the import down again.
 
-**The signal to rebuild it on, now verified.** The report-level `status` is in the
-`with_defects` feed we already fetch, so the right version needs no second call at
-all. Across the 78 real defects in the August window:
+*Attempt two, planned and never shipped.* The obvious rebuild was to use the
+report-level `status` already carried through on every defect as `reportStatus` —
+`open` means outstanding, anything else means dealt with. The distribution across
+the August window looked convincing:
 
 | Report `status` | Count |
 |---|---|
@@ -893,56 +902,68 @@ all. Across the 78 real defects in the August window:
 | `open` | 17 |
 | `acceptable` | 1 |
 
-`mechanic_signed_at` was null throughout, so signing is not the signal — `status`
-is. That makes closing a *positive* rule ("Motive says this DVIR is dealt with")
-rather than the absence-inference it was, which is both safer and simpler.
+**It is wrong, and one live report shows why.** HT-1373, report `10954864043` on
+2026-09-04, comes back with `status: "resolved"` while its one defect —
+"Check engine and wrench light is on" — is still `"open"`. Asking Motive for
+`status=corrected` returns that same report. A report's status is about the
+report; a defect's status is on the part. Closing on the report status would have
+marked a fault dealt with while the truck still had it.
 
-**Note the third value.** A 25-report sample showed only `resolved` and `open`;
-widening the window turned up `acceptable`, which is Motive's "looked at it, it
-is fine". So the rule to build is *`open` means outstanding, anything else means
-dealt with* — never a list of closed-states to match, because the next unseen
-value would then read as still open forever. `reportStates` in the dry run exists
-to keep that honest: if a value appears there that nobody has thought about, it is
-visible before it matters.
-`fetchInspectionDefects` already carries `reportStatus` through onto every defect,
-and the dry run reports the distribution it sees under `reportStates`.
+*What it actually runs on.* `fetchInspectionParts` reads **v2**, where each
+`inspected_parts` entry carries its own `status` and a `mechanic_details` slot.
+v1 hands back a report-level `defects` array with no per-part status, which is why
+the import still uses v1 and closing uses v2 — two feeds, each for the thing it
+can actually answer. The v2 feed is asked for `with_defects`: a report that had a
+defect still has one after it is resolved. If Motive ever moves resolved reports
+out of that feed, parts stop being seen and nothing closes, which is the safe way
+for this to break.
 
-`planClosures` and its three fences are intact and fully tested, just not applied:
+`planClosuresFromParts` is a **positive** rule — Motive says this part is no
+longer open — not the absence-inference it started as. Absence closes nothing.
+Four fences:
 
-1. **Only inside the window.** The feed is date-bounded. A defect last reported
-   before `since` would not appear even if it were wide open, so it is never a
-   candidate. Widening the lookback widens what can be closed, deliberately.
-2. **Only Motive's own.** A hand-logged defect is never closed by Motive's silence.
-3. **An empty or collapsed feed closes nothing.** If the feed returns empty while
-   we hold open defects in the window, that is a bad key or an outage far more
-   often than a fixed fleet. Same if a run would close more than 80% of candidates
-   (above a floor of 4, so a genuinely small clear-out is not blocked). Both refuse
-   and say why, on dry runs too.
+1. **Only Motive's own.** A hand-logged defect is not Motive's to close.
+2. **Only parts actually seen, with a status actually returned.** No part in the
+   feed, or a null status, means no opinion, means leave it alone. A broken feed,
+   a bad key or a changed parameter can only fail to close, never over-close.
+3. **`good` is not `repaired`.** A part imported as a defect coming back `good`
+   is a contradiction, not a repair — most likely the record changed shape. It
+   closes only if `mechanic_details` is attached, which is somebody actually
+   signing off. Every other non-open value — `repaired`, `resolved`, `corrected`,
+   `no_repair_needed`, and whatever Motive adds next — means dealt with. Stated
+   as a positive rule about `open` rather than a list of closed-states to match,
+   because the next unseen value would otherwise read as still open forever.
+4. **A collapsed run refuses.** More than 80% of candidates at once, above a
+   floor of four, is a feed problem rather than a week's repairs. Refuses and
+   says why, on dry runs too.
 
-Closing is disabled at the *write*, behind `CLOSING_IS_VERIFIED` in `sync.mjs`,
-not only by what `planClosures` returns. A comment saying "nothing closes" that
-the code does not enforce is one careless edit from marking an out-of-service
-truck resolved.
+**One DVIR closes the job.** A fault written up on eight mornings is eight parts
+and one row on the board. The moment any one of them stops being open in Motive,
+the job is finished here — the shop is not made to handle it eight times. An
+older report left open cannot drag it back: `planDefects` never matches a repeat
+against a closed row, so a genuine recurrence arrives as a new defect with its own
+key, which is what an auditor should read.
 
-Every closure, when it is turned back on, writes a `defect_closed` row to the work
-log saying whether it had been repaired here first. A repaired one closing is the
-loop finishing; an open one closing means somebody dealt with it outside this
-system.
+Every closure writes a `defect_closed` row to the work log saying what Motive
+called it, which report said so, and whether it had been repaired here first. A
+repaired one closing is the loop finishing; an open one closing means somebody
+dealt with it in Motive.
 
-**Asking Motive things without a deploy.** The raw diagnostic takes a status and a
-count, which is how the table above was produced:
+**Asking Motive things without a deploy.** `what=parts` summarises the v2 feed
+closing runs on — which also proves the key can call v2 at all:
 
     curl -H "X-Sync-Token: $SYNC_TOKEN" \
-      ".../.netlify/functions/motive-sync?what=defects&raw=1&n=25&status=with_defects&since=2026-07-01"
+      ".../.netlify/functions/motive-sync?what=parts&raw=1&since=2026-08-01"
 
-and the plain dry run reports `reportStates` alongside the import numbers:
+and the plain dry run reports `partStatuses`, `partsError`, `wouldClose` and
+`closeRefused` alongside the import numbers:
 
     curl -H "X-Sync-Token: $SYNC_TOKEN" \
-      "https://allenhaul.netlify.app/.netlify/functions/motive-sync?what=defects&since=2026-06-01"
+      "https://allenhaul.netlify.app/.netlify/functions/motive-sync?what=defects&since=2026-08-01"
 
-The planning logic is pure and covered by `scripts/test-motive.mjs`, which needs
-no key — including a guard that the feed can only ever ask Motive for a status it
-accepts. That check is the one that would have caught this before it shipped.
+`partStatuses` is the honest part: every status the feed returned, counted. If a
+value appears there that nobody has thought about, it is visible before it decides
+anything.
 
 ### Telling Motive a defect was repaired
 
