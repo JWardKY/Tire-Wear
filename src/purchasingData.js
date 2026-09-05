@@ -239,6 +239,94 @@ export const openWorkOrder = (kind, key, info, who) =>
 export const syncDefectWorkOrders = (who) =>
   rpc("tw_sync_defect_work_orders", { p_who: who || null });
 
+/* A job somebody decided on, rather than one a defect or a service
+   interval produced. Same numbering, same board, same history — the
+   only difference is where it came from.
+
+   The source key is generated here and never matched by anything: a
+   sync looks up its own kind and key, so a hand-made order cannot be
+   reopened, renumbered or closed by one. That is the same trick
+   addDefect uses for a fault the shop found itself. */
+export async function createWorkOrder(info, who) {
+  const key = `manual:${Date.now().toString(36)}`;
+  const r = await openWorkOrder("other", key, info, who);
+  /* Assigning at creation is one action to the person doing it, so the
+     board does not make them create a job and then go and find it. */
+  if (r?.id && info.assignTo) await assignWorkOrder(r.id, info.assignTo);
+  return r;
+}
+
+/* What has actually been spent on an order: parts off the shelf and
+   hours off the clock, both found by its number.
+
+   tw_part_txns.work_order and tw_time_entries.work_order are text, and
+   they were text before this existed — a part issued against WO-1043 by
+   somebody typing the number has always counted, and still does. This
+   only reads them back in one place.
+
+   Two plain queries rather than an embedded select: the part numbers
+   and costs come back in a second read keyed on the ids the first one
+   returned. */
+export async function workOrderLines(woNumber) {
+  if (!woNumber) return { parts: [], hours: [], partsCost: 0, hoursTotal: 0 };
+
+  const [{ data: txns, error: te }, { data: entries, error: he }] = await Promise.all([
+    supabase.from("tw_part_txns")
+      .select("id,part_id,kind,qty_delta,note,who,created_at")
+      .eq("work_order", woNumber).order("created_at", { ascending: false }).limit(200),
+    supabase.from("tw_time_entries")
+      .select("id,hours,cost_code,note,mechanic_id,created_at")
+      .eq("work_order", woNumber).order("created_at", { ascending: false }).limit(200),
+  ]);
+  if (te) throw te;
+  if (he) throw he;
+
+  const ids = [...new Set((txns || []).map((t) => t.part_id).filter(Boolean))];
+  const byPart = new Map();
+  if (ids.length) {
+    const { data, error } = await supabase.from("tw_parts")
+      .select("id,part_number,name,unit_cost,uom").in("id", ids);
+    if (error) throw error;
+    for (const p of data || []) byPart.set(p.id, p);
+  }
+
+  const names = new Map();
+  const mechIds = [...new Set((entries || []).map((h) => h.mechanic_id).filter(Boolean))];
+  if (mechIds.length) {
+    const { data, error } = await supabase.from("tw_mechanics").select("id,name").in("id", mechIds);
+    if (error) throw error;
+    for (const m of data || []) names.set(m.id, m.name);
+  }
+
+  const parts = (txns || []).map((t) => {
+    const p = byPart.get(t.part_id) || {};
+    /* Issues are negative and receives positive in the ledger. What a
+       job used is the issue; a return puts stock back and should reduce
+       what the job cost, so the sign is kept rather than absolute. */
+    const used = -Number(t.qty_delta);
+    const cost = p.unit_cost == null ? null : used * Number(p.unit_cost);
+    return {
+      id: t.id, num: p.part_number || "—", name: p.name || "", uom: p.uom || "each",
+      qty: used, cost, who: t.who || "", note: t.note || "", at: t.created_at,
+    };
+  });
+
+  const hours = (entries || []).map((h) => ({
+    id: h.id, hours: Number(h.hours) || 0, costCode: h.cost_code || "",
+    note: h.note || "", who: names.get(h.mechanic_id) || "", at: h.created_at,
+  }));
+
+  return {
+    parts, hours,
+    /* Null costs are left out of the total rather than counted as zero,
+       and the caller is told how many so a partial total is not read as
+       a complete one. */
+    partsCost: parts.reduce((n, p) => n + (p.cost || 0), 0),
+    partsWithoutCost: parts.filter((p) => p.cost == null).length,
+    hoursTotal: hours.reduce((n, h) => n + h.hours, 0),
+  };
+}
+
 export async function listWorkOrders(states) {
   let q = supabase.from("tw_work_orders").select("*")
     .order("priority").order("wo_number", { ascending: false }).limit(500);
