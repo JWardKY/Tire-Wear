@@ -107,14 +107,17 @@ export default function HelpSection() {
           next.
         </Step>
         <Step n="2" head="Pick up a job">
-          <B>Timecard → My jobs.</B> Anything somebody has put you on is at the top
-          under <i>Assigned to me</i>. Tap the card to see what it is, what has already
-          been done on it, and any parts already issued to it.
+          <B>Timecard → My jobs.</B> Anything somebody has put you on — and anything you
+          claimed yourself on the Defects tab — is at the top under <i>Assigned to me</i>.
         </Step>
-        <Step n="3" head="Start it">
-          <B>START IT</B> puts a running clock on your timecard with the truck and the
-          work order number already filled in. Walk to the truck — the clock is already
-          counting, which is right, because the walk is work.
+        <Step n="3" head="Tap it to start">
+          Tapping the card puts a running clock on your timecard with the truck and the
+          work order number already filled in. One tap. Walk to the truck — the clock is
+          already counting, which is right, because the walk is work.
+          <div style={{ marginTop: 3 }}>
+            The small <i>what is on it</i> link at the bottom of the card is the other
+            question: what has already been done, and what parts have gone on.
+          </div>
         </Step>
         <Step n="4" head="Pull your parts as you go">
           On that same card there is a parts list. Put each part on as you take it off

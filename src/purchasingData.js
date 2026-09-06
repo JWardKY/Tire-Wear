@@ -430,6 +430,20 @@ export async function myWork(mechanicId) {
   }));
 }
 
+/* Work orders by their number, for the screens that hold the number as
+   text rather than a row — a defect carries work_order as a string, and
+   starting the clock on one needs the id so the job can be closed out
+   at the end of it. */
+export async function workOrdersByNumber(numbers) {
+  const list = [...new Set((numbers || []).filter(Boolean))];
+  if (!list.length) return new Map();
+  const { data, error } = await supabase.from("tw_work_orders")
+    .select("id,wo_number,vehicle_id,unit_number,title,state,started_at")
+    .in("wo_number", list);
+  if (error) throw error;
+  return new Map((data || []).map((w) => [w.wo_number, w]));
+}
+
 export async function startWork(id) {
   const { error } = await supabase.from("tw_work_orders")
     .update({ started_at: new Date().toISOString(), updated_at: new Date().toISOString() })

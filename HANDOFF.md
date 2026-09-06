@@ -268,8 +268,14 @@ one fault is paperwork that has stopped meaning anything.
 onto the defect, so the two screens agree. Priority follows the defect — unsafe is
 `now`, major is `today`.
 
-**Start puts a clock on it.** START IT on a job stamps `started_at` and hands the job
-to the Today tab as a **running** equipment card — the truck, the WO number and the
+**Tapping a card starts a clock.** The card itself is the target — one tap, with gloves
+on — and what is on the job moved to the small `what is on it` link at its bottom. It was
+the other way round for a day, and that meant somebody pressed a job, read a page, and
+still had not started working. A claimed defect starts the same way; its work order is
+looked up by number so the close-out question still has an id to act on.
+
+Tapping stamps `started_at` and hands the job to the Today tab as a **running** equipment
+card — the truck, the WO number and the
 job's title already on it, clock counting. Pressing Start and being left on the same
 list with nothing visibly counting reads as the button not having worked, and the walk
 to the truck is real time.
