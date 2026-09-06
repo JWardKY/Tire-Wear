@@ -77,6 +77,7 @@ export default function PmSection({ who, tab, onBusy }) {
   const [programs, setPrograms] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [recording, setRecording] = useState(null);
+  const [editingProgram, setEditingProgram] = useState(null);
   const [q, setQ] = useState("");
 
   const reload = useCallback(async () => {
@@ -140,9 +141,22 @@ export default function PmSection({ who, tab, onBusy }) {
       <div className="mx-auto w-full" style={{ maxWidth: 1400, padding: "20px 16px 60px" }}>
         {tab === "programs"
           ? <Programs programs={programs} busy={busy}
-              onToggle={(p) => run(() => shop.setProgramActive(p.id, !p.active))} />
+              onToggle={(p) => run(() => shop.setProgramActive(p.id, !p.active))}
+              onNew={() => setEditingProgram({})}
+              onEdit={(p) => setEditingProgram(p)} />
           : <Board {...{ shown, counts, q, setQ, busy, setRecording }} />}
       </div>
+
+      {editingProgram && (
+        <ProgramDialog p={editingProgram} busy={busy}
+          onClose={() => setEditingProgram(null)}
+          onSave={async (v) => {
+            await run(() => (editingProgram.id
+              ? shop.updateProgram(editingProgram.id, v)
+              : shop.addProgram(v)));
+            setEditingProgram(null);
+          }} />
+      )}
 
       {recording && (
         <RecordServiceDialog row={recording} programs={programs} vehicles={vehicles} busy={busy}
@@ -185,7 +199,8 @@ function Board({ shown, counts, q, setQ, busy, setRecording }) {
           <strong>{nf(none)} truck-and-service pairs have no baseline yet.</strong> Nothing can be
           due until someone records when a service was last done, the same way a tire needs its
           mount reading before it has a wear rate. Record the last one you know about and the
-          clock starts.
+          clock starts. The services themselves live on the <strong>Programs</strong> tab, where
+          you can add one or turn one off.
         </div>
       )}
 
@@ -253,7 +268,7 @@ function Board({ shown, counts, q, setQ, busy, setRecording }) {
   );
 }
 
-function Programs({ programs, busy, onToggle }) {
+function Programs({ programs, busy, onToggle, onNew, onEdit }) {
   return (
     /* minmax(0,1fr) because a grid item will not shrink below its content's
        min-content width, and the table inside is 680px wide — without it the
@@ -262,6 +277,9 @@ function Programs({ programs, busy, onToggle }) {
     <div className="grid gap-4" style={{ maxWidth: 900, gridTemplateColumns: "minmax(0,1fr)" }}>
       <Card title="Services and how often"
         note="Turning one off takes it off every truck's board. It does not delete anything already recorded.">
+        <div className="flex justify-end" style={{ marginBottom: 10 }}>
+          <Btn onClick={onNew}>NEW SERVICE</Btn>
+        </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
             <thead>
@@ -289,7 +307,11 @@ function Programs({ programs, busy, onToggle }) {
                   </td>
                   <td style={{ ...td, ...tdNum }}>{p.estHours != null ? nf(p.estHours, 1) : "—"}</td>
                   <td style={{ ...td, color: C.muted }}>{p.appliesTo || "Every unit"}</td>
-                  <td style={{ ...td, textAlign: "right" }}>
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button disabled={busy} onClick={() => onEdit(p)}
+                      style={{ ...linkBtn, fontSize: 12.5, marginRight: 12 }}>
+                      Edit
+                    </button>
                     <button disabled={busy} onClick={() => onToggle(p)}
                       style={{ ...linkBtn, fontSize: 12.5, color: p.active ? C.pull : C.good }}>
                       {p.active ? "Turn off" : "Turn on"}
@@ -302,6 +324,115 @@ function Programs({ programs, busy, onToggle }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ── A service the shop tracks ─────────────────────────────────────
+   Adding one here puts it on every truck it applies to at once — 135
+   trucks and a new service is 135 rows on the board — so the two fields
+   that decide scope, the interval and who it applies to, are the ones
+   this dialog is careful about.
+
+   It does not make anything due. A truck has no clock on a service until
+   somebody records when it was last done, which is the same rule as a
+   tire needing its mount reading before it has a wear rate. */
+function ProgramDialog({ p, busy, onClose, onSave }) {
+  const editing = !!p.id;
+  const [f, setF] = useState({
+    name: p.name || "",
+    category: p.category || "",
+    miles: p.miles ?? "",
+    months: p.months ?? "",
+    leadMiles: p.leadMiles ?? "",
+    leadDays: p.leadDays ?? "",
+    estHours: p.estHours ?? "",
+    appliesTo: p.appliesTo || "",
+  });
+  const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
+
+  const miles = Number(f.miles), months = Number(f.months);
+  const badMiles = f.miles !== "" && !(miles > 0);
+  const badMonths = f.months !== "" && !(months > 0);
+  /* The same rule the database keeps in tw_pm_needs_an_interval. Said
+     here too so somebody finds out before they press Save, not after. */
+  const noInterval = f.miles === "" && f.months === "";
+  const ready = f.name.trim() && !noInterval && !badMiles && !badMonths;
+
+  return (
+    <Modal title={editing ? `Edit ${p.name}` : "New service"}
+      sub="How often it comes round, and which trucks it lands on"
+      onClose={onClose} width={620}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Service">
+            <input style={inp} value={f.name} autoFocus onChange={set("name")}
+              placeholder="Engine oil and filter" />
+          </Field>
+        </div>
+        <Field label="Category">
+          <input style={inp} value={f.category} onChange={set("category")}
+            placeholder="Engine, Brakes, Chassis…" />
+        </Field>
+        <Field label="Applies to">
+          <select style={inp} value={f.appliesTo} onChange={set("appliesTo")}>
+            <option value="">Every unit</option>
+            <option value="DT">DT only</option>
+            <option value="HT">HT only</option>
+            <option value="OT">OT only</option>
+          </select>
+        </Field>
+
+        <Field label="Every — miles">
+          <input type="number" min="1" step="1" style={{ ...inp, fontFamily: FM }}
+            value={f.miles} onChange={set("miles")} placeholder="25000" />
+        </Field>
+        <Field label="Every — months">
+          <input type="number" min="1" step="1" style={{ ...inp, fontFamily: FM }}
+            value={f.months} onChange={set("months")} placeholder="6" />
+        </Field>
+        <Field label="Warn from — miles before">
+          <input type="number" min="0" step="1" style={{ ...inp, fontFamily: FM }}
+            value={f.leadMiles} onChange={set("leadMiles")} placeholder="a tenth of the interval" />
+        </Field>
+        <Field label="Warn from — days before">
+          <input type="number" min="0" step="1" style={{ ...inp, fontFamily: FM }}
+            value={f.leadDays} onChange={set("leadDays")} placeholder="30" />
+        </Field>
+        <Field label="Estimated hours">
+          <input type="number" min="0" step="0.5" style={{ ...inp, fontFamily: FM }}
+            value={f.estHours} onChange={set("estHours")} placeholder="optional" />
+        </Field>
+      </div>
+
+      <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, margin: "12px 0 0" }}>
+        Fill in miles, months, or both — both means whichever comes first. Leave the
+        warn-from boxes empty and it uses a tenth of the interval and thirty days.
+      </p>
+      {noInterval && (
+        <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600, margin: "6px 0 0" }}>
+          Put a mileage or a number of months on it, or nothing can ever come due.
+        </p>
+      )}
+      {(badMiles || badMonths) && (
+        <p style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, margin: "6px 0 0" }}>
+          An interval has to be more than zero.
+        </p>
+      )}
+      {!editing && (
+        <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, margin: "6px 0 0" }}>
+          Nothing is due the moment you save this. Each truck gets its clock the first
+          time somebody records the service against it — <b>Record a service</b> on the
+          Due tab.
+        </p>
+      )}
+
+      <div className="flex justify-end" style={{ gap: 8, marginTop: 14 }}>
+        <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+        <Btn disabled={!ready || busy} onClick={() => onSave(f)}>
+          {editing ? "SAVE" : "ADD IT"}
+        </Btn>
+      </div>
+    </Modal>
   );
 }
 

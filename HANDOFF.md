@@ -1153,6 +1153,24 @@ both. **Whichever trigger fires first wins.** `lead_miles` and `lead_days` are
 how early the warning starts — an oil change with a 1,500 mile lead goes amber
 at 13,500 miles into a 15,000 mile interval.
 
+**Programs are editable from the Programs tab** — NEW SERVICE adds one, Edit changes
+one. Two things a new service does not do, both said in the dialog rather than left to
+be discovered: it does not make anything due (every truck starts at `nobaseline` until
+somebody records the service against it), and it lands on every truck it applies to at
+once — a fleet-wide service is 135 rows on the board the moment it is saved, so
+`applies_to` is the field to get right.
+
+Blank interval boxes are written as `null`, not zero. `tw_pm_needs_an_interval` says a
+program must have miles or months, and `interval_miles > 0` says it cannot be zero; the
+dialog refuses both before Save rather than letting the database do it afterwards. A new
+program sorts to the end, because the order on that screen is the shop's and a new
+service has not earned a place in it.
+
+`applies_to` used to allow DT and HT only, from before Equipment could hold anything
+else. The fleet has an OT unit and the due view already matches `applies_to` against
+whatever division a truck carries, so the constraint was the only thing in the way; it
+now allows OT too. `null` still means every unit.
+
 A **completion** is a service actually performed. The newest one for a truck and
 program is the baseline the next due date counts from; the older ones are the
 history, and they stay.
