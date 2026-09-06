@@ -512,7 +512,10 @@ end $do$;
 do $do$ begin
   if not exists (select 1 from pg_constraint
                   where conname = 'tw_pm_programs_applies_to_check' and conrelid = 'tw_pm_programs'::regclass) then
-    alter table tw_pm_programs add constraint tw_pm_programs_applies_to_check CHECK ((applies_to = ANY (ARRAY['DT'::text, 'HT'::text])));
+    -- OT is here because Equipment can hold one and the due view already
+    -- matches applies_to against whatever division a truck carries; the
+    -- constraint was the only thing refusing it. null still means every unit.
+    alter table tw_pm_programs add constraint tw_pm_programs_applies_to_check CHECK ((applies_to = ANY (ARRAY['DT'::text, 'HT'::text, 'OT'::text])));
   end if;
 end $do$;
 do $do$ begin
@@ -2439,3 +2442,8 @@ on conflict (log_id, part_id) do nothing;
 -- Re-runnable for a database that already holds work orders.
 alter table tw_work_orders add column if not exists hold_reason text;
 alter table tw_work_orders add column if not exists hold_since timestamptz;
+
+-- Re-runnable: widen applies_to on a database that predates OT.
+alter table tw_pm_programs drop constraint if exists tw_pm_programs_applies_to_check;
+alter table tw_pm_programs add constraint tw_pm_programs_applies_to_check
+  check (applies_to = any (array['DT'::text, 'HT'::text, 'OT'::text]));

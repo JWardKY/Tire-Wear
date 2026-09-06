@@ -211,6 +211,40 @@ export async function setProgramActive(id, active) {
   check(await supabase.from("tw_pm_programs").update({ active }).eq("id", id));
 }
 
+/* A service the shop wants tracked. Blank numbers are null, not zero —
+   the database says an interval has to be positive, and a program with
+   "every 0 miles" would be due on every truck forever. */
+const programRow = (p) => ({
+  name: p.name.trim(),
+  category: p.category?.trim() || null,
+  interval_miles: num(p.miles),
+  interval_months: num(p.months),
+  lead_miles: num(p.leadMiles),
+  lead_days: num(p.leadDays),
+  est_hours: num(p.estHours),
+  /* null means every unit. The due view matches this against a truck's
+     division, so it is the one field that decides which trucks a new
+     service lands on. */
+  applies_to: p.appliesTo || null,
+});
+
+const num = (v) => (v === "" || v == null || Number.isNaN(Number(v)) ? null : Number(v));
+
+export async function addProgram(p) {
+  /* Sorted to the end rather than into the middle: the order on that
+     screen is the shop's, and a new service has not earned a place in
+     it yet. */
+  const { data, error } = await supabase.from("tw_pm_programs")
+    .select("sort_order").order("sort_order", { ascending: false }).limit(1);
+  if (error) throw error;
+  const next = (data?.[0]?.sort_order ?? 0) + 10;
+  check(await supabase.from("tw_pm_programs").insert({ ...programRow(p), sort_order: next }));
+}
+
+export async function updateProgram(id, p) {
+  check(await supabase.from("tw_pm_programs").update(programRow(p)).eq("id", id));
+}
+
 const toDue = (r) => ({
   vehId: r.vehicle_id,
   truck: r.truck,
