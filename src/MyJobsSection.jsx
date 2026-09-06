@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { C, FD, FM } from "./theme.js";
-import { fmtDate, nf, Btn, Modal, SectionLabel, th, td } from "./ui.jsx";
+import { fmtDate, nf, Btn, Modal, SectionLabel, linkBtn, th, td } from "./ui.jsx";
 import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
 import * as setup from "./setupData.js";
@@ -23,6 +23,11 @@ const DEFECT_FILTERS = [
 ];
 
 const PRIO_LABEL = { now: "Now", today: "Today", normal: "Normal" };
+
+/* Both spellings, because a claim made before the name went on them
+   recorded an email. New ones are the mechanic's name. */
+const claimedByMe = (me, d) => !!(me && d.claimedBy
+  && (d.claimedBy === me.name || d.claimedBy === me.email));
 const PRIO_COLOUR = (p) => (p === "now" ? "pull" : p === "today" ? "watch" : "muted");
 
 /* Handed the signed-in mechanic rather than sniffing it out of
@@ -37,6 +42,10 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
   const [err, setErr] = useState("");
   const [ready, setReady] = useState(false);
   const [openJob, setOpenJob] = useState(null);
+  /* The work order behind a claimed defect, when it has one. Starting a
+     clock on it needs the id, not the number, so the job can be closed
+     out at the end. */
+  const [defectWos, setDefectWos] = useState(new Map());
 
   const load = useCallback(async () => {
     try {
@@ -45,9 +54,15 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
         shop.listPmDue(["over", "soon"]),
         me?.id ? buy.myWork(me.id) : Promise.resolve([]),
       ]);
-      setDefects(d.filter((x) => x.state !== "repaired"));
+      const live = d.filter((x) => x.state !== "repaired");
+      setDefects(live);
       setPm(p);
       setJobs(j);
+      /* Only for the ones that will actually show as cards. */
+      const mineWithWo = live
+        .filter((x) => x.state === "claimed" && claimedByMe(me, x) && x.workOrder)
+        .map((x) => x.workOrder);
+      setDefectWos(await buy.workOrdersByNumber(mineWithWo).catch(() => new Map()));
       setErr("");
     } catch (e) { setErr(e.message || String(e)); }
     setReady(true);
@@ -64,8 +79,39 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
 
   /* Both spellings, because a claim made before the name went on them
      recorded an email. New ones are the mechanic's name. */
-  const isMine = useCallback((d) => !!(me && d.claimedBy
-    && (d.claimedBy === me.name || d.claimedBy === me.email)), [me]);
+  const isMine = useCallback((d) => claimedByMe(me, d), [me]);
+
+  /* Tapping a card starts the clock. That is the common act at a truck,
+     and making it the second tap behind a dialog meant somebody pressed
+     the card, read a page, and still had not started working.
+
+     What is on the job did not go away — it moved to the small link in
+     the corner, which is the rarer question. */
+  /* Not through run(): that reloads this page afterwards, and by then
+     the timecard has taken over the screen. Start the job, hand it
+     across, done. */
+  const startJob = useCallback(async (j) => {
+    onBusy?.(true);
+    try {
+      if (j.id) await buy.startWork(j.id);
+      onStartJob?.(j);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally { onBusy?.(false); }
+  }, [onStartJob, onBusy]);
+
+  const startDefect = useCallback((d) => {
+    const w = defectWos.get(d.workOrder);
+    startJob({
+      id: w?.id || null,
+      wo: d.workOrder || "",
+      vehId: d.vehId,
+      unit: d.unit,
+      /* The fault is what the mechanic is about to work on, so it is
+         what the timecard's "what was done" starts as. */
+      title: [d.category, d.note].filter(Boolean).join(" — ") || "Defect",
+    });
+  }, [defectWos, startJob]);
 
   const shownDefects = useMemo(() => defects.filter((d) => {
     if (dFilter === "unsafe") return d.safety === "unsafe";
@@ -104,15 +150,13 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
       <div style={{ display: "grid", gap: 7, margin: "8px 0 26px",
                     gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,260px),1fr))" }}>
         {jobs.map((j) => (
-          /* The whole card is the target, not a link buried in it: this
-             is read on a tablet with gloves on, and a mechanic wanting
-             to know what a job actually is should not have to find a
-             six-pixel chevron. */
-          <button key={j.id} onClick={() => setOpenJob(j)}
-            title="What is on this job"
-            style={{ background: C.card, borderRadius: 6, padding: "11px 13px", width: "100%",
-                     textAlign: "left", cursor: "pointer", font: "inherit", color: C.ink,
-                     border: `1px solid ${j.priority === "now" ? C.pull : C.line}` }}>
+          /* The whole card starts the clock — that is what somebody
+             standing at a truck came here to do, and it is one tap with
+             gloves on. What is on the job is the smaller question and
+             sits on the link at the bottom. */
+          <Tappable key={j.id} onTap={() => startJob(j)}
+            hint={j.startedAt ? "Tap to get back on it" : "Tap to start the clock"}
+            edge={j.priority === "now" ? C.pull : C.line}>
             <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: C.muted }}>{j.wo}</span>
               <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase",
@@ -132,17 +176,22 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
                 {j.holdReason}
               </div>
             )}
-            <div style={{ fontSize: 11.5, color: C.green600, marginTop: 6 }}>
-              {j.state === "in progress" && j.startedAt ? "started · " : ""}tap for what is on it
+            <div className="flex items-baseline justify-between"
+              style={{ gap: 8, marginTop: 7 }}>
+              <span style={{ fontSize: 12, color: C.green700, fontWeight: 700 }}>
+                {j.startedAt ? "TAP TO GET BACK ON IT" : "TAP TO START"}
+              </span>
+              <button onClick={(e) => { e.stopPropagation(); setOpenJob(j); }}
+                style={{ ...linkBtn, fontSize: 11.5 }}>
+                what is on it
+              </button>
             </div>
-          </button>
+          </Tappable>
         ))}
         {myDefects.map((d) => (
-          <button key={d.id} onClick={() => go?.("defects", "open", "mine")}
-            title="Open it on the Defects tab"
-            style={{ background: C.card, borderRadius: 6, padding: "11px 13px", width: "100%",
-                     textAlign: "left", cursor: "pointer", font: "inherit", color: C.ink,
-                     border: `1px solid ${d.safety === "unsafe" ? C.pull : C.line}` }}>
+          <Tappable key={d.id} onTap={() => startDefect(d)}
+            hint="Tap to start the clock on it"
+            edge={d.safety === "unsafe" ? C.pull : C.line}>
             <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: C.muted }}>
                 {d.workOrder || "defect"}
@@ -161,10 +210,17 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
             {d.note && (
               <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{d.note}</div>
             )}
-            <div style={{ fontSize: 11.5, color: C.green600, marginTop: 6 }}>
-              you claimed this · tap to open it
+            <div className="flex items-baseline justify-between"
+              style={{ gap: 8, marginTop: 7 }}>
+              <span style={{ fontSize: 12, color: C.green700, fontWeight: 700 }}>
+                TAP TO START
+              </span>
+              <button onClick={(e) => { e.stopPropagation(); go?.("defects", "open", "mine"); }}
+                style={{ ...linkBtn, fontSize: 11.5 }}>
+                open the defect
+              </button>
             </div>
-          </button>
+          </Tappable>
         ))}
         {me && !jobs.length && !myDefects.length && (
           <div style={{ color: C.muted, fontSize: 13.5 }}>
@@ -281,6 +337,26 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/* A card that is one big target with a small link inside it.
+
+   A <button> inside a <button> is not valid HTML and browsers disagree
+   about what to do with the click, so the outer one is a div that
+   behaves like a button — the keyboard handlers are what make that
+   honest rather than just look right. */
+function Tappable({ onTap, hint, edge, children }) {
+  return (
+    <div role="button" tabIndex={0} title={hint} onClick={onTap}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); }
+      }}
+      style={{ background: C.card, borderRadius: 6, padding: "11px 13px",
+               textAlign: "left", cursor: "pointer", color: C.ink,
+               border: `1px solid ${edge}` }}>
+      {children}
     </div>
   );
 }
