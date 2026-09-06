@@ -5,6 +5,7 @@ import {
   inp, th, td, linkBtn,
 } from "./ui.jsx";
 import * as shop from "./shopData.js";
+import { actorFor, readUnlock } from "./identity.js";
 
 /* ── The Defects section ──────────────────────────────────────────
    A defect is something wrong with a truck: today entered by hand,
@@ -91,6 +92,13 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
     return () => onBusy?.(false);
   }, [busy, onBusy]);
 
+  /* Read at the moment of the act, never cached. The badge on this
+     browser says which tablet it is; the PIN says who is holding it,
+     and on a shop tablet those are different people. Claiming or
+     repairing against the badge put the office's email on somebody
+     else's work — and sent it to Motive as the mechanic's name. */
+  const actorNow = useCallback(() => actorFor(who), [who]);
+
   const run = useCallback(async (fn) => {
     setBusy(true);
     try {
@@ -112,7 +120,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
       .filter((d) => (wantClosed
         ? d.state === "closed"
         : d.state !== "closed" && (d.state === "repaired") === wantRepaired))
-      .filter((d) => !FOCUS[focus] || FOCUS[focus].keep(d))
+      .filter((d) => !FOCUS[focus] || FOCUS[focus].keep(d, who))
       .filter((d) => !s || `${d.unit} ${d.category} ${d.note} ${d.driver}`.toLowerCase().includes(s))
       .sort(wantRepaired
         /* Oldest repair first, not newest: the one that has sat longest
@@ -121,7 +129,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
         : wantClosed
         ? (a, b) => String(b.closedAt || "").localeCompare(String(a.closedAt || ""))
         : byUrgency);
-  }, [defects, tab, q, focus]);
+  }, [defects, tab, q, focus, who]);
 
   const live = defects.filter((d) => d.state !== "closed");
   const openCount = live.filter((d) => d.state !== "repaired").length;
@@ -179,7 +187,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
           <div className="grid gap-2">
             {shown.map((d) => (
               <DefectRow key={d.id} d={d} who={who} busy={busy} dvir={dvirs.get(d.id)}
-                onClaim={() => run(() => shop.claimDefect(d.id, who))}
+                onClaim={() => run(() => shop.claimDefect(d.id, actorNow()))}
                 onRelease={() => run(() => shop.releaseDefect(d.id))}
                 onRepair={() => setRepairing(d)}
                 onReopen={() => run(() => shop.reopenDefect(d.id))}
@@ -195,10 +203,10 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
           onSave={async (d) => { await run(() => shop.addDefect(d, who)); setAdding(false); }} />
       )}
       {repairing && (
-        <RepairDialog d={repairing} busy={busy}
+        <RepairDialog d={repairing} busy={busy} actor={actorNow()}
           onClose={() => setRepairing(null)}
           onSave={async (r) => {
-            await run(() => shop.repairDefect(repairing.id, r, who));
+            await run(() => shop.repairDefect(repairing.id, r, actorNow()));
             setRepairing(null);
           }} />
       )}
@@ -209,7 +217,18 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
 /* Arrived here by tapping a number on the Now board. The tile said
    "17 units out of service", so this list has to be those seventeen and
    nothing else, or the number was a lie. */
+/* `focus` stays a plain string, the way the Now board's tiles send it.
+   "mine" resolves against whoever is PIN'd in here rather than being
+   handed a name, so it cannot go stale between the tap and the render. */
 const FOCUS = {
+  mine: {
+    label: "Claimed by you",
+    keep: (d, who) => {
+      const u = readUnlock(who);
+      const names = [u?.name, u?.email, who].filter(Boolean);
+      return !!d.claimedBy && names.includes(d.claimedBy);
+    },
+  },
   unsafe: {
     label: "Out of service",
     keep: (d) => d.safety === "unsafe",
@@ -424,7 +443,7 @@ function AddDefectDialog({ vehicles, busy, onClose, onSave }) {
   );
 }
 
-function RepairDialog({ d, busy, onClose, onSave }) {
+function RepairDialog({ d, busy, actor, onClose, onSave }) {
   const [f, setF] = useState({ note: "", hours: "", workOrder: d.workOrder || "" });
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
@@ -437,6 +456,15 @@ function RepairDialog({ d, busy, onClose, onSave }) {
           {d.note}
         </div>
       )}
+      {/* Said out loud, because this name goes on the DVIR in Motive.
+          Somebody signing a repair under the wrong name should find out
+          here rather than after it has left the building. */}
+      <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 12 }}>
+        Recorded as <b style={{ color: C.ink }}>{actor}</b>
+        {actor && actor.includes("@")
+          ? " — sign in on the Timecard tab with your PIN and it will use your name."
+          : ""}
+      </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <div style={{ gridColumn: "1 / -1" }}>
           <Field label="What was done">

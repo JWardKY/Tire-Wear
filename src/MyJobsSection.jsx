@@ -62,13 +62,30 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
     finally { onBusy?.(false); }
   };
 
+  /* Both spellings, because a claim made before the name went on them
+     recorded an email. New ones are the mechanic's name. */
+  const isMine = useCallback((d) => !!(me && d.claimedBy
+    && (d.claimedBy === me.name || d.claimedBy === me.email)), [me]);
+
   const shownDefects = useMemo(() => defects.filter((d) => {
     if (dFilter === "unsafe") return d.safety === "unsafe";
     if (dFilter === "major") return d.severity === "major";
-    if (dFilter === "mine") return me && d.claimedBy &&
-      (d.claimedBy === me.email || d.claimedBy === me.name);
+    if (dFilter === "mine") return isMine(d);
     return true;
-  }), [defects, dFilter, me]);
+  }), [defects, dFilter, isMine]);
+
+  /* Claiming a defect is somebody putting their name on a job, so it
+     belongs in the same place as a job somebody else put their name on.
+     It used to land only in the MINE filter further down the page,
+     which is not where anybody looked for it.
+
+     A defect that already has a work order assigned to me is skipped —
+     it is one job and it is on the list once, as the work order. */
+  const myDefects = useMemo(() => {
+    const onWo = new Set(jobs.map((j) => j.wo));
+    return defects.filter((d) => d.state === "claimed" && isMine(d)
+      && !(d.workOrder && onWo.has(d.workOrder)));
+  }, [defects, jobs, isMine]);
 
   const shownPm = useMemo(
     () => (pmOverdueOnly ? pm.filter((x) => x.level === "over") : pm), [pm, pmOverdueOnly]);
@@ -81,7 +98,9 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
                             borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
 
       {/* ── Assigned to me ── */}
-      <SectionLabel>Assigned to me{me ? ` · ${jobs.length}` : ""}</SectionLabel>
+      <SectionLabel>
+        Assigned to me{me ? ` · ${jobs.length + myDefects.length}` : ""}
+      </SectionLabel>
       <div style={{ display: "grid", gap: 7, margin: "8px 0 26px",
                     gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,260px),1fr))" }}>
         {jobs.map((j) => (
@@ -118,9 +137,39 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
             </div>
           </button>
         ))}
-        {me && !jobs.length && (
+        {myDefects.map((d) => (
+          <button key={d.id} onClick={() => go?.("defects", "open", "mine")}
+            title="Open it on the Defects tab"
+            style={{ background: C.card, borderRadius: 6, padding: "11px 13px", width: "100%",
+                     textAlign: "left", cursor: "pointer", font: "inherit", color: C.ink,
+                     border: `1px solid ${d.safety === "unsafe" ? C.pull : C.line}` }}>
+            <div className="flex items-baseline justify-between" style={{ gap: 8 }}>
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: C.muted }}>
+                {d.workOrder || "defect"}
+              </span>
+              {d.safety === "unsafe" && (
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+                               letterSpacing: "0.05em", color: C.pull }}>
+                  Out of service
+                </span>
+              )}
+            </div>
+            <div style={{ fontFamily: FD, fontSize: 16, fontWeight: 700, marginTop: 2 }}>
+              {d.unit}
+            </div>
+            <div style={{ fontSize: 13 }}>{d.category || "Defect"}</div>
+            {d.note && (
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{d.note}</div>
+            )}
+            <div style={{ fontSize: 11.5, color: C.green600, marginTop: 6 }}>
+              you claimed this · tap to open it
+            </div>
+          </button>
+        ))}
+        {me && !jobs.length && !myDefects.length && (
           <div style={{ color: C.muted, fontSize: 13.5 }}>
-            Nothing assigned to you. Work is put on people from the Work orders tab.
+            Nothing assigned to you. Work is put on people from the Work orders tab,
+            and anything you claim on the Defects tab shows up here too.
           </div>
         )}
       </div>

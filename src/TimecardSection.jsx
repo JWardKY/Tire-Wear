@@ -12,6 +12,7 @@ import MyJobs from "./MyJobsSection.jsx";
 import * as shop from "./shopData.js";
 import * as partsData from "./partsData.js";
 import EquipmentWorked from "./EquipmentWorked.jsx";
+import { readUnlock, writeUnlock, clearUnlock } from "./identity.js";
 
 /* ── The Timecard section ─────────────────────────────────────────
    Your own hours for one day. Behind a PIN, because this is the one
@@ -24,30 +25,17 @@ import EquipmentWorked from "./EquipmentWorked.jsx";
    against the real list when it turns up.
 
    The PIN unlocks for this browser tab only — sessionStorage, not
-   local. A shop tablet left on a bench re-locks when the tab closes. */
+   local. A shop tablet left on a bench re-locks when the tab closes.
+   Who that unlock names lives in identity.js, because the Defects tab
+   needs the same answer: a job claimed on a shared tablet belongs to
+   the mechanic who is PIN'd in, not to the badge on the browser. */
 
-const UNLOCK_KEY = "tirewear:timecard-unlocked";
 const WHERE = [
   ["shop", "Shop"],
   ["field", "Field"],
   ["road", "Road call"],
   ["plant", "Plant"],
 ];
-
-function readUnlock(email) {
-  try {
-    const v = JSON.parse(sessionStorage.getItem(UNLOCK_KEY) || "null");
-    return v && v.email === email ? v : null;
-  } catch {
-    return null;
-  }
-}
-function writeUnlock(v) {
-  try { sessionStorage.setItem(UNLOCK_KEY, JSON.stringify(v)); } catch { /* not essential */ }
-}
-function clearUnlock() {
-  try { sessionStorage.removeItem(UNLOCK_KEY); } catch { /* not essential */ }
-}
 
 export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFocus }) {
   const [ready, setReady] = useState(false);

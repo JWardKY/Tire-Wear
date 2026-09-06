@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 
 const SUITES = [
   ["test-motive", "Motive sync logic, on fixtures — needs no key"],
+  ["test-identity", "who work gets recorded against — needs no key"],
   ["test-tires", "tread, mounting, pulling, wear rates"],
   ["test-shop", "defects and PM"],
   ["test-pins", "PIN plumbing — the security properties"],

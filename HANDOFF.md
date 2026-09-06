@@ -553,6 +553,32 @@ disabled after four digits. Nobody could sign in, and no unit test could see it.
 guard is a ref now. The line about permanence is the mockup's and it stays: entries are added,
 never edited or removed. A record you can quietly rewrite is not a record.
 
+### Two identities, and which one work gets recorded against
+
+There are two answers to "who is this", and confusing them was a real bug.
+
+The **badge** (`identity.js`, localStorage) is the email on the browser. It says which
+tablet this is, and it is what the domain check gates on. The **unlock**
+(sessionStorage, same file) is the mechanic who PIN'd into the timecard on it. The gate
+lets anybody on the roster PIN in regardless of the badge, so on a shop tablet these are
+routinely different people.
+
+`actorFor(badge)` is the answer to "whose work is this": the PIN'd-in mechanic's name,
+or the badge when nobody is unlocked. **Read it at the moment of the act, never cache
+it** — the person at the tablet changes between renders.
+
+Claiming and repairing on the Defects tab used to pass the badge straight through. On
+Jason's own iPad that is right and nothing looked wrong; on a shared tablet the board
+said the office had somebody else's job, and — worse — `repaired_by` is what the Motive
+write-back sends as `mechanic_name`, so a DVIR would have been signed with an email
+address, which also never matches the `tw_mechanics` name lookup for a Motive user id.
+
+The repair dialog now states the name it is about to record, because that name leaves
+the building.
+
+`scripts/test-identity.mjs` holds this, and needs no database or key — the storage is
+stubbed, including the case where a browser blocks it entirely.
+
 ### Signing in on the shop floor
 
 A mechanic taps their name on the roster and types four digits on a **number pad**,
