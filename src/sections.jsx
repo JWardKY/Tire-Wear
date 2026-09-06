@@ -6,6 +6,7 @@ import TimecardSection from "./TimecardSection.jsx";
 import InventorySection from "./InventorySection.jsx";
 import WorkSection from "./WorkSection.jsx";
 import SupervisorSection from "./SupervisorSection.jsx";
+import HelpSection from "./HelpSection.jsx";
 
 /* The shop system is a list of sections. Adding one is a row here plus a
    component — the shell renders the nav, owns which section is showing,
@@ -120,6 +121,16 @@ export const SECTIONS = [
       ["equipment", "Equipment"],
     ],
     Component: SupervisorSection,
+  },
+  {
+    /* Last, and open to everybody. It is the book on the shelf rather
+       than a screen anybody works in, and the PRINT button on it is the
+       handout — one source, so the paper on the wall cannot drift from
+       what the app actually does. */
+    key: "help",
+    label: "Help",
+    blurb: "How to use this — and the printable version for the wall",
+    Component: HelpSection,
   },
 ];
 
