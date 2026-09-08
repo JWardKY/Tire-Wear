@@ -194,7 +194,10 @@ create table if not exists tw_shifts (
   ended_at timestamptz,
   note text,
   created_at timestamptz default now() not null,
-  lunch_minutes integer default 30 not null
+  lunch_minutes integer default 30 not null,
+  -- Maintained by trigger, and compared against a timecard approval:
+  -- editing a shift changes the clocked hours the supervisor signed off.
+  updated_at timestamptz default now() not null
 );
 
 create table if not exists tw_time_entries (
@@ -683,7 +686,11 @@ end $do$;
 do $do$ begin
   if not exists (select 1 from pg_constraint
                   where conname = 'tw_work_log_event_type_check' and conrelid = 'tw_work_log'::regclass) then
-    alter table tw_work_log add constraint tw_work_log_event_type_check CHECK ((event_type = ANY (ARRAY['timecard_saved'::text, 'timecard_deleted'::text, 'defect_repaired'::text, 'defect_reopened'::text, 'defect_closed'::text, 'pm_completed'::text, 'tire_reading'::text, 'tire_mounted'::text, 'tire_pulled'::text, 'work_order_assigned'::text, 'work_order_completed'::text, 'part_issued'::text])));
+    -- timecard_approved / timecard_unapproved gate payroll and unwind a
+    -- sign-off on somebody's pay. defect_resolved_in_motive was being
+    -- written by the Motive write-back and refused here — a warn rather
+    -- than a throw, so it failed silently.
+    alter table tw_work_log add constraint tw_work_log_event_type_check CHECK ((event_type = ANY (ARRAY['timecard_saved'::text, 'timecard_deleted'::text, 'timecard_approved'::text, 'timecard_unapproved'::text, 'defect_repaired'::text, 'defect_reopened'::text, 'defect_closed'::text, 'defect_resolved_in_motive'::text, 'pm_completed'::text, 'tire_reading'::text, 'tire_mounted'::text, 'tire_pulled'::text, 'work_order_assigned'::text, 'work_order_completed'::text, 'part_issued'::text])));
   end if;
 end $do$;
 do $do$ begin
@@ -1848,6 +1855,71 @@ $function$;
 
 -- ── Views ───────────────────────────────────────────────────
 -- security_invoker on every one: without it a view reads with its
+-- ── Approving a timecard before payroll ─────────────────────
+-- A card is one mechanic's one day. Payroll does not export until
+-- somebody has looked at each card in the range.
+--
+-- The interesting part is not the row, it is the staleness. An approval
+-- is of the NUMBERS that were on the card, so editing the card
+-- afterwards has to un-approve it — otherwise the approval is a
+-- signature on a document somebody rewrote. tw_timecard_days works that
+-- out by comparing approved_at against the newest edit to any entry or
+-- shift on the card, which is why both tables carry a touch trigger.
+
+create table if not exists tw_timecard_approvals (
+  id uuid primary key default gen_random_uuid(),
+  mechanic_id uuid not null references tw_mechanics(id) on delete cascade,
+  work_date date not null,
+  approved_by text not null,
+  -- clock_timestamp(), not now(): now() is the transaction's start time,
+  -- so an approval and an edit in one transaction tie, and a tie
+  -- resolves as still approved — the wrong way to be wrong.
+  approved_at timestamptz not null default clock_timestamp(),
+  -- What was on the screen when it was approved, so a later argument
+  -- about a figure has the figure that was signed off.
+  clock_hours numeric(6,2),
+  booked_hours numeric(6,2),
+  note text,
+  constraint tw_timecard_approvals_one_per_card unique (mechanic_id, work_date),
+  constraint tw_timecard_approvals_by_is_real check (length(btrim(approved_by)) > 0)
+);
+
+create index if not exists tw_timecard_approvals_date
+  on tw_timecard_approvals (work_date desc);
+
+alter table tw_timecard_approvals enable row level security;
+drop policy if exists "tw_timecard_approvals_anon_all" on tw_timecard_approvals;
+create policy "tw_timecard_approvals_anon_all" on tw_timecard_approvals
+  for all to anon using (true) with check (true);
+drop policy if exists "tw_timecard_approvals_auth_all" on tw_timecard_approvals;
+create policy "tw_timecard_approvals_auth_all" on tw_timecard_approvals
+  for all to authenticated using (true) with check (true);
+
+-- By trigger rather than by asking every call site to remember. One
+-- that forgets leaves an approval standing over numbers that moved,
+-- and it also puts the stamp on the server's clock rather than a shop
+-- tablet's — which is the clock approved_at is compared against.
+create or replace function public.tw_touch_updated_at()
+ returns trigger
+ language plpgsql
+ set search_path to 'public', 'pg_temp'
+as $function$
+begin
+  new.updated_at := clock_timestamp();
+  return new;
+end $function$;
+
+alter table tw_shifts add column if not exists updated_at timestamptz not null default now();
+
+drop trigger if exists tw_shifts_touch on tw_shifts;
+create trigger tw_shifts_touch before update on tw_shifts
+  for each row execute function public.tw_touch_updated_at();
+
+drop trigger if exists tw_time_entries_touch on tw_time_entries;
+create trigger tw_time_entries_touch before update on tw_time_entries
+  for each row execute function public.tw_touch_updated_at();
+
+
 -- owner's rights and becomes a hole straight through the RLS below.
 
 create or replace view tw_vehicle_meter as
@@ -1875,7 +1947,8 @@ SELECT s.id,
     s.lunch_minutes,
     tw_shift_hours(s.started_at, s.ended_at, s.lunch_minutes) AS clock_hours,
     (s.ended_at IS NULL) AS open,
-    s.note
+    s.note,
+    s.updated_at
    FROM (tw_shifts s
      JOIN tw_mechanics m ON ((m.id = s.mechanic_id)));
 
@@ -2099,7 +2172,8 @@ WITH booked AS (
             ((sum(tw_time_entries.unit_seconds))::numeric / 3600.0) AS true_hours,
             count(*) AS lines,
             count(*) FILTER (WHERE (tw_time_entries.cost_code IS NULL)) AS uncoded_lines,
-            sum(tw_time_entries.hours) FILTER (WHERE (tw_time_entries.cost_code IS NULL)) AS uncoded_hours
+            sum(tw_time_entries.hours) FILTER (WHERE (tw_time_entries.cost_code IS NULL)) AS uncoded_hours,
+            max(tw_time_entries.updated_at) AS last_entry_edit
            FROM tw_time_entries
           GROUP BY tw_time_entries.mechanic_id, tw_time_entries.work_date
         ), clocked AS (
@@ -2108,7 +2182,8 @@ WITH booked AS (
             sum(tw_shift_days.clock_hours) AS clock_hours,
             min(tw_shift_days.started_at) AS first_in,
             max(tw_shift_days.ended_at) AS last_out,
-            bool_or(tw_shift_days.open) AS still_open
+            bool_or(tw_shift_days.open) AS still_open,
+            max(tw_shift_days.updated_at) AS last_shift_edit
            FROM tw_shift_days
           GROUP BY tw_shift_days.mechanic_id, tw_shift_days.work_date
         ), days AS (
@@ -2133,11 +2208,24 @@ WITH booked AS (
     COALESCE(b.uncoded_hours, (0)::numeric) AS uncoded_hours,
     k.first_in,
     k.last_out,
-    COALESCE(k.still_open, false) AS still_open
-   FROM (((days d
+    COALESCE(k.still_open, false) AS still_open,
+    a.approved_by,
+    a.approved_at,
+    -- The newest change to anything the card is made of.
+    greatest(b.last_entry_edit, k.last_shift_edit) AS last_edit,
+    -- Approved AND untouched since. This is the column payroll is gated
+    -- on, so nothing has to remember to check both halves.
+    (a.approved_at IS NOT NULL
+      AND (greatest(b.last_entry_edit, k.last_shift_edit) IS NULL
+           OR a.approved_at >= greatest(b.last_entry_edit, k.last_shift_edit))) AS approved,
+    (a.approved_at IS NOT NULL
+      AND greatest(b.last_entry_edit, k.last_shift_edit) IS NOT NULL
+      AND a.approved_at < greatest(b.last_entry_edit, k.last_shift_edit)) AS changed_since_approved
+   FROM ((((days d
      JOIN tw_mechanics m ON ((m.id = d.mechanic_id)))
      LEFT JOIN booked b ON (((b.mechanic_id = d.mechanic_id) AND (b.work_date = d.work_date))))
-     LEFT JOIN clocked k ON (((k.mechanic_id = d.mechanic_id) AND (k.work_date = d.work_date))));
+     LEFT JOIN clocked k ON (((k.mechanic_id = d.mechanic_id) AND (k.work_date = d.work_date))))
+     LEFT JOIN tw_timecard_approvals a ON (((a.mechanic_id = d.mechanic_id) AND (a.work_date = d.work_date))));
 
 create or replace view tw_work_history as
 SELECT d.created_at AS at,

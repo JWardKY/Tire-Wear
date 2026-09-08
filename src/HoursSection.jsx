@@ -122,11 +122,24 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
   /* The payroll export is Jason's seventeen columns, read straight from
      tw_payroll_lines rather than rebuilt out of what happens to be on
      this screen. The search box narrows the tables; payroll gets the
-     whole range, because a filtered payroll run is a wrong one. */
+     whole range, because a filtered payroll run is a wrong one.
+
+     And it does not run at all until every card in the range has been
+     approved. The check asks the database, not this screen: a filtered
+     payroll run is wrong, and so is one checked against a filtered
+     list. */
   const [exporting, setExporting] = useState(false);
+  const [blocked, setBlocked] = useState(null);   // the cards standing in the way
   async function exportCsv() {
     setExporting(true);
     try {
+      const pending = await time.unapprovedCards(from, to);
+      if (pending.length) {
+        setBlocked(pending);
+        setErr(null);
+        return;
+      }
+      setBlocked(null);
       const lines = await time.payrollLines(from, to);
       const rows = [time.PAYROLL_COLUMNS, ...lines.map(time.payrollRow)];
       const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8" });
@@ -176,10 +189,12 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
             <input value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="Find a name, truck or code" style={{ ...inp, width: 200 }} />
             <Btn tone="ghost" onClick={exportCsv} disabled={exporting || !rows.length}>
-              {exporting ? "Building…" : "Payroll CSV"}
+              {exporting ? "Checking…" : "Payroll CSV"}
             </Btn>
           </div>
         </div>
+
+        {blocked && <NotApproved rows={blocked} onClose={() => setBlocked(null)} />}
 
         {tab === "cards" ? (
           <Cards from={from} to={to} q={q} who={supervisor?.name || who} onErr={setErr} />
@@ -362,12 +377,169 @@ function WhereTheTimeWent({ rows }) {
    Deleting a card needs a reason, and the reason plus the whole card
    goes to the work log before a single row is removed. */
 
+/* One card's approval state, and the one thing to do about it.
+
+   Four states, and the third is the one that matters: a card that WAS
+   approved and has been edited since reads as changed rather than as
+   approved, because an approval of numbers somebody moved afterwards is
+   not an approval. The view works that out by comparing approved_at
+   against the last edit to any entry or shift on the card, so nothing
+   here has to remember to check. */
+function ApprovalCell({ d, busy, onApprove, onPull }) {
+  const why = time.blocksApproval(d);
+
+  if (d.approved) {
+    return (
+      <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+        <span style={{ color: C.good, fontWeight: 700 }}>Approved</span>
+        <div style={{ color: C.muted, fontSize: 11.5 }}>
+          {d.approvedBy}
+          {" · "}
+          <button onClick={onPull} disabled={busy}
+            style={{ ...linkBtn, fontSize: 11.5, color: C.pull }}>
+            take it back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (d.changedSinceApproved) {
+    return (
+      <div style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+        <span style={{ color: C.watch, fontWeight: 700 }}>Changed since approving</span>
+        <div>
+          <button onClick={onApprove} disabled={busy || !!why}
+            style={{ ...linkBtn, fontSize: 11.5 }}>
+            approve again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (why) {
+    return (
+      <span style={{ fontSize: 12, color: C.muted }} title="This has to be sorted first">
+        {why}
+      </span>
+    );
+  }
+
+  return (
+    <button onClick={onApprove} disabled={busy}
+      style={{ fontFamily: FD, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em",
+               textTransform: "uppercase", padding: "4px 10px", borderRadius: 4,
+               cursor: busy ? "not-allowed" : "pointer",
+               border: `1px solid ${C.green700}`, background: "#fff", color: C.green700 }}>
+      Approve
+    </button>
+  );
+}
+
+/* Taking an approval back needs a reason, for the same reason deleting a
+   card does: it is unwinding a sign-off on somebody's pay, and the work
+   log is the only place that will remember why. */
+function UnapproveDialog({ d, busy, onClose, onDone }) {
+  const [why, setWhy] = useState("");
+  const ok = why.trim().length >= 4;
+  return (
+    <Modal title="Take the approval back"
+      sub={`${d.mechanic} · ${fmtDate(d.date)} · ${nf(d.bookedHours, 2)} hr`}
+      onClose={onClose} width={520}>
+      <p style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55, marginTop: 0 }}>
+        Approved by <b>{d.approvedBy}</b>
+        {d.approvedAt ? ` on ${fmtDate(String(d.approvedAt).slice(0, 10))}` : ""}. Taking it
+        back puts this card in front of somebody again and stops payroll exporting until
+        it is approved a second time.
+      </p>
+      <Field label="Why">
+        <input style={inp} value={why} autoFocus onChange={(e) => setWhy(e.target.value)}
+          placeholder="Wrong cost code on the second line" />
+      </Field>
+      <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+        This goes in the work log with your name on it. The log cannot be edited, so if
+        it will not write, the approval stays where it is.
+      </p>
+      <div className="flex justify-end" style={{ gap: 8, marginTop: 10 }}>
+        <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+        <Btn tone="danger" disabled={!ok || busy} onClick={() => onDone(why)}>
+          TAKE IT BACK
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+/* Why payroll did not run. A greyed-out button that will not say what
+   is wrong is where a payroll run goes to die: the office assumes the
+   system is broken and goes back to the spreadsheet. This names the
+   cards, and says which of them cannot be approved yet and why —
+   because "go and approve them" is not an instruction if one of them is
+   somebody who is still on the clock. */
+function NotApproved({ rows, onClose }) {
+  const open = rows.filter((r) => r.stillOpen).length;
+  const uncoded = rows.filter((r) => r.uncodedLines > 0).length;
+  const changed = rows.filter((r) => r.changedSinceApproved).length;
+
+  return (
+    <div style={{ background: "#FDECEA", border: `1px solid ${C.pull}44`,
+      borderLeft: `4px solid ${C.pull}`, borderRadius: 8,
+      padding: "13px 16px", marginBottom: 16 }}>
+      <div className="flex flex-wrap items-baseline justify-between" style={{ gap: 10 }}>
+        <div style={{ fontFamily: FD, fontSize: 17, fontWeight: 700, color: C.pull }}>
+          Payroll did not run — {rows.length} card{rows.length === 1 ? "" : "s"} not approved
+        </div>
+        <button onClick={onClose} style={{ ...linkBtn, fontSize: 12.5 }}>Dismiss</button>
+      </div>
+      <p style={{ fontSize: 13, color: C.ink, margin: "6px 0 0", lineHeight: 1.55,
+        maxWidth: 760 }}>
+        Every card in the range has to be approved first. Approve them on the{" "}
+        <b>Timecards</b> tab.
+        {changed > 0 && ` ${changed} was approved and then changed, so it needs looking at again.`}
+        {open > 0 && ` ${open} cannot be approved yet — somebody is still on the clock.`}
+        {uncoded > 0 && ` ${uncoded} has hours with no cost code on them.`}
+      </p>
+      <div style={{ overflowX: "auto", marginTop: 10 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}>
+          <tbody>
+            {rows.slice(0, 12).map((r) => (
+              <tr key={`${r.mechanic}-${r.date}`}>
+                <td style={{ padding: "2px 14px 2px 0", whiteSpace: "nowrap" }}>
+                  {fmtDate(r.date)}
+                </td>
+                <td style={{ padding: "2px 14px 2px 0", fontWeight: 600 }}>{r.mechanic}</td>
+                <td style={{ padding: "2px 14px 2px 0", fontFamily: FM }}>
+                  {nf(r.hours, 2)} hr
+                </td>
+                <td style={{ padding: "2px 0", color: C.muted }}>
+                  {r.stillOpen ? "still on the clock"
+                    : r.uncodedLines > 0 ? `${r.uncodedLines} uncoded`
+                    : r.changedSinceApproved ? "changed after it was approved"
+                    : "waiting to be approved"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length > 12 && (
+          <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>
+            and {rows.length - 12} more.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Cards({ from, to, q, who, onErr }) {
   const [all, setAll] = useState(null);
   const [open, setOpen] = useState(null);   // the day being looked at
   const [busy, setBusy] = useState(false);
   const [mech, setMech] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [pulling, setPulling] = useState(null);   // an approval being taken back
+  const [approving, setApproving] = useState(false);
 
   const load = useCallback(async () => {
     try { setAll(await time.timecardDays(from, to)); }
@@ -403,8 +575,41 @@ function Cards({ from, to, q, who, onErr }) {
       gap: clocked - booked,
       offBalance: days.filter((d) => !d.stillOpen && Math.abs(d.difference) >= 0.25).length,
       running: days.filter((d) => d.stillOpen).length,
+      approved: days.filter((d) => d.approved).length,
+      waiting: days.filter((d) => !d.approved).length,
     };
   }, [days]);
+
+  /* The ones that can be approved right now. A card still on the clock
+     or carrying uncoded hours is not one of them, and the button says
+     so rather than failing on each in turn. */
+  const ready = useMemo(
+    () => days.filter((d) => !d.approved && !time.blocksApproval(d)), [days]);
+  const stuck = useMemo(
+    () => days.filter((d) => !d.approved && time.blocksApproval(d)), [days]);
+
+  const approveOne = async (d) => {
+    setBusy(true);
+    try { await time.approveCard(d, who); await load(); }
+    catch (e) { onErr?.(e.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  /* Thirteen mechanics over a week is up to ninety cards, so approving
+     them one at a time is not a workflow anybody would follow. This
+     approves what it can and leaves the rest visibly unapproved rather
+     than stopping at the first one it cannot do. */
+  const approveAll = async () => {
+    setApproving(true);
+    const failed = [];
+    for (const d of ready) {
+      try { await time.approveCard(d, who); }
+      catch (e) { failed.push(`${d.mechanic} ${d.date}: ${e.message || e}`); }
+    }
+    await load();
+    setApproving(false);
+    onErr?.(failed.length ? `Some cards did not approve — ${failed.join("; ")}` : null);
+  };
 
   /* The short export: one row per mechanic per cost code. The payroll
      CSV is the full seventeen columns; this is the one you read. */
@@ -484,6 +689,11 @@ function Cards({ from, to, q, who, onErr }) {
             <Btn tone="ghost" disabled={exporting || !days.length} onClick={summaryCsv}>
               {exporting ? "Building…" : "Summary CSV"}
             </Btn>
+            <Btn disabled={approving || busy || !ready.length} onClick={approveAll}>
+              {approving ? "Approving…"
+                : ready.length ? `APPROVE ${ready.length} CARD${ready.length === 1 ? "" : "S"}`
+                : "ALL APPROVED"}
+            </Btn>
           </div>
         </div>
 
@@ -495,6 +705,8 @@ function Cards({ from, to, q, who, onErr }) {
             Math.abs(kpi.gap) >= 1 ? C.pull : Math.abs(kpi.gap) >= 0.01 ? C.watch : C.good],
           ["Out of balance", nf(kpi.offBalance), kpi.offBalance ? C.watch : C.muted],
           ["Still clocked in", nf(kpi.running), kpi.running ? C.green700 : C.muted],
+          ["Approved", `${nf(kpi.approved)} of ${nf(kpi.cards)}`,
+            kpi.waiting ? C.watch : C.good],
         ]} />
 
         {days.length === 0 && (
@@ -507,7 +719,8 @@ function Cards({ from, to, q, who, onErr }) {
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
             <thead>
               <tr>
-                {["Date", "Mechanic", "Emp #", "On the clock", "Booked", "True", "Gap", "Lines", ""]
+                {["Date", "Mechanic", "Emp #", "On the clock", "Booked", "True", "Gap", "Lines",
+                  "Approved", ""]
                   .map((h, i) => (
                     <th key={h || i}
                       style={{ ...th, textAlign: i >= 3 && i <= 7 ? "right" : "left" }}>{h}</th>
@@ -536,6 +749,11 @@ function Cards({ from, to, q, who, onErr }) {
                       <span style={{ color: C.pull, fontWeight: 700 }}> · {d.uncodedLines} uncoded</span>
                     )}
                   </td>
+                  <td style={td}>
+                    <ApprovalCell d={d} busy={busy || approving}
+                      onApprove={() => approveOne(d)}
+                      onPull={() => setPulling(d)} />
+                  </td>
                   <td style={{ ...td, textAlign: "right" }}>
                     <button onClick={() => setOpen(d)} style={{ ...linkBtn, fontSize: 12.5 }}>
                       Open
@@ -549,9 +767,31 @@ function Cards({ from, to, q, who, onErr }) {
         <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.lineSoft}`,
           fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
           The gap is hours on the clock less hours booked to a unit and a cost code.
-          A positive number is time nobody can charge out yet.
+          A positive number is time nobody can charge out yet. Payroll will not export
+          until every card in the range is approved.
+          {stuck.length > 0 && (
+            <div style={{ color: C.watch, fontWeight: 600, marginTop: 4 }}>
+              {stuck.length} card{stuck.length === 1 ? "" : "s"} cannot be approved yet —
+              somebody is still on the clock, or there are hours with no cost code on them.
+            </div>
+          )}
         </div>
       </div>
+
+      {pulling && (
+        <UnapproveDialog d={pulling} busy={busy}
+          onClose={() => setPulling(null)}
+          onDone={async (reason) => {
+            setBusy(true);
+            try {
+              await time.unapproveCard(pulling, reason, who);
+              setPulling(null);
+              await load();
+              onErr?.(null);
+            } catch (e) { onErr?.(e.message || String(e)); }
+            finally { setBusy(false); }
+          }} />
+      )}
 
       {open && (
         <CardDialog day={open} who={who} busy={busy} setBusy={setBusy}
