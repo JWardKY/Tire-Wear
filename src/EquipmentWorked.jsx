@@ -27,42 +27,12 @@ const WHERE = [
   ["road", "Outside service call"],
 ];
 
-/* Not every hour is against a truck. Sweeping the bay, a parts run, an
-   hour waiting on a gearbox — that is real time somebody has to pay for,
-   and it used to be pushed off to the Add hours dialog, which meant the
-   clock and the parts list were not available for it. It belongs on the
-   same card.
-
-   The six are Jason's, from the indirect group in his mockup. They say
-   what the person was doing; the cost code says what it charges to, and
-   the two are not the same question. "Swept the shop" charges to the
-   shop's own code, picked for the mechanic by the shop they name below;
-   the 9xx Plant codes are the asphalt plant, not this building. */
-const SHOP_WORK = [
-  "Shop cleanup / housekeeping",
-  "Parts run / pickup",
-  "Yard & equipment moves",
-  "Waiting on parts",
-  "Safety meeting / training",
-  "Other shop time",
-];
-
-/* The shops are the cost codes filed under Shop. They used to be a
-   hardcoded list of three names, which meant an hour of shop time still
-   had to be charged to a piece of equipment's code — in practice one of
-   the 9xx Plant codes, which are the asphalt plant, not this building.
-   Now picking the shop IS charging the time to it, and adding a fourth
-   shop is a row in Setup rather than a deploy. */
-const shopsFrom = (codes) => codes.filter((c) => c.group === "Shop");
-
-/* The shop a mechanic picked last, so the second card of the day does
-   not ask again. Per browser, which is per person in practice. Stored as
-   the code, not the name: a name can be corrected in Setup, and a stale
-   one here would silently stop matching. */
-const LAST_SHOP = "tirewear:lastshop";
-const lastShop = () => {
-  try { return localStorage.getItem(LAST_SHOP) || ""; } catch { return ""; }
-};
+/* SHOP_WORK, the shop list and the remembered shop live in timeData now
+   — the unbooked-hours prompt on the Today tab offers the same choices,
+   and two copies of that list would drift. */
+const SHOP_WORK = time.SHOP_WORK;
+const shopsFrom = time.shopsFrom;
+const lastShop = time.lastShop;
 
 const blank = () => ({
   key: Math.random().toString(36).slice(2),
@@ -599,7 +569,7 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
                 const sh = shops.find((x) => x.code === e.target.value);
                 onPatch({ shopCode: e.target.value, shop: sh ? sh.name : "",
                           costCode: e.target.value });
-                try { localStorage.setItem(LAST_SHOP, e.target.value); } catch { /* fine */ }
+                time.rememberShop(e.target.value);
               }}
               style={{ ...inp, borderColor: c.shopCode ? C.line : C.pull }}>
               {!shops.length && <option value="">No shops set up yet</option>}

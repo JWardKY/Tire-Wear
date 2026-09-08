@@ -99,6 +99,40 @@ export const WORK_TYPES = [
   "Diagnostics", "Welding / fab", "Road call",
 ];
 
+/* ── Shop time ────────────────────────────────────────────────────
+   Not every hour is against a truck. Sweeping the bay, a parts run, an
+   hour waiting on a gearbox — real time somebody has to pay for.
+
+   These say what the person was doing. The SHOP cost code says what it
+   charges to, and the two are not the same question: picking the shop
+   IS charging the time to it. Both live here rather than inside one
+   screen, because the equipment card and the unbooked-hours prompt on
+   the same tab have to offer the same list or they will drift. */
+export const SHOP_WORK = [
+  "Shop cleanup / housekeeping",
+  "Parts run / pickup",
+  "Yard & equipment moves",
+  "Waiting on parts",
+  "Safety meeting / training",
+  "Other shop time",
+];
+
+/* The shops are the cost codes filed under Shop. Adding a fourth is a
+   row in Setup rather than a deploy. */
+export const shopsFrom = (codes) => codes.filter((c) => c.group === "Shop");
+
+/* The shop somebody picked last, so the second lot of shop time in a day
+   does not ask again. Per browser, which is per person in practice.
+   Stored as the code, not the name: a name can be corrected in Setup and
+   a stale one here would quietly stop matching. */
+const LAST_SHOP = "tirewear:lastshop";
+export const lastShop = () => {
+  try { return localStorage.getItem(LAST_SHOP) || ""; } catch { return ""; }
+};
+export const rememberShop = (code) => {
+  try { if (code) localStorage.setItem(LAST_SHOP, code); } catch { /* fine */ }
+};
+
 export async function listDay(mechanicId, date) {
   const { data, error } = await supabase
     .from("tw_hours")
