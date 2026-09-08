@@ -199,7 +199,9 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
       </div>
 
       <Shift mechanicId={unlocked.id} date={date} entries={entries}
-        onBusy={onBusy} onErr={setErr} />
+        mechanic={unlocked} codes={codes}
+        onBusy={onBusy} onErr={setErr}
+        onSaved={() => loadDay().catch((e) => setErr(e.message))} />
 
       <EquipmentWorked mechanic={unlocked} date={date}
         vehicles={vehicles} codes={codes} parts={parts}
@@ -722,7 +724,7 @@ function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
 
 const LUNCH = [0, 15, 30, 45, 60];
 
-function Shift({ mechanicId, date, entries, onBusy, onErr }) {
+function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSaved }) {
   const [sh, setSh] = React.useState(null);
   const [, tick] = React.useState(0);
 
@@ -831,6 +833,16 @@ function Shift({ mechanicId, date, entries, onBusy, onErr }) {
                                : acc.tone === "ok" ? C.good : C.muted }}>
               {acc.note}
             </div>
+
+            {/* The gap used to be a number and a telling-off. It is the
+                shop's own time — sweeping, a parts run, waiting on a
+                gearbox — and it has to land on a shop's cost code to be
+                charged out at all. So it gets booked here, and the
+                mechanic says which shop, because nothing else knows. */}
+            {!running && acc.diff > 0.01 && (
+              <GapTime hours={acc.diff} codes={codes} mechanic={mechanic}
+                date={date} onBusy={onBusy} onErr={onErr} onSaved={onSaved} />
+            )}
           </div>
         </>
       )}
@@ -838,6 +850,129 @@ function Shift({ mechanicId, date, entries, onBusy, onErr }) {
   );
 }
 
+
+/* ── The hours nobody has booked yet ──────────────────────────────
+   Clocked time that has not been charged to a truck or a shop. Payroll
+   cannot charge out an hour with no cost code, and a card carrying one
+   cannot be approved, so this is the last thing standing between a
+   mechanic and going home.
+
+   The shop is the mechanic's to pick and it is not guessed at. Three
+   shops charge to three different codes; defaulting to one of them
+   would put Clover Bottom's hours on Clays Ferry quietly, which is
+   worse than asking. The last one used is pre-selected, because the
+   answer is the same most days — but it is a starting point, not a
+   decision made on somebody's behalf. */
+function GapTime({ hours, codes, mechanic, date, onBusy, onErr, onSaved }) {
+  const shops = React.useMemo(() => time.shopsFrom(codes), [codes]);
+  const [shop, setShop] = React.useState(() => time.lastShop());
+  const [what, setWhat] = React.useState("Other shop time");
+  const [hrs, setHrs] = React.useState(() => hours.toFixed(2));
+  const [saving, setSaving] = React.useState(false);
+
+  /* The gap moves as entries are added, so the box follows it until
+     somebody types over it. */
+  const typed = React.useRef(false);
+  React.useEffect(() => {
+    if (!typed.current) setHrs(hours.toFixed(2));
+  }, [hours]);
+
+  /* A remembered shop that has since been turned off in Setup would
+     leave the select on a code that no longer exists. */
+  const valid = shops.some((x) => x.code === shop) ? shop : "";
+  const n = Number(hrs);
+  const ok = valid && n > 0 && n <= hours + 0.001;
+
+  const book = async () => {
+    setSaving(true);
+    onBusy?.(true);
+    try {
+      const sh = shops.find((x) => x.code === valid);
+      await time.saveCard({
+        date,
+        vehId: null,
+        /* Payroll's Unit column is coalesce(vehicle number, unit_label),
+           so shop time reads as what the person was doing, and the shop
+           itself rides in Job/location beside it — the same shape the
+           equipment card writes. */
+        unitLabel: what,
+        where: "shop",
+        jobLocation: sh ? sh.name : null,
+        hours: n,
+        costCode: valid,
+        workOrder: null,
+        note: what,
+        workTypes: [],
+        unitSeconds: 0,
+        stints: [],
+        workPerformed: what,
+        parts: [],
+        who: mechanic.name,
+      }, mechanic.id);
+      time.rememberShop(valid);
+      typed.current = false;
+      onErr?.(null);
+      await onSaved?.();
+    } catch (e) {
+      onErr?.(`Those hours did not save — ${e.message || e}`);
+    } finally {
+      setSaving(false);
+      onBusy?.(false);
+    }
+  };
+
+  return (
+    <div style={{ background: C.paper, border: `1px solid ${C.line}`,
+      borderLeft: `3px solid ${C.watch}`, borderRadius: 6,
+      padding: "11px 13px", marginTop: 10 }}>
+      <div style={{ fontFamily: FD, fontSize: 13.5, fontWeight: 700, color: C.green900 }}>
+        Put those hours on a shop
+      </div>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "3px 0 9px", lineHeight: 1.5,
+        maxWidth: 620 }}>
+        Shop time still has to be charged somewhere. Pick the shop you were at — that is
+        what it charges to, and nothing else can work it out.
+      </p>
+
+      <div className="flex flex-wrap items-end" style={{ gap: 8 }}>
+        <Field label="Which shop">
+          <select value={valid} onChange={(e) => setShop(e.target.value)}
+            style={{ ...inp, width: 200, borderColor: valid ? C.line : C.pull }}>
+            <option value="">Choose a shop…</option>
+            {shops.map((sh) => <option key={sh.code} value={sh.code}>{sh.name}</option>)}
+          </select>
+        </Field>
+        <Field label="What you were doing">
+          <select value={what} onChange={(e) => setWhat(e.target.value)}
+            style={{ ...inp, width: 220 }}>
+            {time.SHOP_WORK.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </Field>
+        <Field label="Hours">
+          <input type="number" step="0.25" min="0" max={hours}
+            value={hrs}
+            onChange={(e) => { typed.current = true; setHrs(e.target.value); }}
+            style={{ ...inp, width: 96, fontFamily: FM }} />
+        </Field>
+        <Btn disabled={!ok || saving} onClick={book}>
+          {saving ? "Saving…" : `BOOK ${nf(n || 0, 2)} HRS`}
+        </Btn>
+      </div>
+
+      {!shops.length && (
+        <div style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, marginTop: 6 }}>
+          No shops are set up yet. A supervisor adds them under Cost codes, filed under
+          Shop.
+        </div>
+      )}
+      {n > hours + 0.001 && (
+        <div style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, marginTop: 6 }}>
+          That is more than the {nf(hours, 2)} hrs left on the clock.
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ── My history ───────────────────────────────────────────────────
    Everything one person has worked on, and the shifts they have

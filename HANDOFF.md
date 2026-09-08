@@ -658,6 +658,34 @@ not the clock's opinion.
 
 `scripts/test-now.mjs` measures the skew and asserts the punch does not carry it.
 
+### The gap, and putting it on a shop
+
+The "time accounted for" line was a number and a telling-off: *2.50 hrs still need a
+unit or a shop code*, and nothing to do about it. Those hours are usually the shop's own
+— sweeping, a parts run, an hour waiting on a gearbox — and they cannot be charged out
+at all without a cost code. A card carrying them cannot be approved either, so it is the
+last thing between a mechanic and going home.
+
+`GapTime` sits under that line and books them. It appears only when the shift is
+**closed** and the gap is positive: while somebody is still on the clock the number keeps
+moving, so booking against it would be booking against a guess.
+
+**The shop is picked, never guessed.** Three shops charge to three different codes, and
+defaulting to one would put Clover Bottom's hours on Clays Ferry quietly — worse than
+asking. The last shop used is pre-selected as a starting point on later days, and the
+button stays disabled until there is a shop on it. A remembered shop that has since been
+turned off in Setup falls back to "Choose a shop…" rather than leaving the select on a
+code that no longer exists.
+
+It writes through `saveCard`, the same path the equipment card uses, so the shape matches
+what payroll already reads: the **cost code is the shop's** (picking the shop IS charging
+the time to it), `unit_label` is what the person was doing, and the shop's name rides in
+`job_location` beside it.
+
+`SHOP_WORK`, `shopsFrom` and the remembered shop moved into `timeData.js`. They were
+private to `EquipmentWorked`, and two screens on the same tab offering two copies of that
+list would have drifted.
+
 ### Approving a card, and the gate in front of payroll
 
 **Payroll does not export until every card in the range is approved.** A card is one

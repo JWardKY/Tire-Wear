@@ -197,6 +197,12 @@ export default function HelpSection() {
           Forgot to punch? Type over the <i>Clocked in</i> and <i>Clocked out</i> times.
           The clock only fills them in for you.
         </Note>
+        <Note tone="watch">
+          Once you have clocked out, anything left over shows a <B>Put those hours on a
+          shop</B> box. Pick the shop you were at, say roughly what you were doing, and
+          book it. That is how sweeping the bay or waiting on parts gets paid for — and a
+          card with hours nobody has charged cannot be approved, so it holds up payroll.
+        </Note>
       </Block>
 
       <Block id="defects" title="Defects — what the drivers write up">
