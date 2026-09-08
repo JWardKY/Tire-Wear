@@ -393,6 +393,104 @@ export async function timecardDays(from, to) {
     firstIn: r.first_in,
     lastOut: r.last_out,
     stillOpen: r.still_open,
+    approved: !!r.approved,
+    changedSinceApproved: !!r.changed_since_approved,
+    approvedBy: r.approved_by || "",
+    approvedAt: r.approved_at,
+    lastEdit: r.last_edit,
+  }));
+}
+
+/* ── Approving a card before payroll ──────────────────────────────
+   A card is one mechanic's one day, and payroll does not leave the
+   building until somebody has looked at each of them.
+
+   `approved` on the view is not just "a row exists". It is a row whose
+   approved_at is newer than the last edit to anything the card is made
+   of, so a card somebody changed after it was signed off reads as
+   unapproved again and has to be looked at a second time. That
+   comparison is why tw_time_entries and tw_shifts both carry a touch
+   trigger — an approval standing over numbers that moved underneath it
+   is a signature on a document somebody rewrote. */
+
+/* What stops a card being approvable, or "" if nothing does. Said as a
+   sentence because it goes straight in front of a supervisor. */
+export function blocksApproval(d) {
+  if (d.stillOpen) return "still on the clock";
+  if (d.uncodedLines > 0)
+    return `${d.uncodedLines} line${d.uncodedLines === 1 ? "" : "s"} with no cost code`;
+  return "";
+}
+
+export async function approveCard(d, actor) {
+  if (!actor) throw new Error("A card can only be approved by a named person.");
+  const why = blocksApproval(d);
+  if (why) throw new Error(`${d.mechanic}'s ${d.date} card cannot be approved — ${why}.`);
+
+  /* The numbers as they were on the screen, so a later argument about a
+     figure has the figure that was approved rather than today's. */
+  check(await supabase.from("tw_timecard_approvals").upsert({
+    mechanic_id: d.mechanicId,
+    work_date: d.date,
+    approved_by: actor,
+    approved_at: new Date().toISOString(),
+    clock_hours: d.clockHours,
+    booked_hours: d.bookedHours,
+  }, { onConflict: "mechanic_id,work_date" }));
+
+  const { log } = await import("./logData.js");
+  await log({
+    type: "timecard_approved",
+    mechanicId: d.mechanicId,
+    actor,
+    summary: `${d.mechanic}'s card for ${d.date} approved — ${d.bookedHours} hr booked`,
+    detail: { work_date: d.date, mechanic: d.mechanic,
+              clock_hours: d.clockHours, booked_hours: d.bookedHours,
+              gap: d.difference, lines: d.lines },
+  });
+}
+
+/* Taking an approval back. Strict logging, like deleting a card: this
+   is unwinding a sign-off on a pay record, and if the trail cannot be
+   written the approval stays where it is. */
+export async function unapproveCard(d, reason, actor) {
+  const why = String(reason || "").trim();
+  if (why.length < 4) throw new Error("A reason is required to take an approval back.");
+  if (!actor) throw new Error("An approval can only be withdrawn by a named person.");
+
+  const { logStrict } = await import("./logData.js");
+  await logStrict({
+    type: "timecard_unapproved",
+    mechanicId: d.mechanicId,
+    actor,
+    summary: `${d.mechanic}'s card for ${d.date} un-approved — ${why}`,
+    detail: { reason: why, work_date: d.date, mechanic: d.mechanic,
+              was_approved_by: d.approvedBy, was_approved_at: d.approvedAt },
+  });
+
+  check(await supabase.from("tw_timecard_approvals").delete()
+    .eq("mechanic_id", d.mechanicId).eq("work_date", d.date));
+}
+
+/* The gate. Asked of the database rather than of whatever the screen
+   happens to be showing, because a filtered payroll run is a wrong one
+   and so is one checked against a filtered list. */
+export async function unapprovedCards(from, to) {
+  const { data, error } = await supabase
+    .from("tw_timecard_days")
+    .select("mechanic,work_date,booked_hours,still_open,uncoded_lines,changed_since_approved")
+    .gte("work_date", from).lte("work_date", to)
+    .eq("approved", false)
+    .order("work_date", { ascending: true })
+    .order("mechanic", { ascending: true });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    mechanic: r.mechanic,
+    date: r.work_date,
+    hours: Number(r.booked_hours),
+    stillOpen: r.still_open,
+    uncodedLines: Number(r.uncoded_lines),
+    changedSinceApproved: !!r.changed_since_approved,
   }));
 }
 

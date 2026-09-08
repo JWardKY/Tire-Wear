@@ -18,6 +18,10 @@ const KINDS = new Set([
   "defect_reopened", "defect_closed", "pm_completed",
   "tire_reading", "tire_mounted", "tire_pulled",
   "work_order_assigned", "work_order_completed", "part_issued",
+  /* Approving a card is the gate payroll runs behind, and taking an
+     approval back is unwinding a sign-off on somebody's pay. Both
+     belong in the one table nobody can edit. */
+  "timecard_approved", "timecard_unapproved",
 ]);
 
 export const EVENT_LABEL = {
@@ -30,6 +34,8 @@ export const EVENT_LABEL = {
   tire_reading: "Tread reading",
   tire_mounted: "Tire mounted",
   tire_pulled: "Tire pulled",
+  timecard_approved: "Timecard approved",
+  timecard_unapproved: "Approval taken back",
   work_order_assigned: "Work assigned",
   work_order_completed: "Work order completed",
   part_issued: "Parts issued",

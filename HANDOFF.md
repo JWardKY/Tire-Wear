@@ -658,6 +658,55 @@ not the clock's opinion.
 
 `scripts/test-now.mjs` measures the skew and asserts the punch does not carry it.
 
+### Approving a card, and the gate in front of payroll
+
+**Payroll does not export until every card in the range is approved.** A card is one
+mechanic's one day. The check is `unapprovedCards(from, to)`, asked of the database
+rather than of whatever the screen is showing — a filtered payroll run is wrong, and so
+is one checked against a filtered list. The refusal names the cards and says which of
+them cannot be approved yet and why, because "go and approve them" is not an instruction
+if one of them is somebody still on the clock.
+
+**`approved` is not "a row exists".** It is a row whose `approved_at` is newer than the
+last edit to anything the card is made of. Edit a card after signing it off and it reads
+as *Changed since approving* and has to be looked at again — otherwise the approval is a
+signature on a document somebody rewrote. `tw_timecard_days` works that out from
+`greatest(last_entry_edit, last_shift_edit)`, so nothing in the app has to remember to
+check both halves.
+
+That comparison is why `tw_time_entries` and `tw_shifts` both carry a **touch trigger**.
+`updated_at` was maintained by one call site remembering to pass it, and `tw_shifts` had
+no such column at all — so a raw fix or a new code path would have left an approval
+standing over numbers that had moved. By trigger it is structural, and the stamp is the
+server's clock rather than a shop tablet's, which is the clock `approved_at` is compared
+against.
+
+**`clock_timestamp()`, not `now()`.** `now()` is the transaction's start time, so an
+approval and an edit inside one transaction carry the same timestamp, the comparison
+ties, and a tie resolves as *still approved* — the wrong way to be wrong. Found while
+testing exactly that case.
+
+Two things block approval, and both are the point of catching them before payroll:
+a card **still on the clock**, and a card with **uncoded hours** (payroll cannot charge
+out an hour with no cost code). `blocksApproval(d)` returns the reason as a sentence
+because it goes straight in front of a supervisor.
+
+Thirteen mechanics over a week is up to ninety cards, so there is a bulk **APPROVE n
+CARDS** that does the eligible ones and leaves the rest visibly unapproved rather than
+stopping at the first it cannot do.
+
+Taking an approval back needs a reason of four characters or more and goes through
+`logStrict` — the same rule as deleting a card. If the append-only log will not write,
+the approval stays where it is.
+
+**A bug found on the way past.** `tw_work_log` has a check constraint listing the event
+types it accepts, and `defect_resolved_in_motive` was not on it. The Motive write-back
+has been writing that row since it shipped and the constraint has been refusing it —
+inside a `console.warn` rather than a throw, so it failed silently. The one record of a
+repair leaving the building was never written. Nothing has been lost only because the
+write-back has not been switched on yet. The constraint now accepts it, along with the
+two new timecard types.
+
 ### The payroll export
 
 Seventeen columns, and the column list is Jason's, not ours:

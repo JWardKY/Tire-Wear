@@ -17,6 +17,7 @@ import { Btn, SectionLabel } from "./ui.jsx";
 const SECTIONS = [
   ["start", "Getting in"],
   ["day", "A normal day"],
+  ["approval", "Getting approved"],
   ["clocks", "The two clocks"],
   ["defects", "Defects"],
   ["orders", "Work orders"],
@@ -148,6 +149,24 @@ export default function HelpSection() {
           Until you press <B>Save timecard</B>, everything on that form is only on your
           phone. It survives the phone going to sleep, but it is not in the system and
           nobody else can see it. Save before you leave.
+        </Note>
+      </Block>
+
+      <Block id="approval" title="Your card gets approved before payroll sees it">
+        <p style={p}>
+          Once your day is saved, a supervisor looks at the card and approves it. Payroll
+          does not go out until every card for the week has been approved, so a card
+          nobody can approve holds up everybody.
+        </p>
+        <Note tone="watch">
+          Two things stop a card being approved: <B>still being on the clock</B>, and
+          <B> hours with no cost code on them</B>. Both are yours to sort — clock out at
+          the end of the day, and make sure every line has a code.
+        </Note>
+        <Note>
+          If your card gets changed after it was approved, the approval drops off and it
+          goes back in front of a supervisor. Nothing is lost; it just gets looked at
+          again, which is the point.
         </Note>
       </Block>
 
