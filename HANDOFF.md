@@ -499,6 +499,58 @@ whichever identity the mechanic had when they claimed it — the unlock name if 
 had unlocked, the badge email if they had not. Matching on name alone silently
 dropped the older claims.
 
+### A job takes a crew, not a person
+
+`tw_work_orders.assigned_to` held exactly one mechanic. Two people on a transmission
+is ordinary shop work, so the board made the shop pick which of the two to lie about
+— and the other one was then working a job that on every screen belonged to somebody
+else, and it never appeared on their own **My jobs** at all.
+
+`tw_work_order_crew` is now the truth about who is on a job. `assigned_to` survives
+as the **lead**: whoever was put on it first and is still on it. It survives because a
+handful of things genuinely want one name — the `tw_wo_assigned_is_complete`
+constraint, the history rows, the one-line summary on the Now board — and inventing a
+second way to answer "whose is this" would have meant two answers that could disagree.
+
+**The two are kept in step by a trigger, not by call-site discipline.**
+`tw_wo_crew_sync()` fires on every insert and delete against the crew and recomputes
+the lead as the earliest-added member still on it, along with the state: somebody on
+it means `in progress`, nobody means `open`, and a `done` or `cancelled` order is left
+alone because its crew is history rather than a queue. So taking the lead off promotes
+whoever is left instead of leaving the order naming somebody who walked away — and
+that is true no matter what wrote the change, this app or a hand-typed insert.
+Nothing in `purchasingData.js` writes `assigned_to` any more; `addToCrew` and
+`removeFromCrew` write crew rows and let the database sort out the rest.
+
+**Why a list of names with an × rather than a multi-select.** A multi-select on a
+phone is a scrolling box where the last tap silently drops everything else — which is
+exactly the mistake the crew table exists to stop being possible. Each name is its
+own chip you take off deliberately, and the lead is marked so somebody can see which
+one the rest of the system will name.
+
+**What this fixed on the way past.** `tw_work_orders_assigned_to_fkey` is
+`ON DELETE SET NULL`, and that was never safe on its own: blanking the lead on an
+order still `in progress` violates `tw_wo_assigned_is_complete`, so deleting a
+mechanic who had a live job failed outright with a check-constraint error. That was
+already true before any of this — the crew table only made it surface, because the
+test suite deletes a mechanic who is on a job. `tw_mechanic_off_the_board()` runs
+*before* the delete, takes them off every crew (which lets the sync trigger promote or
+reopen), and clears any lingering direct assignment, so the referential action finds
+nothing left to blank and the ordering between the two stops mattering.
+
+**Where a crew shows up.** The Work orders board lists the whole crew in *Who is on
+it*. **My jobs** shows a shared job to everybody on it, with "with <names>" on the
+card and "Working it with you" in the dialog — a mechanic walking up to a job somebody
+else has already had apart needs to know to go and find them, not start over. The Now
+board's one-line summary appends `(+1)`, because "both of them are on the same
+transmission" and "both of them are somewhere" are very different answers to give a
+foreman walking the floor.
+
+`myWork` reads the crew first and the orders second — two plain reads and a join in
+memory, the same shape used everywhere else here rather than a PostgREST embedded
+filter. "Put on you" in the job dialog uses their own crew row's timestamp, not the
+lead's, because on a job with a crew those are different days.
+
 ### The mechanic's own side of it
 
 Three things a mechanic needs that the office views do not give them.
@@ -1627,6 +1679,9 @@ Two more views:
 - **`tw_time_entry_parts`** — what a mechanic put on a timecard line, typed or
   from the catalog. The payroll export reads this, not the stock movements.
 - **`tw_work_log`** — append only. See the section above before touching it.
+- **`tw_work_order_crew`** — who is on a work order, one row per pair of hands.
+  `tw_work_orders.assigned_to` is the lead, kept in step by `tw_wo_crew_sync()` —
+  write the crew, never the order. See *A job takes a crew* above.
 - **`tw_payroll_lines`** — the seventeen-column payroll export.
 - **`tw_timecard_days`** — one row per mechanic per day, clocked against booked.
   Its day keys come from a UNION of both sides on purpose: a mechanic who

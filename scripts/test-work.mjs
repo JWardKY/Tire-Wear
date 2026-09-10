@@ -54,15 +54,44 @@ try {
     { p_email: "work-test@invalid", p_name: `${MARK} Fitter` });
   const mech = { id: add.data.id, name: `${MARK} Fitter` };
 
-  await buy.assignWorkOrder(mine.id, mech);
+  await buy.addToCrew(mine.id, mech, WHO);
   list = await buy.listWorkOrders(["in progress"]);
   const assigned = list.find((w) => w.id === mine.id);
-  truthy(assigned, "assigning it moves it to in progress");
+  truthy(assigned, "putting somebody on it moves it to in progress");
   is(assigned.assignedName, `${MARK} Fitter`, "with the name on it");
+  is(assigned.crew.length, 1, "and one pair of hands on it");
 
-  await buy.assignWorkOrder(mine.id, null);
+  /* ── A crew, not a person ───────────────────────────────────── */
+  const add2 = await c.rpc("tw_mechanic_add",
+    { p_email: "work-test-2@invalid", p_name: `${MARK} Helper` });
+  const mate = { id: add2.data.id, name: `${MARK} Helper` };
+
+  await buy.addToCrew(mine.id, mate, WHO);
+  let both = (await buy.listWorkOrders(["in progress"])).find((w) => w.id === mine.id);
+  is(both.crew.length, 2, "a second pair of hands goes on beside the first");
+  is(both.assignedName, `${MARK} Fitter`, "and the first one stays the lead");
+
+  /* The same person twice is a double-tap, not a second body. */
+  await buy.addToCrew(mine.id, mate, WHO);
+  both = (await buy.listWorkOrders(["in progress"])).find((w) => w.id === mine.id);
+  is(both.crew.length, 2, "putting the same one on twice changes nothing");
+
+  /* Both of them see it on their own worklist, which is the whole point:
+     before the crew table only whoever was named on the order did. */
+  truthy((await buy.myWork(mech.id)).some((w) => w.id === mine.id),
+         "the lead has it on their worklist");
+  truthy((await buy.myWork(mate.id)).some((w) => w.id === mine.id),
+         "and so does the second pair of hands");
+
+  await buy.removeFromCrew(mine.id, mech.id);
+  const promoted = (await buy.listWorkOrders(["in progress"])).find((w) => w.id === mine.id);
+  is(promoted?.assignedName, `${MARK} Helper`,
+     "taking the lead off promotes whoever is left");
+  is(promoted?.state, "in progress", "and the job is still somebody's");
+
+  await buy.removeFromCrew(mine.id, mate.id);
   is((await buy.listWorkOrders(["open"])).find((w) => w.id === mine.id)?.state,
-     "open", "unassigning puts it back to open");
+     "open", "taking the last one off puts it back to open");
 
   const bad = await c.from("tw_work_orders")
     .update({ state: "in progress", assigned_to: null }).eq("id", mine.id);
@@ -171,14 +200,19 @@ try {
       manual: "check tw_work_orders for rows this run opened",
     },
     {
-      label: "test mechanic",
-      run: async () => { await c.rpc("tw_purge_test_mechanic", { p_email: "work-test@invalid", p_name: null }); },
+      label: "test mechanics",
+      run: async () => {
+        for (const e of ["work-test@invalid", "work-test-2@invalid"]) {
+          await c.rpc("tw_purge_test_mechanic", { p_email: e, p_name: null });
+        }
+      },
       verify: async () => {
         const { count, error } = await c.from("tw_mechanics")
-          .select("id", { count: "exact", head: true }).eq("email", "work-test@invalid");
+          .select("id", { count: "exact", head: true })
+          .in("email", ["work-test@invalid", "work-test-2@invalid"]);
         return error ? null : (count || 0);
       },
-      manual: `delete from tw_mechanics where email='work-test@invalid';`,
+      manual: `delete from tw_mechanics where email in ('work-test@invalid','work-test-2@invalid');`,
     },
   ]);
 }

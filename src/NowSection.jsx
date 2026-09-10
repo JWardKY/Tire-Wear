@@ -268,8 +268,12 @@ function OnWhat({ d }) {
   const job = d.jobs[0];
   const def = d.defects[0];
 
+  /* A shared job says so on the one line, because "both of them are on
+     the same transmission" and "both of them are somewhere" are very
+     different answers to give a foreman walking the floor. */
   const line = job
-    ? `${job.unit || "shop job"} · ${job.title}`
+    ? `${job.unit || "shop job"} · ${job.title}${
+        job.crewSize > 1 ? ` (+${job.crewSize - 1})` : ""}`
     : def
       ? `${def.unit} · ${def.category}`
       : d.booked.length
@@ -313,7 +317,9 @@ function OnClockDialog({ s, d, go, onClose }) {
             <Row key={j.id}
               head={`${j.wo} · ${j.unit || "shop job"}`}
               body={j.title}
-              note={[j.detail, j.holdReason && `Waiting: ${j.holdReason}`]
+              note={[j.detail, j.holdReason && `Waiting: ${j.holdReason}`,
+                     j.crewSize > 1
+                       && `Sharing it with ${j.crewSize - 1} other${j.crewSize > 2 ? "s" : ""}`]
                 .filter(Boolean).join(" — ")}
               tone={j.priority === "now" ? C.pull : j.priority === "today" ? C.watch : C.line}
               tag={j.startedAt ? "started" : j.state} />

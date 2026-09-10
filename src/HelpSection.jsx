@@ -253,7 +253,9 @@ export default function HelpSection() {
         />
         <p style={p}>
           Put somebody on a job with the dropdown in the <i>Who is on it</i> column, and
-          it shows up on their <B>My jobs</B> straight away. Tap the <B>WO number</B> to
+          it shows up on their <B>My jobs</B> straight away. A job can take as many
+          people as it needs — pick another name and they go on beside the first,
+          each with an <b>×</b> to take them back off. Tap the <B>WO number</B> to
           see the parts and hours on it with a running total.
         </p>
         <Note>
