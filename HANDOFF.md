@@ -460,6 +460,45 @@ than no link.
 On the clock scrolls to the list already above it rather than navigating — the
 answer is on the same screen, just off the top on a phone.
 
+### "Show me what they are working on"
+
+The count of bodies in the building was never the question. Jason's was "i want to
+see indivial info on each clocked in employee. show me what they are working on",
+so every card in On the clock now is tappable and opens the person.
+
+The card itself carries a one-line answer, because a supervisor walking the floor
+should not have to open eight dialogs to find the one person who is stuck. The line
+is picked by precedence — the work order put on them beats a defect they claimed off
+the board, which beats hours they have already booked — on the theory that the thing
+somebody else assigned is the thing they are answerable for. A job on hold says so
+on that line, with its reason, since "waiting on a hose" is the single most useful
+thing the board can tell you about a mechanic who looks idle.
+
+Opening the card gives three groups, and they are deliberately three rather than one
+merged list, because they answer different questions:
+
+**Put on them** — work orders assigned to them that are not done, in priority order.
+Shows the state and, for one on hold, the reason.
+
+**Claimed off the board** — defects they took themselves. This is the half of the
+day nobody assigned, and on most days it is larger than the first group.
+
+**Booked today** — hours already saved against a unit and a cost code. This is the
+only group with a number attached, and it is the number payroll will see.
+
+**What it cannot show, and says so.** A mechanic running a clock on an equipment card
+has not written anything to the database yet — that clock is a draft in localStorage
+on their own phone until they hit Save. So a person can be actively turning wrenches
+and have an empty Booked today. The dialog therefore says "nothing booked yet"
+rather than anything implying idleness, and the caveat is printed under the group.
+Getting this wrong would have made the board accuse working mechanics of loafing,
+which is exactly the kind of quietly wrong number rule 10 is about.
+
+Claimed defects are matched by name *and* by email, because `claimed_by` holds
+whichever identity the mechanic had when they claimed it — the unlock name if they
+had unlocked, the badge email if they had not. Matching on name alone silently
+dropped the older claims.
+
 ### The mechanic's own side of it
 
 Three things a mechanic needs that the office views do not give them.
