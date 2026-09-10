@@ -122,7 +122,8 @@ export async function onClockDetail(people, dateISO) {
     const g = out.get(h.mechanic_id);
     if (!g) continue;
     g.booked.push({
-      id: h.id, unit: h.unit || h.job_location || "—", hours: Number(h.hours) || 0,
+      id: h.id, unit: h.unit || "—", hours: Number(h.hours) || 0,
+      jobLocation: h.job_location || "",
       costCode: h.cost_code || "", costCodeName: h.cost_code_name || "",
       note: h.note || "", workOrder: h.work_order || "", where: h.where_worked,
     });

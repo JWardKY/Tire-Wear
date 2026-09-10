@@ -1978,7 +1978,12 @@ SELECT t.id,
     t.unit_seconds,
     t.stints,
     t.work_performed,
-    t.created_at
+    t.created_at,
+    -- Appended, not inserted: CREATE OR REPLACE VIEW can only add
+    -- columns at the end. It was missing entirely, so a screen reading
+    -- this view could say somebody was on an outside service call and
+    -- not be able to say where.
+    t.job_location
    FROM (((tw_time_entries t
      JOIN tw_mechanics m ON ((m.id = t.mechanic_id)))
      LEFT JOIN tw_cost_codes c ON ((c.code = t.cost_code)))
