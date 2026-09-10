@@ -31,6 +31,84 @@ export async function listOnClock() {
   }));
 }
 
+/* ── What each person on the clock is actually on ─────────────────
+   The board says who is here. This says what they are doing, which is
+   the next question a foreman asks and the one the shop had to walk out
+   and find out.
+
+   Three things the database genuinely knows, and one it does not.
+
+   Knows: the work orders somebody has been put on, the defects they
+   have claimed, and the hours they have booked today.
+
+   Does not know: the clock running on their own equipment card. That
+   lives in their phone's storage until they press Save, on purpose —
+   a card in progress is a draft, not a record. So "nothing booked yet"
+   here means nothing SAVED yet; somebody can be an hour into a job and
+   still read as nothing. The card says that rather than implying the
+   person is idle, because implying that about somebody under a truck is
+   how a board loses its credibility.
+
+   Claimed defects are matched on the name rather than an id, because
+   claimed_by is text — the mechanic's name now, an email on anything
+   claimed before that changed. Both are checked. */
+export async function onClockDetail(people, dateISO) {
+  const ids = people.map((p) => p.mechanicId).filter(Boolean);
+  const out = new Map(people.map((p) => [p.mechanicId,
+    { jobs: [], defects: [], booked: [], hours: 0 }]));
+  if (!ids.length) return out;
+
+  const [wo, def, hrs] = await Promise.all([
+    supabase.from("tw_work_orders")
+      .select("id,wo_number,unit_number,title,detail,priority,state,assigned_to,started_at,hold_reason")
+      .in("assigned_to", ids).neq("state", "done")
+      .order("priority"),
+    supabase.from("tw_defects")
+      .select("id,unit_number,category,note,safety,claimed_by,claimed_at,work_order")
+      .eq("state", "claimed"),
+    supabase.from("tw_hours")
+      .select("id,mechanic_id,unit,hours,cost_code,cost_code_name,note,work_order,where_worked,job_location")
+      .in("mechanic_id", ids).eq("work_date", dateISO),
+  ]);
+  for (const r of [wo, def, hrs]) if (r.error) throw r.error;
+
+  for (const w of wo.data || []) {
+    const g = out.get(w.assigned_to);
+    if (g) g.jobs.push({
+      id: w.id, wo: w.wo_number, unit: w.unit_number || "", title: w.title,
+      detail: w.detail || "", priority: w.priority, state: w.state,
+      startedAt: w.started_at, holdReason: w.hold_reason || "",
+    });
+  }
+
+  const byName = new Map();
+  for (const p of people) {
+    if (p.mechanic) byName.set(p.mechanic, p.mechanicId);
+    if (p.email) byName.set(p.email, p.mechanicId);
+  }
+  for (const d of def.data || []) {
+    const id = byName.get(d.claimed_by);
+    const g = id && out.get(id);
+    if (g) g.defects.push({
+      id: d.id, unit: d.unit_number, category: d.category || "Defect",
+      note: d.note || "", unsafe: d.safety === "unsafe",
+      claimedAt: d.claimed_at, workOrder: d.work_order || "",
+    });
+  }
+
+  for (const h of hrs.data || []) {
+    const g = out.get(h.mechanic_id);
+    if (!g) continue;
+    g.booked.push({
+      id: h.id, unit: h.unit || h.job_location || "—", hours: Number(h.hours) || 0,
+      costCode: h.cost_code || "", costCodeName: h.cost_code_name || "",
+      note: h.note || "", workOrder: h.work_order || "", where: h.where_worked,
+    });
+    g.hours = Math.round((g.hours + (Number(h.hours) || 0)) * 100) / 100;
+  }
+  return out;
+}
+
 export async function openShift(mechanicId) {
   const { data, error } = await supabase
     .from("tw_shifts").select("id,started_at")
