@@ -176,6 +176,12 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
                 {j.holdReason}
               </div>
             )}
+            {(j.crew || []).length > 1 && (
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 5 }}>
+                with {j.crew.filter((c) => c.mechanicId !== me?.id)
+                        .map((c) => c.name).join(", ")}
+              </div>
+            )}
             <div className="flex items-baseline justify-between"
               style={{ gap: 8, marginTop: 7 }}>
               <span style={{ fontSize: 12, color: C.green700, fontWeight: 700 }}>
@@ -398,6 +404,16 @@ function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
         </Tag>
         {j.holdReason && <Tag tone="watch">{j.holdReason}</Tag>}
       </div>
+
+      {/* Who else is on it. Worth saying plainly: a mechanic walking up to
+          a job somebody else has already had apart needs to know to go and
+          find them first, not start over. */}
+      {(j.crew || []).length > 1 && (
+        <p style={{ fontSize: 13, margin: "0 0 12px" }}>
+          <b>Working it with you:</b>{" "}
+          {j.crew.filter((c) => c.mechanicId !== me?.id).map((c) => c.name).join(", ")}
+        </p>
+      )}
 
       {j.detail && (
         <p style={{ fontSize: 13.5, lineHeight: 1.55, margin: "0 0 12px" }}>{j.detail}</p>

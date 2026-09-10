@@ -169,19 +169,7 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
                   }}>{PRIO_LABEL[w.priority]}</span>
                 </td>
                 <td style={td}>
-                  <select style={{ ...inp, maxWidth: 180 }}
-                    value={w.assignedTo || ""}
-                    disabled={w.state === "done"}
-                    onChange={(e) => run(async () => {
-                      const m = roster.find((x) => x.id === e.target.value);
-                      await buy.assignWorkOrder(w.id, m || null);
-                      await load();
-                    })}>
-                    <option value="">— nobody —</option>
-                    {roster.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
+                  <Crew wo={w} roster={roster} who={who} run={run} reload={load} />
                 </td>
                 <td style={td}>
                   {w.state}
@@ -265,12 +253,80 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
    Blank is allowed and means it. Not every job is a truck: a shelving
    build or a yard tidy is real work somebody should be able to number
    and book hours against. */
+
+/* ── Who is on a job ───────────────────────────────────────────────
+   A crew, not a person. Two hands on a transmission is ordinary shop
+   work, and a single dropdown made the shop choose which of the two to
+   lie about — the other one was then working a job that on every screen
+   belonged to somebody else, and it stayed off their own worklist.
+
+   Names read as a list with a × on each rather than as a multi-select.
+   A multi-select on a phone is a scrolling box where the last tap
+   silently drops everything else, which is exactly the mistake this is
+   meant to stop being possible.
+
+   The first one on it is the lead, and is marked, because a few things
+   still want one name and somebody should know which one it will be.
+   Taking the lead off promotes whoever is left rather than emptying the
+   job — the database does that, so it is true no matter what wrote the
+   change. */
+function Crew({ wo, roster, who, run, reload }) {
+  const on = wo.crew || [];
+  const done = wo.state === "done";
+  const left = roster.filter((m) => !on.some((c) => c.mechanicId === m.id));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 150 }}>
+      {on.map((c, i) => (
+        <span key={c.mechanicId} style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          background: C.paper, border: `1px solid ${C.line}`, borderRadius: 3,
+          padding: "2px 4px 2px 7px", fontSize: 12.5, maxWidth: 190,
+        }}>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis",
+                         whiteSpace: "nowrap" }}>
+            {c.name}
+            {i === 0 && on.length > 1 && (
+              <span style={{ color: C.muted, fontSize: 11 }}> · lead</span>
+            )}
+          </span>
+          {!done && (
+            <button title={`Take ${c.name} off this job`}
+              onClick={() => run(async () => {
+                await buy.removeFromCrew(wo.id, c.mechanicId);
+                await reload();
+              })}
+              style={{ background: "none", border: 0, cursor: "pointer", padding: 0,
+                       lineHeight: 1, color: C.muted, fontSize: 15 }}>×</button>
+          )}
+        </span>
+      ))}
+
+      {!done && !!left.length && (
+        <select style={{ ...inp, maxWidth: 190, fontSize: 12.5, padding: "4px 6px" }}
+          value=""
+          onChange={(e) => run(async () => {
+            const m = roster.find((x) => x.id === e.target.value);
+            if (m) await buy.addToCrew(wo.id, m, who);
+            await reload();
+          })}>
+          <option value="">{on.length ? "+ another pair of hands" : "— nobody —"}</option>
+          {left.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      )}
+
+      {done && !on.length && <span style={{ color: C.muted }}>—</span>}
+    </div>
+  );
+}
+
 function NewOrderDialog({ vehicles, roster, onClose, onSave }) {
   const [f, setF] = useState({
-    vehId: "", title: "", detail: "", priority: "normal", assignTo: "",
+    vehId: "", title: "", detail: "", priority: "normal", crew: [],
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const veh = vehicles.find((v) => v.id === f.vehId);
+  const notOn = roster.filter((m) => !f.crew.some((c) => c.id === m.id));
   const ready = f.title.trim().length > 0;
 
   return (
@@ -305,12 +361,38 @@ function NewOrderDialog({ vehicles, roster, onClose, onSave }) {
               placeholder="optional" />
           </Field>
         </div>
-        <Field label="Put someone on it">
-          <select style={inp} value={f.assignTo} onChange={set("assignTo")}>
-            <option value="">— nobody yet —</option>
-            {roster.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </Field>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Put someone on it">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {f.crew.map((m) => (
+                <span key={m.id} style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  background: C.paper, border: `1px solid ${C.line}`, borderRadius: 3,
+                  padding: "3px 5px 3px 9px", fontSize: 13,
+                }}>
+                  {m.name}
+                  <button onClick={() => setF({
+                    ...f, crew: f.crew.filter((x) => x.id !== m.id),
+                  })} title={`Take ${m.name} back off`}
+                    style={{ background: "none", border: 0, cursor: "pointer", padding: 0,
+                             lineHeight: 1, color: C.muted, fontSize: 16 }}>×</button>
+                </span>
+              ))}
+              {!!notOn.length && (
+                <select style={{ ...inp, width: 220 }} value=""
+                  onChange={(e) => {
+                    const m = roster.find((x) => x.id === e.target.value);
+                    if (m) setF({ ...f, crew: [...f.crew, m] });
+                  }}>
+                  <option value="">
+                    {f.crew.length ? "+ another pair of hands" : "— nobody yet —"}
+                  </option>
+                  {notOn.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              )}
+            </div>
+          </Field>
+        </div>
       </div>
 
       <p style={{ fontSize: 12.5, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
@@ -327,7 +409,7 @@ function NewOrderDialog({ vehicles, roster, onClose, onSave }) {
           title: f.title.trim(),
           detail: f.detail.trim() || null,
           priority: f.priority,
-          assignTo: f.assignTo ? roster.find((m) => m.id === f.assignTo) : null,
+          assignTo: f.crew,
         })}>OPEN IT</Btn>
       </div>
     </Modal>

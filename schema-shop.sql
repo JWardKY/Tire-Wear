@@ -2535,3 +2535,150 @@ alter table tw_work_orders add column if not exists hold_since timestamptz;
 alter table tw_pm_programs drop constraint if exists tw_pm_programs_applies_to_check;
 alter table tw_pm_programs add constraint tw_pm_programs_applies_to_check
   check (applies_to = any (array['DT'::text, 'HT'::text, 'OT'::text]));
+-- ── More than one person on a work order ───────────────────────
+-- assigned_to held one mechanic, which is not how a shop works: two
+-- people on a transmission is normal, and the board could only name
+-- one of them. The crew table is the truth about who is on a job;
+-- assigned_to survives as the lead — the first one put on it — because
+-- the state constraint, the history and every screen that names one
+-- person still want a single answer.
+--
+-- The two are kept in step by a trigger rather than by call-site
+-- discipline. Any path that touches the crew — this app, a script, a
+-- hand-typed insert — leaves the order agreeing with it.
+create table if not exists tw_work_order_crew (
+  id uuid default gen_random_uuid() not null,
+  work_order uuid not null,
+  mechanic_id uuid not null,
+  -- Denormalised so a name still reads on a roster row that has since
+  -- been renamed, the same way tw_work_orders.assigned_name does.
+  mechanic_name text not null,
+  added_by text,
+  added_at timestamptz default now() not null
+);
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_work_order_crew_pkey' and conrelid = 'tw_work_order_crew'::regclass) then
+    alter table tw_work_order_crew add constraint tw_work_order_crew_pkey PRIMARY KEY (id);
+  end if;
+end $do$;
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_work_order_crew_once' and conrelid = 'tw_work_order_crew'::regclass) then
+    -- Putting somebody on a job twice is a double-tap, not a second person.
+    alter table tw_work_order_crew add constraint tw_work_order_crew_once
+      UNIQUE (work_order, mechanic_id);
+  end if;
+end $do$;
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_work_order_crew_wo_fkey' and conrelid = 'tw_work_order_crew'::regclass) then
+    alter table tw_work_order_crew add constraint tw_work_order_crew_wo_fkey
+      FOREIGN KEY (work_order) REFERENCES tw_work_orders(id) ON DELETE CASCADE;
+  end if;
+end $do$;
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_work_order_crew_mech_fkey' and conrelid = 'tw_work_order_crew'::regclass) then
+    alter table tw_work_order_crew add constraint tw_work_order_crew_mech_fkey
+      FOREIGN KEY (mechanic_id) REFERENCES tw_mechanics(id) ON DELETE CASCADE;
+  end if;
+end $do$;
+
+create index if not exists tw_work_order_crew_wo on tw_work_order_crew (work_order);
+create index if not exists tw_work_order_crew_mech on tw_work_order_crew (mechanic_id);
+
+alter table tw_work_order_crew enable row level security;
+drop policy if exists "tw_work_order_crew_anon_all" on tw_work_order_crew;
+create policy "tw_work_order_crew_anon_all" on tw_work_order_crew for all to anon using (true) with check (true);
+drop policy if exists "tw_work_order_crew_auth_all" on tw_work_order_crew;
+create policy "tw_work_order_crew_auth_all" on tw_work_order_crew for all to authenticated using (true) with check (true);
+
+-- The lead is whoever was put on it first and is still on it. Adding a
+-- second hand does not take the job off the first one, and taking the
+-- lead off promotes the next one rather than leaving the order claiming
+-- somebody who walked away.
+--
+-- State follows the same rule the single assignment always followed:
+-- somebody on it means in progress, nobody means open. A finished or
+-- cancelled order is left alone — its crew is history, not a queue.
+create or replace function public.tw_wo_crew_sync() returns trigger
+language plpgsql
+set search_path to 'public', 'pg_temp'
+as $fn$
+declare
+  v_wo uuid := coalesce(new.work_order, old.work_order);
+  v_id uuid; v_name text; v_at timestamptz;
+begin
+  select c.mechanic_id, c.mechanic_name, c.added_at
+    into v_id, v_name, v_at
+    from tw_work_order_crew c
+   where c.work_order = v_wo
+   order by c.added_at, c.id
+   limit 1;
+
+  update tw_work_orders w
+     set assigned_to   = v_id,
+         assigned_name = v_name,
+         assigned_at   = v_at,
+         state = case when w.state in ('done', 'cancelled') then w.state
+                      when v_id is not null then 'in progress'
+                      else 'open' end,
+         updated_at = clock_timestamp()
+   where w.id = v_wo
+     and (w.assigned_to is distinct from v_id
+          or (w.state not in ('done', 'cancelled')
+              and w.state <> case when v_id is not null then 'in progress' else 'open' end));
+
+  return null;
+end $fn$;
+
+drop trigger if exists tw_wo_crew_sync_t on tw_work_order_crew;
+create trigger tw_wo_crew_sync_t after insert or delete on tw_work_order_crew
+  for each row execute function public.tw_wo_crew_sync();
+
+-- Re-runnable backfill: everybody already assigned is already crew of one.
+insert into tw_work_order_crew (work_order, mechanic_id, mechanic_name, added_by, added_at)
+select w.id, w.assigned_to, coalesce(w.assigned_name, m.name, 'Unknown'),
+       'backfill', coalesce(w.assigned_at, w.created_at)
+  from tw_work_orders w
+  left join tw_mechanics m on m.id = w.assigned_to
+ where w.assigned_to is not null
+on conflict (work_order, mechanic_id) do nothing;
+
+-- Taking somebody off the roster entirely.
+--
+-- assigned_to's foreign key is ON DELETE SET NULL, and that alone was
+-- never safe: blanking it on an order that is still 'in progress'
+-- violates tw_wo_assigned_is_complete, so deleting a mechanic who had
+-- a live job failed outright. That was true before the crew table
+-- existed; the crew table is what made it show up, because the test
+-- suite now deletes a mechanic who is on one.
+--
+-- Doing it before the delete rather than after means the referential
+-- action finds nothing left to blank, so ordering between the two stops
+-- mattering. Their crew rows go first, which lets the crew trigger
+-- promote whoever is left, or put the job back to open if nobody is.
+create or replace function public.tw_mechanic_off_the_board() returns trigger
+language plpgsql
+set search_path to 'public', 'pg_temp'
+as $fn$
+begin
+  delete from tw_work_order_crew where mechanic_id = old.id;
+  -- Defensive: an order naming them with no crew row behind it. The
+  -- backfill leaves none, but a hand-edited row would.
+  update tw_work_orders
+     set assigned_to = null, assigned_name = null, assigned_at = null,
+         state = case when state in ('done', 'cancelled') then state else 'open' end,
+         updated_at = clock_timestamp()
+   where assigned_to = old.id;
+  return old;
+end $fn$;
+
+drop trigger if exists tw_mechanic_off_the_board_t on tw_mechanics;
+create trigger tw_mechanic_off_the_board_t before delete on tw_mechanics
+  for each row execute function public.tw_mechanic_off_the_board();

@@ -252,7 +252,9 @@ export async function createWorkOrder(info, who) {
   const r = await openWorkOrder("other", key, info, who);
   /* Assigning at creation is one action to the person doing it, so the
      board does not make them create a job and then go and find it. */
-  if (r?.id && info.assignTo) await assignWorkOrder(r.id, info.assignTo);
+  for (const m of info.assignTo || []) {
+    if (r?.id) await addToCrew(r.id, m, who);
+  }
   return r;
 }
 
@@ -333,7 +335,9 @@ export async function listWorkOrders(states) {
   if (states?.length) q = q.in("state", states);
   const { data, error } = await q;
   if (error) throw error;
+  const crew = await crewFor(data.map((w) => w.id));
   return data.map((w) => ({
+    crew: crew.get(w.id) || [],
     id: w.id, wo: w.wo_number, kind: w.kind, key: w.source_key,
     vehId: w.vehicle_id, unit: w.unit_number || "", title: w.title,
     detail: w.detail || "", priority: w.priority, state: w.state,
@@ -344,14 +348,56 @@ export async function listWorkOrders(states) {
   }));
 }
 
-export async function assignWorkOrder(id, mechanic) {
-  check(await supabase.from("tw_work_orders").update({
-    assigned_to: mechanic ? mechanic.id : null,
-    assigned_name: mechanic ? mechanic.name : null,
-    assigned_at: mechanic ? new Date().toISOString() : null,
-    state: mechanic ? "in progress" : "open",
-    updated_at: new Date().toISOString(),
-  }).eq("id", id));
+/* ── Who is on a job ───────────────────────────────────────────────
+   A job can have a crew. Two people on a transmission is normal, and
+   for a long time the board could only name one of them, which meant
+   the second one was working a job that on every screen belonged to
+   somebody else.
+
+   tw_work_order_crew is the truth about who is on it. The order's own
+   assigned_to survives as the lead — whoever was put on it first and is
+   still on it — because a handful of things want one name: the state
+   constraint, the history rows, the one-line summary on the Now board.
+   A database trigger keeps the two in step, so nothing here has to
+   remember to, and a crew row written by anything else still leaves the
+   order telling the truth.
+
+   Everything below therefore writes the crew and never assigned_to. */
+
+export async function crewFor(woIds) {
+  const list = [...new Set((woIds || []).filter(Boolean))];
+  const out = new Map(list.map((id) => [id, []]));
+  if (!list.length) return out;
+  const { data, error } = await supabase.from("tw_work_order_crew")
+    .select("work_order,mechanic_id,mechanic_name,added_at")
+    .in("work_order", list).order("added_at");
+  if (error) throw error;
+  for (const c of data || []) {
+    out.get(c.work_order)?.push({
+      mechanicId: c.mechanic_id, name: c.mechanic_name, addedAt: c.added_at,
+    });
+  }
+  return out;
+}
+
+/* Putting the same person on twice is a double-tap, not a second pair
+   of hands, and the unique constraint says so. Swallowing that one
+   error is right: the outcome the tapper wanted is already true. */
+export async function addToCrew(woId, mechanic, who) {
+  const { error } = await supabase.from("tw_work_order_crew").insert({
+    work_order: woId, mechanic_id: mechanic.id,
+    mechanic_name: mechanic.name, added_by: who || null,
+  });
+  if (error && error.code !== "23505") throw error;
+}
+
+/* Taking the last person off puts the order back to open, and taking
+   the lead off promotes whoever is left rather than leaving the order
+   naming somebody who walked away. Both of those happen in the
+   trigger. */
+export async function removeFromCrew(woId, mechanicId) {
+  check(await supabase.from("tw_work_order_crew").delete()
+    .eq("work_order", woId).eq("mechanic_id", mechanicId));
 }
 
 export async function closeWorkOrder(id, note, who) {
@@ -415,16 +461,33 @@ export async function workHistory({ from, to, kind, unit, who } = {}) {
 /* ── One mechanic's own worklist ───────────────────────────────── */
 
 export async function myWork(mechanicId) {
+  /* Their crew rows first, then the orders behind them. Two plain reads
+     rather than an embedded filter, and it is the crew that decides —
+     a second pair of hands on a job sees it on their own list, which
+     before the crew table only the one named on the order did. */
+  const { data: mine, error: crewErr } = await supabase
+    .from("tw_work_order_crew").select("work_order")
+    .eq("mechanic_id", mechanicId);
+  if (crewErr) throw crewErr;
+  const ids = [...new Set((mine || []).map((c) => c.work_order))];
+  if (!ids.length) return [];
+
   const { data, error } = await supabase
     .from("tw_work_orders").select("*")
-    .eq("assigned_to", mechanicId).neq("state", "done")
+    .in("id", ids).neq("state", "done")
     .order("priority").order("wo_number", { ascending: false });
   if (error) throw error;
+  const crew = await crewFor(data.map((w) => w.id));
   return data.map((w) => ({
+    crew: crew.get(w.id) || [],
     id: w.id, wo: w.wo_number, kind: w.kind, unit: w.unit_number || "",
     title: w.title, detail: w.detail || "", priority: w.priority,
     state: w.state, vehId: w.vehicle_id, at: w.created_at,
-    assignedAt: w.assigned_at, startedAt: w.started_at,
+    /* When they were put on it, not when the lead was — on a job with a
+       crew those are different days, and "put on you" should mean them. */
+    assignedAt: (crew.get(w.id) || []).find((c) => c.mechanicId === mechanicId)
+      ?.addedAt || w.assigned_at,
+    startedAt: w.started_at,
     holdReason: w.hold_reason || "", holdSince: w.hold_since,
     sourceKey: w.source_key,
   }));

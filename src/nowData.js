@@ -58,11 +58,23 @@ export async function onClockDetail(people, dateISO) {
     { jobs: [], defects: [], booked: [], hours: 0 }]));
   if (!ids.length) return out;
 
+  /* Their crew rows first, then the orders. A job can have more than one
+     pair of hands on it, so "what is this person on" is a question for
+     tw_work_order_crew — reading assigned_to would show the job only to
+     whoever was put on it first. */
+  const { data: crewRows, error: crewErr } = await supabase
+    .from("tw_work_order_crew").select("work_order,mechanic_id")
+    .in("mechanic_id", ids);
+  if (crewErr) throw crewErr;
+  const woIds = [...new Set((crewRows || []).map((c) => c.work_order))];
+
   const [wo, def, hrs] = await Promise.all([
-    supabase.from("tw_work_orders")
-      .select("id,wo_number,unit_number,title,detail,priority,state,assigned_to,started_at,hold_reason")
-      .in("assigned_to", ids).neq("state", "done")
-      .order("priority"),
+    woIds.length
+      ? supabase.from("tw_work_orders")
+          .select("id,wo_number,unit_number,title,detail,priority,state,started_at,hold_reason")
+          .in("id", woIds).neq("state", "done")
+          .order("priority")
+      : Promise.resolve({ data: [], error: null }),
     supabase.from("tw_defects")
       .select("id,unit_number,category,note,safety,claimed_by,claimed_at,work_order")
       .eq("state", "claimed"),
@@ -72,13 +84,23 @@ export async function onClockDetail(people, dateISO) {
   ]);
   for (const r of [wo, def, hrs]) if (r.error) throw r.error;
 
+  /* One order can land on two people's cards, which is the point. */
+  const onIt = new Map();
+  for (const c of crewRows || []) {
+    if (!onIt.has(c.work_order)) onIt.set(c.work_order, []);
+    onIt.get(c.work_order).push(c.mechanic_id);
+  }
   for (const w of wo.data || []) {
-    const g = out.get(w.assigned_to);
-    if (g) g.jobs.push({
-      id: w.id, wo: w.wo_number, unit: w.unit_number || "", title: w.title,
-      detail: w.detail || "", priority: w.priority, state: w.state,
-      startedAt: w.started_at, holdReason: w.hold_reason || "",
-    });
+    const crew = onIt.get(w.id) || [];
+    for (const mid of crew) {
+      const g = out.get(mid);
+      if (g) g.jobs.push({
+        id: w.id, wo: w.wo_number, unit: w.unit_number || "", title: w.title,
+        detail: w.detail || "", priority: w.priority, state: w.state,
+        startedAt: w.started_at, holdReason: w.hold_reason || "",
+        crewSize: crew.length,
+      });
+    }
   }
 
   const byName = new Map();
