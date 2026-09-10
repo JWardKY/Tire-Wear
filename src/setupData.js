@@ -21,10 +21,14 @@ const rpc = async (fn, args) => {
 export async function listRoster() {
   const rows = await fetchAll(
     "tw_mechanics",
-    "id,email,name,role,emp_no,cell_phone,pin_set,active,locked_until", "name");
+    "id,email,name,role,emp_no,cell_phone,pay_group,pay_class,pay_class_name," +
+      "pay_job,pay_job_name,pin_set,active,locked_until", "name");
   return rows.map((r) => ({
     id: r.id, email: r.email || "", name: r.name, role: r.role || "mechanic",
     empNo: r.emp_no || "", cell: r.cell_phone || "",
+    payGroup: r.pay_group || "", payClass: r.pay_class || "",
+    payClassName: r.pay_class_name || "",
+    payJob: r.pay_job || "", payJobName: r.pay_job_name || "",
     pinSet: !!r.pin_set, active: !!r.active,
     lockedUntil: r.locked_until,
     locked: !!r.locked_until && new Date(r.locked_until) > new Date(),
@@ -43,10 +47,18 @@ export const addMechanic = (name, role, email, empNo) =>
 /* Correcting a record rather than adding a second one. Without this,
    "D. Bradley" could not become "Donald Bradley" and the roster grew a
    duplicate instead — which is exactly what happened. */
-export const updateMechanic = (id, { name, email, empNo, cell }) =>
+export const updateMechanic = (id, {
+  name, email, empNo, cell, payClass, payClassName, payGroup, payJob, payJobName,
+}) =>
   rpc("tw_mechanic_update", {
     p_id: id, p_name: name, p_email: email || null,
-    p_emp_no: empNo || null, p_cell: cell || null });
+    p_emp_no: empNo || null, p_cell: cell || null,
+    /* The payroll half of the record. The employee number is the key
+       the import matches on, and the class is what it prices the hour
+       at — an hour with neither is a line payroll has to chase. */
+    p_class: payClass || null, p_class_name: payClassName || null,
+    p_group: payGroup || null,
+    p_job: payJob || null, p_job_name: payJobName || null });
 
 /* Home address, home phone and next of kin. These are the only fields
    in the app the browser cannot read with the key that ships in the

@@ -90,13 +90,29 @@ for (const f of files) {
   const s = readFileSync(f, "utf8");
   const lineOf = (i) => s.slice(0, i).split("\n").length;
 
+  /* A select list is often written as adjacent string literals joined
+     with +, because one line of columns runs past the margin. Reading
+     only the first literal silently skips the rest, which is worse than
+     not checking at all: the columns after the + would look verified.
+     So the pieces are joined before they are checked. */
+  const joined = (str, at) => {
+    let cols = str, i = at;
+    for (;;) {
+      const more = s.slice(i).match(/^\s*\+\s*"([^"]*)"/);
+      if (!more) return cols;
+      cols += more[1];
+      i += more[0].length;
+    }
+  };
+
   for (const m of s.matchAll(/\.from\(\s*"([a-z_0-9]+)"\s*\)/g)) {
-    const tail = s.slice(m.index + m[0].length, m.index + m[0].length + 400);
+    const from = m.index + m[0].length;
+    const tail = s.slice(from, from + 400);
     const sm = tail.match(/\.select\(\s*"([^"]*)"/);
-    if (sm) check(m[1], sm[1], f, lineOf(m.index));
+    if (sm) check(m[1], joined(sm[1], from + sm.index + sm[0].length), f, lineOf(m.index));
   }
   for (const m of s.matchAll(/fetchAll\(\s*\n?\s*"([a-z_0-9]+)"\s*,\s*\n?\s*"([^"]*)"/g)) {
-    check(m[1], m[2], f, lineOf(m.index));
+    check(m[1], joined(m[2], m.index + m[0].length), f, lineOf(m.index));
   }
 }
 
