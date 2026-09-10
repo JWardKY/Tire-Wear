@@ -352,7 +352,11 @@ function OnClockDialog({ s, d, go, onClose }) {
             <Row key={b.id}
               head={`${nf(b.hours, 2)} hr · ${b.unit}`}
               body={[b.costCode, b.costCodeName].filter(Boolean).join(" — ")}
-              note={[b.workOrder, b.note].filter(Boolean).join(" · ")}
+              /* Where it happened, when that is not the shop. "Outside
+                 service call" without naming the place is half an
+                 answer to a foreman asking where somebody is. */
+              note={[b.where && b.where !== "shop" ? b.jobLocation || b.where : "",
+                     b.workOrder, b.note].filter(Boolean).join(" · ")}
               tone={C.line} />
           ))}
       </Group>

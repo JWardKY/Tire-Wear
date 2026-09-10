@@ -486,6 +486,47 @@ day nobody assigned, and on most days it is larger than the first group.
 **Booked today** — hours already saved against a unit and a cost code. This is the
 only group with a number attached, and it is the number payroll will see.
 
+### The bug this board shipped, and the two guards that came out of it
+
+The first version of this selected `tw_hours.job_location`. That column is on
+`tw_time_entries` and on `tw_payroll_lines`, but it had never been carried through
+the `tw_hours` view. Jason opened the Now board and got
+
+> column tw_hours.job_location does not exist
+
+**Nothing caught it, and the reason matters.** `npm run build` does not read SQL.
+The browser test did drive the real app — but the fake PostgREST behind it answered
+every request with whatever the fixture held and ignored the select list entirely.
+So the query for a nonexistent column came back `200` with rows, and every check
+went green. *A fake more permissive than the real thing does not merely fail to
+catch a bug; it certifies it.*
+
+Two guards now exist, both runnable without database credentials:
+
+**`scripts/check-columns.mjs`** walks every `.from("t").select("a,b")` and
+`fetchAll("t", "a,b")` in `src/` and `netlify/` and checks each column against
+`scripts/schema-columns.json` — the real shape of all 40 tables and views,
+generated from the database with `--write`. It covers every screen at once rather
+than the ones a test happens to open, and it names the file and line. Run against
+the shipped bug it prints exactly `tw_hours.job_location — src/nowData.js:81`.
+
+**`scripts/_fakerest.mjs`** is the fake PostgREST, now shared rather than
+copy-pasted per test. It refuses a column that is not in that same schema file, the
+way the real thing refuses one the database does not have, and it honours filters
+(an ignored `eq` once made a test pass against the wrong card). `scripts/test-nowboard.mjs`
+is the committed browser suite built on it; it was checked by putting the bug back
+and confirming it fails, rather than only by confirming it passes.
+
+Judging columns against the *database* rather than against the fixture rows is
+deliberate. A fixture only carries the fields a test bothered to fill in, so judging
+by it rejects columns that genuinely exist — the first attempt did exactly that on
+`tw_defects.first_reported`.
+
+`job_location` is now on the `tw_hours` view, appended rather than inserted because
+`CREATE OR REPLACE VIEW` can only add columns at the end. It earns its place: the
+booked-hours rows can now say a road call was at *Danville yard* instead of just
+saying it happened somewhere that was not the shop.
+
 **What it cannot show, and says so.** A mechanic running a clock on an equipment card
 has not written anything to the database yet — that clock is a draft in localStorage
 on their own phone until they hit Save. So a person can be actively turning wrenches
