@@ -20,10 +20,11 @@ const rpc = async (fn, args) => {
 
 export async function listRoster() {
   const rows = await fetchAll(
-    "tw_mechanics", "id,email,name,role,emp_no,pin_set,active,locked_until", "name");
+    "tw_mechanics",
+    "id,email,name,role,emp_no,cell_phone,pin_set,active,locked_until", "name");
   return rows.map((r) => ({
     id: r.id, email: r.email || "", name: r.name, role: r.role || "mechanic",
-    empNo: r.emp_no || "",
+    empNo: r.emp_no || "", cell: r.cell_phone || "",
     pinSet: !!r.pin_set, active: !!r.active,
     lockedUntil: r.locked_until,
     locked: !!r.locked_until && new Date(r.locked_until) > new Date(),
@@ -42,14 +43,21 @@ export const addMechanic = (name, role, email, empNo) =>
 /* Correcting a record rather than adding a second one. Without this,
    "D. Bradley" could not become "Donald Bradley" and the roster grew a
    duplicate instead — which is exactly what happened. */
-export const updateMechanic = (id, { name, email, empNo }) =>
+export const updateMechanic = (id, { name, email, empNo, cell }) =>
   rpc("tw_mechanic_update", {
-    p_id: id, p_name: name, p_email: email || null, p_emp_no: empNo || null });
+    p_id: id, p_name: name, p_email: email || null,
+    p_emp_no: empNo || null, p_cell: cell || null });
 
-/* Address, phone and next of kin. These are the only fields in the app
-   the browser cannot read with the key that ships in the page — they
-   cost the supervisor's own PIN, checked in the database, because a
-   list of where everybody lives is not roster data. The PIN is passed
+/* Home address, home phone and next of kin. These are the only fields
+   in the app the browser cannot read with the key that ships in the
+   page — they cost the supervisor's own PIN, checked in the database,
+   because a list of where everybody lives is not roster data.
+
+   The work cell is deliberately not among them. It is how the shop
+   rings somebody about a job, so it sits with the name and the employee
+   number where anyone on the board can read it. Putting it behind a PIN
+   would have meant nobody could look up a number without a supervisor
+   standing there, which is not a protection, only an obstacle. The PIN is passed
    per call and never stored: the supervisor gate deliberately remembers
    who signed in and nothing else. */
 export const getPrivate = (actorId, pin, id) =>

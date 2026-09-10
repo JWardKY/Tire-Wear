@@ -75,6 +75,10 @@ create table if not exists tw_mechanics (
   created_at timestamptz default now() not null,
   role text default 'mechanic'::text not null,
   emp_no text,
+  -- The work cell. Roster data, not personal: it is how the shop rings
+  -- somebody about a job, so it is granted to the browser alongside the
+  -- name. The home phone below is not.
+  cell_phone text,
   address text,
   phone text,
   emergency_name text,
@@ -1520,7 +1524,7 @@ begin
 end;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.tw_mechanic_update(p_id uuid, p_name text, p_email text, p_emp_no text)
+CREATE OR REPLACE FUNCTION public.tw_mechanic_update(p_id uuid, p_name text, p_email text, p_emp_no text, p_cell text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -1548,7 +1552,8 @@ begin
   update tw_mechanics
      set name   = nm,
          email  = e,
-         emp_no = nullif(btrim(coalesce(p_emp_no, '')), '')
+         emp_no = nullif(btrim(coalesce(p_emp_no, '')), ''),
+         cell_phone = nullif(btrim(coalesce(p_cell, '')), '')
    where id = p_id;
   get diagnostics n = row_count;
   if n = 0 then return jsonb_build_object('ok', false, 'error', 'No such mechanic.'); end if;
@@ -2453,8 +2458,8 @@ create policy "tw_work_orders_auth_all" on tw_work_orders for all to authenticat
 -- columns. Writes are not granted at all — they go through the
 -- SECURITY DEFINER functions above.
 revoke all on tw_mechanics from anon, authenticated;
-grant select (id, name, email, emp_no, role, active, pin_set, locked_until,
-              created_at, motive_user_id)
+grant select (id, name, email, emp_no, cell_phone, role, active, pin_set,
+              locked_until, created_at, motive_user_id)
   on tw_mechanics to anon, authenticated;
 
 
@@ -2682,3 +2687,23 @@ end $fn$;
 drop trigger if exists tw_mechanic_off_the_board_t on tw_mechanics;
 create trigger tw_mechanic_off_the_board_t before delete on tw_mechanics
   for each row execute function public.tw_mechanic_off_the_board();
+
+-- ── The work cell on the roster ────────────────────────────────
+-- Re-runnable for a database that predates it.
+--
+-- A cell number is roster data, not personal data. The shop rings it to
+-- ask where somebody is; a number nobody can look up without a
+-- supervisor standing over them is an obstacle rather than a
+-- protection. So it is granted to the browser alongside the name and
+-- the employee number, while the home phone, the address and the next
+-- of kin stay behind tw_mechanic_private_get and a checked PIN.
+alter table tw_mechanics add column if not exists cell_phone text;
+
+grant select (id, name, email, emp_no, cell_phone, role, active, pin_set,
+              locked_until, created_at, motive_user_id)
+  on tw_mechanics to anon, authenticated;
+
+-- The four-argument signature would otherwise survive as an overload
+-- beside the five-argument one, and PostgREST cannot choose between two
+-- functions of the same name.
+drop function if exists public.tw_mechanic_update(uuid, text, text, text);

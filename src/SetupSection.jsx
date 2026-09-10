@@ -81,7 +81,8 @@ function Roster({ roster, run, supervisor }) {
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead><tr>
-            <th style={th}>Name</th><th style={th}>Role</th>
+            <th style={th}>Name</th><th style={th}>Emp #</th>
+            <th style={th}>Cell</th><th style={th}>Role</th>
             <th style={th}>PIN</th><th style={th}>On the roster</th>
             <th style={th}></th>
           </tr></thead>
@@ -93,6 +94,19 @@ function Roster({ roster, run, supervisor }) {
                   {m.email && (
                     <div style={{ fontSize: 11, color: C.muted }}>{m.email}</div>
                   )}
+                </td>
+                {/* Both on the board rather than only inside the dialog:
+                    an employee number nobody can see is one nobody
+                    checks against payroll, and a cell number is looked
+                    up far more often than it is edited. */}
+                <td style={{ ...td, fontFamily: FM }}>
+                  {m.empNo || <span style={{ color: C.muted }}>—</span>}
+                </td>
+                <td style={{ ...td, fontFamily: FM, whiteSpace: "nowrap" }}>
+                  {m.cell
+                    ? <a href={`tel:${m.cell.replace(/[^\d+]/g, "")}`}
+                         style={{ color: C.green700 }}>{m.cell}</a>
+                    : <span style={{ color: C.muted }}>—</span>}
                 </td>
                 <td style={td}>
                   <select style={{ ...inp, maxWidth: 150 }} value={m.role}
@@ -127,7 +141,7 @@ function Roster({ roster, run, supervisor }) {
               </tr>
             ))}
             {!roster.length && (
-              <tr><td style={{ ...td, color: C.muted }} colSpan={5}>
+              <tr><td style={{ ...td, color: C.muted }} colSpan={7}>
                 Nobody on the roster yet. Add somebody and they set their own PIN
                 the first time they tap their name on the timecard tab.
               </td></tr>
@@ -201,8 +215,8 @@ function Roster({ roster, run, supervisor }) {
 
 /* ── Editing one mechanic ──────────────────────────────────────── */
 
-/* Jason's record: name, address, phone, email, Allen employee number,
-   emergency contact, PIN.
+/* Jason's record: name, email, Allen employee number, work cell,
+   address, home phone, emergency contact, PIN.
 
    It comes in two halves on purpose. The top half is what the roster
    already shows the whole shop, so it saves on its own. The bottom half
@@ -216,6 +230,7 @@ function EditMechanic({ m, run, supervisor, onClose }) {
   const [name, setName] = useState(m.name || "");
   const [email, setEmail] = useState(m.email || "");
   const [empNo, setEmpNo] = useState(m.empNo || "");
+  const [cell, setCell] = useState(m.cell || "");
 
   const [pin, setPin] = useState("");
   const [priv, setPriv] = useState(null);      // null until unlocked
@@ -225,7 +240,8 @@ function EditMechanic({ m, run, supervisor, onClose }) {
 
   const changed = name.trim() !== (m.name || "")
     || email.trim() !== (m.email || "")
-    || empNo.trim() !== (m.empNo || "");
+    || empNo.trim() !== (m.empNo || "")
+    || cell.trim() !== (m.cell || "");
 
   const unlock = async () => {
     setPrivErr(""); setUnlocking(true);
@@ -252,10 +268,21 @@ function EditMechanic({ m, run, supervisor, onClose }) {
         <input style={inp} value={email} placeholder="optional"
                onChange={(e) => setEmail(e.target.value)} />
       </Field>
-      <Field label="Allen Co employee number">
-        <input style={{ ...inp, fontFamily: FM }} value={empNo} placeholder="optional"
-               onChange={(e) => setEmpNo(e.target.value)} />
-      </Field>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <Field label="Allen Co employee number">
+          <input style={{ ...inp, fontFamily: FM }} value={empNo} placeholder="optional"
+                 onChange={(e) => setEmpNo(e.target.value)} />
+        </Field>
+        {/* The work cell sits up here with the name, not down in the
+            PIN-locked half. It is how the shop rings somebody about a
+            job — a number nobody can look up without a supervisor
+            standing over them is an obstacle, not a protection. The
+            home phone below stays locked. */}
+        <Field label="Cell phone">
+          <input style={{ ...inp, fontFamily: FM }} value={cell} placeholder="optional"
+                 inputMode="tel" onChange={(e) => setCell(e.target.value)} />
+        </Field>
+      </div>
 
       <div style={{ borderTop: `1px solid ${C.line}`, margin: "16px 0 12px" }} />
       <SectionLabel>Personal details</SectionLabel>
@@ -296,7 +323,7 @@ function EditMechanic({ m, run, supervisor, onClose }) {
             <textarea style={{ ...inp, minHeight: 60 }} value={priv.address}
               onChange={(e) => setPriv({ ...priv, address: e.target.value })} />
           </Field>
-          <Field label="Phone">
+          <Field label="Home phone">
             <input style={{ ...inp, fontFamily: FM }} value={priv.phone}
               onChange={(e) => setPriv({ ...priv, phone: e.target.value })} />
           </Field>
@@ -328,7 +355,8 @@ function EditMechanic({ m, run, supervisor, onClose }) {
           <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
           <Btn disabled={!name.trim() || (!changed && !priv)}
             onClick={() => {
-              const wanted = { name: name.trim(), email: email.trim(), empNo: empNo.trim() };
+              const wanted = { name: name.trim(), email: email.trim(),
+                               empNo: empNo.trim(), cell: cell.trim() };
               const p = priv;
               onClose();
               run(async () => {

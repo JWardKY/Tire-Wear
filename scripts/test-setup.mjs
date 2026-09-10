@@ -237,11 +237,23 @@ try {
   /* ── Correcting a record instead of adding a second one ─────── */
   /* "D. Bradley" could not become "Donald Bradley", so the roster grew
      a duplicate. That is the bug this whole block exists for. */
-  const up = await setup.updateMechanic(nid, { name: `${MARK} Renamed`, empNo: "E-4471" });
+  const up = await setup.updateMechanic(nid, {
+    name: `${MARK} Renamed`, empNo: "E-4471", cell: "859-555-0142" });
   truthy(up.ok, "a mechanic can be renamed rather than duplicated");
   let after = (await setup.listRoster()).find((x) => x.id === nid);
   is(after.name, `${MARK} Renamed`, "and the new name reads back");
   is(after.empNo, "E-4471", "with the Allen employee number on it");
+  is(after.cell, "859-555-0142", "and the work cell beside it");
+
+  /* The dialog always sends the whole record, so leaving a field out is
+     the same as clearing it — the same way the name and the employee
+     number have always behaved. Worth pinning down: it is the one thing
+     that would quietly wipe a number somebody typed. */
+  await setup.updateMechanic(nid, { name: `${MARK} Renamed`, empNo: "E-4471" });
+  after = (await setup.listRoster()).find((x) => x.id === nid);
+  is(after.cell, "", "sending the record without a cell clears it");
+  await setup.updateMechanic(nid, {
+    name: `${MARK} Renamed`, empNo: "E-4471", cell: "859-555-0142" });
 
   const blank = await setup.updateMechanic(nid, { name: "   " });
   is(blank.ok, false, "a blank name is refused — that is how somebody vanishes");
@@ -277,6 +289,14 @@ try {
     .select("address,phone,emergency_name,emergency_phone").eq("id", nid);
   truthy(direct.error,
          "and the browser cannot read those columns off the table at all");
+
+  /* The work cell is deliberately on the other side of that line, and
+     the home phone is deliberately not — if a later grant ever widened
+     to `phone` this is what would catch it. */
+  const cellRead = await c.from("tw_mechanics").select("cell_phone").eq("id", nid);
+  truthy(!cellRead.error, "the work cell is roster data and reads off the table");
+  const homeRead = await c.from("tw_mechanics").select("phone").eq("id", nid);
+  truthy(homeRead.error, "the home phone still is not");
 
   /* A mechanic is not a supervisor, whatever PIN they hold. */
   await setup.setRole(nid, "mechanic");
