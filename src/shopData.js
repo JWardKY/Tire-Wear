@@ -400,6 +400,59 @@ export async function listCompletions(vehicleId, programId) {
   }));
 }
 
+/* ── Every service that has been done ──────────────────────────────
+   listCompletions answers "this truck, this service". This answers
+   "what has the shop actually done", which is the question the history
+   tab exists for, and it is a different read: across every truck and
+   every program, newest first.
+
+   Two plain reads and a join in memory rather than an embedded select,
+   the same shape used everywhere else here. The vehicle and the program
+   are read whole because a completion on a truck that has since gone
+   off the roster, or a service since turned off, still happened and
+   still has to render. */
+export async function pmHistory({ from, to, vehId, programId } = {}) {
+  let q = supabase.from("tw_pm_completions")
+    .select("id,vehicle_id,program_id,done_date,done_odometer,engine_hours,hours,done_by,note,created_at")
+    .order("done_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(2000);
+  if (from) q = q.gte("done_date", from);
+  if (to) q = q.lte("done_date", to);
+  if (vehId && vehId !== "all") q = q.eq("vehicle_id", vehId);
+  if (programId && programId !== "all") q = q.eq("program_id", programId);
+  const { data, error } = await q;
+  if (error) throw error;
+  if (!data.length) return [];
+
+  const [veh, prog] = await Promise.all([
+    supabase.from("tw_vehicles").select("id,number,division")
+      .in("id", [...new Set(data.map((r) => r.vehicle_id))]),
+    supabase.from("tw_pm_programs").select("id,name,category")
+      .in("id", [...new Set(data.map((r) => r.program_id))]),
+  ]);
+  for (const r of [veh, prog]) if (r.error) throw r.error;
+  const byVeh = new Map((veh.data || []).map((v) => [v.id, v]));
+  const byProg = new Map((prog.data || []).map((p) => [p.id, p]));
+
+  return data.map((r) => ({
+    id: r.id,
+    date: r.done_date,
+    vehId: r.vehicle_id,
+    truck: byVeh.get(r.vehicle_id)?.number || "—",
+    div: byVeh.get(r.vehicle_id)?.division || "",
+    programId: r.program_id,
+    program: byProg.get(r.program_id)?.name || "—",
+    category: byProg.get(r.program_id)?.category || "",
+    odo: r.done_odometer,
+    engineHours: r.engine_hours == null ? null : Number(r.engine_hours),
+    hours: r.hours == null ? null : Number(r.hours),
+    by: r.done_by || "",
+    note: r.note || "",
+    at: r.created_at,
+  }));
+}
+
 export async function deleteCompletion(id) {
   check(await supabase.from("tw_pm_completions").delete().eq("id", id));
 }
