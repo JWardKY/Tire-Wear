@@ -61,14 +61,6 @@ const toReading = (r) => ({
   d: Number(r.depth_32nds),
 });
 
-const toPressure = (r) => ({
-  tire: r.tire_id,
-  date: r.reading_date,
-  psi: Number(r.psi),
-  status: r.sensor_status || "",
-  source: r.source,
-});
-
 const toOdo = (r, vehNumById) => ({
   id: r.id,
   vehId: r.vehicle_id,
@@ -102,7 +94,7 @@ const toWear = (r) => ({
 /* ── Load ─────────────────────────────────────────────────────── */
 
 export async function loadAll() {
-  const [vehRows, tireRows, readingRows, odoRows, wearRows, brandRows, setRows, psiRows] =
+  const [vehRows, tireRows, readingRows, odoRows, wearRows, brandRows, setRows] =
     await Promise.all([
       fetchAll("tw_vehicles", "*", "number"),
       fetchAll("tw_tires", "*"),
@@ -111,10 +103,6 @@ export async function loadAll() {
       fetchAll("tw_tire_wear", "*"),
       fetchAll("tw_tire_brands", "*", "sort_order"),
       fetchAll("tw_settings", "*"),
-      /* The newest pressure per tire, not the whole history. A weekly
-         file adds a few hundred rows every Monday, and the fleet screen
-         only ever draws the latest one. */
-      fetchAll("tw_tire_pressure_latest", "*"),
     ]);
 
   const vehicles = vehRows.filter((r) => r.active).map(toVehicle);
@@ -123,14 +111,10 @@ export async function loadAll() {
   const wear = {};
   wearRows.forEach((r) => { wear[r.tire_id] = toWear(r); });
 
-  const pressures = {};
-  psiRows.forEach((r) => { pressures[r.tire_id] = toPressure(r); });
-
   return {
     vehicles,
     tires: tireRows.map((r) => toTire(r, vehNumById)),
     readings: readingRows.map(toReading),
-    pressures,
     odos: odoRows.map((r) => toOdo(r, vehNumById)),
     wear,
     brands: brandRows.filter((b) => b.active).map((b) => b.name),
@@ -257,46 +241,6 @@ function nudgeTireAlerts() {
   try {
     fetch("/.netlify/functions/tire-alert", { method: "POST" }).catch(() => {});
   } catch { /* no fetch, or running under a test harness */ }
-}
-
-/* One weekly TPMS file. Upsert on (tire, date) rather than insert so
-   re-running the same file — which is what happens when somebody is not
-   sure it took the first time — corrects the day instead of failing on
-   the unique index.
-
-   Only tires passed in are written. Deciding which those are is
-   tpmsImport.planPressures' job, and the screen shows that decision
-   before this ever runs. */
-export async function savePressures(entries, date, who) {
-  if (!entries.length) return { recorded: 0 };
-  check(
-    await supabase.from("tw_tire_pressures").upsert(
-      entries.map((e) => ({
-        tire_id: e.tireId,
-        reading_date: date,
-        psi: e.psi,
-        sensor_status: e.status || null,
-        source: "tpms",
-        recorded_by: who,
-      })),
-      { onConflict: "tire_id,reading_date" }
-    )
-  );
-  return { recorded: entries.length };
-}
-
-/* Every pressure ever recorded for one tire, newest first. Read on
-   demand from the tire dialog — the fleet screen carries only the
-   latest, so the history is fetched by whoever actually opens it. */
-export async function pressureHistory(tireId) {
-  const { data, error } = await supabase
-    .from("tw_tire_pressures")
-    .select("id,tire_id,reading_date,psi,sensor_status,source")
-    .eq("tire_id", tireId)
-    .order("reading_date", { ascending: false })
-    .limit(60);
-  if (error) throw error;
-  return data.map(toPressure);
 }
 
 export async function deleteReading(id) {
