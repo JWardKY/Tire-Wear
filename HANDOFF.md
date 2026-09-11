@@ -40,6 +40,7 @@ What is done:
 - Wear rates computed in a database view, not in the React — see below.
 - Every reading is stamped with the email of whoever took it.
 - CSV exports for tires, tread readings, and the mileage log.
+- A weekly TPMS import that puts air pressure on the wheels we have tires entered for.
 - **Defects** — log a fault, claim it, mark it repaired, with the out-of-service
   ones sorted to the top.
 - **PM** — twelve service programs, a due board by miles and by months, and a
@@ -132,7 +133,8 @@ history with it silently. Inactive drops it off the boards and keeps everything.
 Four files, in this order:
 
 ```
-schema.sql        tire wear: vehicles, tires, tread readings, mileage, settings
+schema.sql        tire wear: vehicles, tires, tread readings, air pressure,
+                  mileage, settings
 schema-shop.sql   everything else: defects, PM, timecards and the clock, parts,
                   purchasing, work orders, the mechanic roster — plus the 32
                   functions, the stock trigger, RLS and the tw_mechanics grants
@@ -1121,6 +1123,9 @@ none, because somebody follows it.
 | `scripts/test-pins.mjs` | The PIN security properties — run this after any auth change |
 | `scripts/test-timecards.mjs` | Exercises the timecard data layer |
 | `scripts/test-parts.mjs` | The CSV reader, the import planner, and stock movements |
+| `src/tpmsImport.js` | Reads the weekly TPMS export and plans the import. Pure |
+| `scripts/test-tpms.mjs` | The TPMS reader and planner, on a real week. No key needed |
+| `scripts/test-pressureboard.mjs` | The air-pressure screen in a real browser. Needs the app served |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
@@ -1721,6 +1726,45 @@ at mount time, shows in the tire dialog header, and rides along in the tires CSV
 as the `wheel` column. It is optional, so a mount is never blocked on it, and it is null
 on every tire mounted before the field existed — those stay blank until the tire is
 pulled and remounted.
+
+### Air pressure
+
+`tw_tire_pressures` holds what the truck's TPMS reported: one row per tire per
+reading date, with the pressure and the sensor's own status text. The fleet screen
+reads `tw_tire_pressure_latest` — one row per tire — so it stays the same size in
+year three as in week one; the full history is read on demand when somebody opens a
+wheel.
+
+It comes in weekly as a file. **Tires → Air pressure** takes the Continental
+ContiConnect export, works out which column is which, and shows exactly what it
+would record before anything is written. The rule it exists to hold:
+
+> A pressure is only ever recorded against a tire already entered on the site.
+
+A truck whose tires are not in yet is counted, named on screen, and skipped whole —
+no tire is invented to hang a reading on. Enter its tires and the next file picks it
+up. `scripts/test-tpms.mjs` holds that rule against a real week of readings (688
+rows, 58 trucks, 28 of them entered).
+
+Three things worth knowing about the file:
+
+- **It has three pressure columns.** Cold inflation pressure is the *target*,
+  compensated pressure is corrected to a reference temperature, and only
+  *non-compensated* is what a gauge would read at the wheel. The mapping matches
+  that one strictly and leaves the field blank rather than guessing — filing the
+  target as a measurement would be wrong on every wheel and look perfectly
+  reasonable on screen.
+- **Truck numbers are spelled three ways in one file** — `DT 864`, `DT-1807`,
+  `DT1800`. Matching strips everything that is not a letter or a digit.
+- **Roughly half the rows carry no pressure at all** (sensor loose or flipped, no
+  current reading, no pressure data). Those wheels are left alone rather than
+  recorded as zero. A real `0` is recorded, because that is a flat tire.
+
+The colour on a pressure comes from the sensor's own status, not from a threshold
+of ours. Continental knows each truck's target cold pressure; we do not, and 100 psi
+is fine on a drive and may not be on a steer. If the shop ever wants its own
+thresholds, that is a `target_psi` on `tw_settings` and a change to `psiTone` in
+`src/TireWear.jsx` — nothing else.
 
 ### Notes on a wheel
 

@@ -81,6 +81,7 @@ export const SECTIONS = [
     blurb: "Tread depth, miles run, and cost-per-mile by brand and position",
     subTabs: [
       ["fleet", "Fleet"],
+      ["pressure", "Air pressure"],
       ["analysis", "Analysis"],
       ["settings", "Settings"],
     ],

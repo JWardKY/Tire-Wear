@@ -446,6 +446,23 @@
       "name",
       "sort_order"
     ],
+    "tw_tire_pressure_latest": [
+      "tire_id",
+      "reading_date",
+      "psi",
+      "sensor_status",
+      "source"
+    ],
+    "tw_tire_pressures": [
+      "id",
+      "tire_id",
+      "reading_date",
+      "psi",
+      "sensor_status",
+      "source",
+      "recorded_by",
+      "created_at"
+    ],
     "tw_tire_wear": [
       "first_depth",
       "first_odometer",
