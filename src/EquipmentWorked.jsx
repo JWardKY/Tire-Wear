@@ -3,6 +3,7 @@ import { C, FD, FM } from "./theme.js";
 import { nf, Btn, Field, SectionLabel, inp, linkBtn } from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as buy from "./purchasingData.js";
+import * as shop from "./shopData.js";
 
 /* ── Equipment worked ─────────────────────────────────────────────
    A mechanic's day, one unit at a time. This is the shape the shop
@@ -60,6 +61,12 @@ const blank = () => ({
   holdReason: "",
   jobLocation: "",
   workTypes: [],
+  /* Only ever set on a card whose Type of work includes PM service.
+     Which services were done, and what the dash said — the two things a
+     PM completion needs that a timecard never used to ask for. */
+  pmPrograms: [],
+  pmOdo: "",
+  pmEngineHours: "",
   workPerformed: "",
   parts: [],
   seconds: 0,
@@ -67,13 +74,17 @@ const blank = () => ({
   runningAt: null,
 });
 
+/* A card that says a PM was done on a truck. Shop time is not a PM on
+   anything, so the unit is half the test. */
+const needsPm = (c) => !!c.vehId && c.workTypes.includes("PM service");
+
 /* Has anybody put anything on this card. Module level because both the
    seed effect and the save path need it, and they sit either side of
    the component's own helpers. */
 const isFilled = (c) =>
   c.vehId || c.shopWork || c.costCode || c.hours || c.workPerformed
     || c.workTypes.length || c.parts.length || c.seconds || c.runningAt
-    || c.jobLocation;
+    || c.jobLocation || c.pmPrograms.length || c.pmOdo;
 
 const hms = (sec) => {
   const s = Math.max(0, Math.floor(sec));
@@ -114,7 +125,8 @@ function readDraft(mechanicId, date) {
   }
 }
 
-export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts, seed, onSeedUsed, onSaved, onErr }) {
+export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts,
+  programs = [], seed, onSeedUsed, onSaved, onErr }) {
   const [cards, setCards] = useState(() => readDraft(mechanic.id, date) || [blank()]);
   const [restored, setRestored] = useState(
     () => !!readDraft(mechanic.id, date));
@@ -229,7 +241,11 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     /* A card started from a job has to say what happened to the job.
        It is one tap, and the alternative is an order that sits looking
        untouched while somebody has actually spent the afternoon on it. */
-    && (!c.woId || c.jobOutcome === "done" || c.jobOutcome === "hold");
+    && (!c.woId || c.jobOutcome === "done" || c.jobOutcome === "hold")
+    /* Ticking PM service and naming none is a tick that records
+       nothing — the truck would still read "no baseline" and the
+       mechanic would have every reason to think it did not. */
+    && (!needsPm(c) || c.pmPrograms.length > 0);
   const filled = isFilled;
 
   const live = cards.filter(filled);
@@ -251,6 +267,8 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     if (Number(bad.hours) > 24) return "That is more than twenty-four hours.";
     if (bad.woId && !bad.jobOutcome)
       return `Say whether ${bad.workOrder || "the job"} is finished — either way the hours save.`;
+    if (needsPm(bad) && !bad.pmPrograms.length)
+      return "Say which PM service was done, or untick PM service.";
     return null;
   })();
   const totalHours = live.reduce((a, c) => a + (Number(c.hours) || 0), 0);
@@ -285,6 +303,30 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
           who: mechanic.name,
         }, mechanic.id);
         saved += 1;
+
+        /* The PM, after the hours are in, and for the same reason the
+           work-order outcome is: a completion that will not write is
+           worth telling somebody about, and it is never worth losing an
+           afternoon's hours over. */
+        if (needsPm(c) && c.pmPrograms.length) {
+          try {
+            await shop.recordServicesFromCard({
+              vehId: c.vehId,
+              programIds: c.pmPrograms,
+              date,
+              odo: c.pmOdo,
+              engineHours: c.pmEngineHours,
+              /* The labour on the truck is already on the card. */
+              hours: Number(c.hours) || null,
+              note: c.workPerformed.trim().slice(0, 120) || null,
+            }, mechanic.name);
+          } catch (e) {
+            const unit = (vehicles.find((v) => v.id === c.vehId) || {}).num || "the truck";
+            failed.push(
+              `the hours are saved but the PM on ${unit} did not record — `
+              + (e.message || String(e)));
+          }
+        }
 
         /* The job's own outcome, after the hours are in. Deliberately
            after: a work order that will not update is worth telling
@@ -355,6 +397,7 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
       {cards.map((c, i) => (
         <UnitCard key={c.key} card={c} index={i} count={cards.length}
           now={now} vehicles={vehicles} codeGroups={codeGroups} shops={shops} parts={parts}
+          programs={programs}
           onPatch={(f) => patch(c.key, f)}
           onClock={() => toggleClock(c.key)}
           onRemove={() => setCards((cs) => (cs.length === 1 ? [blank()] : cs.filter((x) => x.key !== c.key)))} />
@@ -470,7 +513,8 @@ function JobOutcome({ c, onPatch }) {
 
 /* ── One unit ─────────────────────────────────────────────────── */
 
-function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, parts, onPatch, onClock, onRemove }) {
+function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, parts,
+  programs, onPatch, onClock, onRemove }) {
   const secs = liveSeconds(c, now);
   const running = !!c.runningAt;
   const isShop = !!c.shopWork;
@@ -684,6 +728,10 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
         </div>
       </div>
 
+      {needsPm(c) && (
+        <PmDone c={c} programs={programs} vehicles={vehicles} onPatch={onPatch} />
+      )}
+
       <div style={{ marginTop: 12 }}>
         <Field label="Work performed">
           <textarea value={c.workPerformed} rows={3}
@@ -700,6 +748,110 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
 }
 
 /* ── Parts pulled on this unit ────────────────────────────────── */
+
+
+/* ── The PM half of a card ─────────────────────────────────────────
+   Appears only when PM SERVICE is ticked on a unit, because that is the
+   only time these two questions have an answer.
+
+   Before this, ticking PM SERVICE wrote the words "PM service" onto the
+   hours and nothing else: the PM board never heard about it, the truck
+   kept reading "no baseline", and the service never came due. The
+   mechanic had every reason to think otherwise. What a completion needs
+   and a timecard never asked for is which service and what the odometer
+   said, so it asks.
+
+   Services are chips rather than a dropdown for the same reason the
+   work types are: a PM is usually several at once — oil, fuel filters
+   and a chassis lube on the same truck in the same hour — and a
+   dropdown makes the second one a fight.
+
+   The programs a truck cannot have are filtered out. applies_to null
+   means every unit; otherwise it has to match the truck's division,
+   which is the same rule tw_pm_due uses to decide what is even on the
+   board for that truck. */
+function PmDone({ c, programs, vehicles, onPatch }) {
+  const veh = vehicles.find((v) => v.id === c.vehId);
+  const mine = programs.filter((p) => p.active
+    && (!p.appliesTo || !veh?.div || p.appliesTo === veh.div));
+
+  const picked = mine.filter((p) => c.pmPrograms.includes(p.id));
+  /* Nine of twelve programs come due on miles. One recorded without a
+     reading can only ever come due by date, which is the difference
+     between a board that works and a board that looks like it does. */
+  const needOdo = picked.some((p) => p.miles) && !String(c.pmOdo).trim();
+
+  const toggle = (id) => onPatch({
+    pmPrograms: c.pmPrograms.includes(id)
+      ? c.pmPrograms.filter((x) => x !== id)
+      : [...c.pmPrograms, id],
+  });
+
+  return (
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 6,
+                  background: C.paper, border: `1px solid ${C.line}` }}>
+      <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
+                    textTransform: "uppercase", color: C.muted, marginBottom: 2 }}>
+        Which PM service
+      </div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 7 }}>
+        Saving the card records these against {veh?.num || "the truck"}, so the PM
+        board starts counting from today. Tick every one you did.
+      </div>
+
+      {mine.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: C.watch, fontWeight: 600 }}>
+          No services are set up for this unit. Somebody adds them under PM →
+          Programs; until then the hours still save, so untick PM service.
+        </div>
+      ) : (
+        <div className="flex flex-wrap" style={{ gap: 6 }}>
+          {mine.map((p) => {
+            const on = c.pmPrograms.includes(p.id);
+            return (
+              <button key={p.id} onClick={() => toggle(p.id)}
+                style={{ fontFamily: FD, fontSize: 12.5, fontWeight: 600,
+                         letterSpacing: "0.03em", padding: "6px 11px", borderRadius: 999,
+                         cursor: "pointer", textAlign: "left",
+                         border: `1px solid ${on ? C.green700 : C.line}`,
+                         background: on ? C.green700 : "#fff",
+                         color: on ? "#fff" : C.ink }}>
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {c.pmPrograms.length > 0 && (
+        <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 10 }}>
+          <Field label="Odometer">
+            <input type="number" min="0" value={c.pmOdo}
+              onChange={(e) => onPatch({ pmOdo: e.target.value })}
+              placeholder={needOdo ? "off the dash" : "optional"}
+              style={{ ...inp, fontFamily: FM,
+                       borderColor: needOdo ? C.watch : C.line }} />
+          </Field>
+          <Field label="Engine hours">
+            <input type="number" min="0" step="0.1" value={c.pmEngineHours}
+              onChange={(e) => onPatch({ pmEngineHours: e.target.value })}
+              placeholder="optional" style={{ ...inp, fontFamily: FM }} />
+          </Field>
+        </div>
+      )}
+
+      {needOdo && (
+        <div style={{ fontSize: 12.5, color: C.watch, fontWeight: 600, marginTop: 7,
+                      lineHeight: 1.5 }}>
+          {picked.filter((p) => p.miles).map((p) => p.name).join(", ")}{" "}
+          {picked.filter((p) => p.miles).length === 1 ? "comes" : "come"} due on miles.
+          Without a reading {picked.filter((p) => p.miles).length === 1 ? "it" : "they"}{" "}
+          can only ever come due by date. The hours save either way.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PartsPulled({ parts, picked, onChange }) {
   const [q, setQ] = useState("");

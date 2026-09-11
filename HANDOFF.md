@@ -1924,6 +1924,55 @@ The proper fix is in Motive, by setting the odometer offset on those three devic
 Until then their mileage on the truck screen is wrong in an obvious way rather than a
 subtle one, which is the failure worth having.
 
+### Ticking PM SERVICE now records the PM
+
+Jason asked the right question: *if a mechanic timecards a piece of equipment and
+selects that he is doing a PM, will it automatically record a PM for it?*
+
+**It did not.** Ticking PM SERVICE wrote the words "PM service" onto the timecard
+line and nothing else. The PM board never heard about it, the truck kept reading
+"no baseline", and the service still never came due — while the mechanic had every
+reason to believe he had logged it. Nobody had hit it yet (zero lines tagged, zero
+completions), so there was no wrong data to unwind, but the trap was live.
+
+It could not have worked as it stood, and this is the part worth keeping. A
+completion needs two things a timecard never asked for:
+
+1. **Which service.** Twelve programs are set up — oil, chassis lube, fuel filters,
+   brake inspection, DOT annual and so on. "PM service" is one checkbox.
+2. **The odometer.** Nine of the twelve come due on miles. A completion recorded
+   without a reading gets no mileage baseline and can only ever come due by date.
+
+Auto-creating a completion from the tag alone would have been worse than doing
+nothing: the clock reset on a service nobody named, using a reading nobody took, and
+a board claiming the truck was handled.
+
+**So the card asks.** Tick PM SERVICE on a unit and a panel appears under it with the
+services that apply to that truck as chips, plus an odometer and an optional engine
+hours box. Saving the timecard writes one `tw_pm_completions` row per service ticked.
+
+- **Chips, not a dropdown**, for the same reason the work types are: a PM is usually
+  several at once — oil, fuel filters and a chassis lube on the same truck in the same
+  hour — and a dropdown makes the second one a fight.
+- **Programs the truck cannot have are filtered out**, by the same `applies_to` rule
+  `tw_pm_due` uses to decide what is even on that truck's board.
+- **The labour hours come off the card**, because they are already there. The same
+  figure goes on each completion and the note says it covered more than one — splitting
+  them would invent numbers nobody measured.
+- **The odometer is logged against the truck too**, not just against the completion. A
+  mechanic standing at the dash is the best meter reading this system is going to get.
+- **Ticking PM SERVICE and naming no service blocks the save**, with "Say which PM
+  service was done, or untick PM service." A tick that records nothing is the bug this
+  whole section is about.
+- **A missing odometer warns but never blocks.** It names the mileage services picked
+  and says the hours save either way. Rule: hours are never held hostage to a PM
+  detail.
+- The write happens **after** the hours are in and its failure is reported without
+  losing them — the same contract the work-order outcome already had.
+
+This is also how the 1,620 empty baselines start filling: off work the shop is already
+logging, with no double entry.
+
 ### Two numbers that both read as "hours"
 
 Jason opened **Record a service** on DT-885, typed the odometer (356,872) and the
