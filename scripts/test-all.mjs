@@ -21,6 +21,7 @@ const SUITES = [
      header — and is skipped rather than failed when nothing answers. */
   ["check-columns", "every column the app selects, against the real schema"],
   ["test-payrollformat", "the payroll CSV against Jason's own workbook — needs no key"],
+  ["test-dberror", "turning a database error into a sentence — needs no key"],
   ["test-nowboard", "the Now board in a real browser — needs the app served"],
   ["test-tires", "tread, mounting, pulling, wear rates"],
   ["test-shop", "defects and PM"],

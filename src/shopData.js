@@ -1,5 +1,5 @@
 import { supabase } from "./supabase.js";
-import { fetchAll } from "./data.js";
+import { fetchAll, logOdometer } from "./data.js";
 
 /* Defects and preventive maintenance. Kept apart from data.js, which is
    the tire section's, so the two can be read and changed independently.
@@ -259,6 +259,7 @@ const toDue = (r) => ({
   estHours: r.est_hours == null ? null : Number(r.est_hours),
   lastDate: r.last_date,
   lastOdo: r.last_odometer,
+  lastEngineHours: r.last_engine_hours == null ? null : Number(r.last_engine_hours),
   lastBy: r.last_by || "",
   odo: r.current_odometer,
   odoDate: r.odometer_date,
@@ -324,10 +325,60 @@ export async function recordService(s, who) {
       done_date: s.date,
       done_odometer: s.odo === "" || s.odo == null ? null : Number(s.odo),
       done_by: who,
+      /* Two different numbers that both read as "hours". This one is
+         how long the job took; engine_hours is what the dash said. */
       hours: s.hours === "" || s.hours == null ? null : Number(s.hours),
+      engine_hours: s.engineHours === "" || s.engineHours == null
+        ? null : Number(s.engineHours),
       note: s.note || null,
     })
   );
+}
+
+/* ── A PM recorded off the timecard ────────────────────────────────
+   A mechanic who ticks PM SERVICE on a unit has done a PM, and until
+   now that tick was a label on the hours and nothing more: the truck
+   still read "no baseline" and the service still never came due. The
+   two things a completion needs that a timecard never asked for are
+   which service and what the odometer said, so the card now asks for
+   both, and this writes them.
+
+   More than one service in one go is the normal case, not the edge —
+   oil, fuel filters and a chassis lube on the same truck in the same
+   hour is one card and three completions.
+
+   The odometer is logged against the truck as well as against each
+   completion. A mechanic standing at the dash reading the number is the
+   best meter reading the system is going to get, and throwing it away
+   after using it once would be daft. */
+export async function recordServicesFromCard(
+  { vehId, programIds, date, odo, engineHours, hours, note }, who
+) {
+  const ids = [...new Set((programIds || []).filter(Boolean))];
+  if (!vehId || !ids.length) return 0;
+
+  const odoNum = odo === "" || odo == null ? null : Number(odo);
+  check(
+    await supabase.from("tw_pm_completions").insert(ids.map((programId) => ({
+      vehicle_id: vehId,
+      program_id: programId,
+      done_date: date,
+      done_odometer: odoNum,
+      engine_hours: engineHours === "" || engineHours == null
+        ? null : Number(engineHours),
+      /* The hours on the card are the labour on the truck. Splitting
+         them across several services would invent numbers nobody
+         measured, so each completion carries the same figure and the
+         note says it covered more than one. */
+      hours: hours === "" || hours == null ? null : Number(hours),
+      done_by: who,
+      note: [note, ids.length > 1 ? `one of ${ids.length} services on this card` : null]
+        .filter(Boolean).join(" · ") || null,
+    })))
+  );
+
+  if (odoNum != null) await logOdometer(vehId, date, odoNum, who);
+  return ids.length;
 }
 
 export async function listCompletions(vehicleId, programId) {
@@ -344,6 +395,7 @@ export async function listCompletions(vehicleId, programId) {
     odo: r.done_odometer,
     by: r.done_by || "",
     hours: r.hours == null ? null : Number(r.hours),
+    engineHours: r.engine_hours == null ? null : Number(r.engine_hours),
     note: r.note || "",
   }));
 }

@@ -154,7 +154,13 @@ create table if not exists tw_pm_completions (
   done_date date not null,
   done_odometer integer,
   done_by text,
+  -- How long the service took somebody. 999.99 is plenty for that and
+  -- deliberately not enough for a meter reading.
   hours numeric(5,2),
+  -- What the dash said. Its own column, wide enough for a meter,
+  -- because a single box called "Hours" under "Odometer" got read as
+  -- the meter and the database answered "numeric field overflow".
+  engine_hours numeric(9,1),
   note text,
   created_at timestamptz default now() not null
 );
@@ -2771,3 +2777,35 @@ update tw_cost_codes set job_number = '100710.', job_name = 'Clay''s Ferry Shop'
  where code = 'SHOP-CF' and job_number is null;
 update tw_cost_codes set job_number = '100740.', job_name = 'Nicholasville Shop'
  where code = 'SHOP-NIC' and job_number is null;
+-- ── The hour meter on a PM service ─────────────────────────────
+-- Re-runnable for a database that predates it.
+--
+-- tw_pm_completions.hours is how long the service took, and at
+-- numeric(5,2) it stops at 999.99 — right for a labour figure. The
+-- dialog put that field directly under "Odometer" and called it
+-- "Hours", so it got read as the meter, 16,409 was typed into it, and
+-- the screen said "numeric field overflow".
+--
+-- The meter now has its own column, sized for a meter. Nothing comes
+-- due on it — PM is still miles and months — but the readings
+-- accumulate from now rather than from whenever that gets built.
+alter table tw_pm_completions
+  add column if not exists engine_hours numeric(9,1);
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_pm_engine_hours_sane'
+                    and conrelid = 'tw_pm_completions'::regclass) then
+    -- A meter does not run backwards and no truck reaches a million
+    -- hours. This is the guard the narrow labour column was providing
+    -- by accident.
+    alter table tw_pm_completions add constraint tw_pm_engine_hours_sane
+      CHECK (engine_hours IS NULL OR (engine_hours >= 0 AND engine_hours < 1000000));
+  end if;
+end $do$;
+
+-- tw_pm_due carries the last reading through so it is not write-only.
+-- last_engine_hours is appended at the end of the select list rather
+-- than sitting beside last_odometer where it belongs: CREATE OR REPLACE
+-- VIEW refuses to rename a column, and slotting one into the middle is
+-- exactly that.
