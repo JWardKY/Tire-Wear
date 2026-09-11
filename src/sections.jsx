@@ -63,6 +63,7 @@ export const SECTIONS = [
     blurb: "Preventive maintenance due by miles and by months",
     subTabs: [
       ["due", "Due"],
+      ["history", "History"],
       ["programs", "Programs"],
     ],
     Component: PmSection,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { C, FD, FM } from "./theme.js";
 import {
-  todayISO, fmtDate, nf, Modal, Btn, Field, SectionLabel, Card,
+  todayISO, fmtDate, nf, toCSV, Modal, Btn, Field, SectionLabel, Card,
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as shop from "./shopData.js";
@@ -146,12 +146,18 @@ export default function PmSection({ who, tab, onBusy }) {
       )}
 
       <div className="mx-auto w-full" style={{ maxWidth: 1400, padding: "20px 16px 60px" }}>
-        {tab === "programs"
-          ? <Programs programs={programs} busy={busy}
-              onToggle={(p) => run(() => shop.setProgramActive(p.id, !p.active))}
-              onNew={() => setEditingProgram({})}
-              onEdit={(p) => setEditingProgram(p)} />
-          : <Board {...{ shown, counts, q, setQ, busy, setRecording }} />}
+        {tab === "programs" ? (
+          <Programs programs={programs} busy={busy}
+            onToggle={(p) => run(() => shop.setProgramActive(p.id, !p.active))}
+            onNew={() => setEditingProgram({})}
+            onEdit={(p) => setEditingProgram(p)} />
+        ) : tab === "history" ? (
+          <History programs={programs} vehicles={vehicles} busy={busy}
+            onErr={setErr}
+            onDelete={(r) => run(() => shop.deleteCompletion(r.id))} />
+        ) : (
+          <Board {...{ shown, counts, q, setQ, busy, setRecording }} />
+        )}
       </div>
 
       {editingProgram && (
@@ -278,6 +284,209 @@ function Board({ shown, counts, q, setQ, busy, setRecording }) {
             </table>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+/* ── What the shop has actually done ───────────────────────────────
+   The Due board answers "what is coming"; this answers "what got
+   done", which is a different question and the one somebody asks when
+   a truck comes back with the same fault, or when a warranty claim
+   wants the service record.
+
+   Every completion, newest first, whatever it came from: the office
+   recording one on the Due board, or a mechanic ticking PM SERVICE on
+   his timecard. They are the same row in the same table, which is why
+   there is no "source" column here — it would be a distinction without
+   a difference to anybody reading this screen.
+
+   The filters are a range, a truck and a service, because those are the
+   three ways somebody arrives: "what did we do last month", "what has
+   DT-885 had", "when did we last grease anything". */
+function History({ programs, vehicles, busy, onErr, onDelete }) {
+  const [rows, setRows] = useState(null);
+  const [from, setFrom] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    return d.toISOString().slice(0, 10);
+  });
+  const [to, setTo] = useState(todayISO());
+  const [vehId, setVehId] = useState("all");
+  const [programId, setProgramId] = useState("all");
+  const [q, setQ] = useState("");
+  const [confirming, setConfirming] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setRows(await shop.pmHistory({ from, to, vehId, programId }));
+      onErr?.(null);
+    } catch (e) {
+      onErr?.(`Could not load the service history — ${e.message || e}`);
+      setRows([]);
+    }
+  }, [from, to, vehId, programId, onErr]);
+
+  useEffect(() => { load(); }, [load]);
+  /* Reload after a delete, which happens in the parent. */
+  useEffect(() => { if (!busy) load(); }, [busy]);   // eslint-disable-line
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return rows || [];
+    return (rows || []).filter((r) =>
+      `${r.truck} ${r.program} ${r.category} ${r.by} ${r.note}`.toLowerCase()
+        .includes(needle));
+  }, [rows, q]);
+
+  const totalHours = shown.reduce((a, r) => a + (r.hours || 0), 0);
+  const trucks = new Set(shown.map((r) => r.vehId)).size;
+
+  const csv = () => {
+    const head = ["Date", "Truck", "Service", "Category", "Odometer",
+                  "Engine hours", "Labour hours", "Done by", "Note"];
+    const body = shown.map((r) => [r.date, r.truck, r.program, r.category,
+      r.odo ?? "", r.engineHours ?? "", r.hours ?? "", r.by, r.note]);
+    const blob = new Blob([toCSV([head, ...body])], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `allen-pm-history-${from}-to-${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <>
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                    padding: "12px 16px", marginBottom: 16 }}>
+        <div className="flex flex-wrap items-end justify-between" style={{ gap: 12 }}>
+          <div>
+            <div style={{ fontFamily: FD, fontSize: 26, fontWeight: 700, color: C.green900 }}>
+              {shown.length} service{shown.length === 1 ? "" : "s"} done
+            </div>
+            <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>
+              {trucks} truck{trucks === 1 ? "" : "s"}
+              {totalHours > 0 && ` · ${nf(totalHours, 2)} labour hours`}
+              {" · newest first"}
+            </div>
+          </div>
+          <div className="flex flex-wrap" style={{ gap: 6 }}>
+            <input type="date" value={from} max={to} aria-label="From"
+              onChange={(e) => setFrom(e.target.value)} style={{ ...inp, width: 150 }} />
+            <input type="date" value={to} min={from} aria-label="To"
+              onChange={(e) => setTo(e.target.value)} style={{ ...inp, width: 150 }} />
+            <select value={vehId} onChange={(e) => setVehId(e.target.value)}
+              style={{ ...inp, width: 150 }}>
+              <option value="all">Every truck</option>
+              {vehicles.map((v) => <option key={v.id} value={v.id}>{v.num}</option>)}
+            </select>
+            <select value={programId} onChange={(e) => setProgramId(e.target.value)}
+              style={{ ...inp, width: 180 }}>
+              <option value="all">Every service</option>
+              {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <input value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Find a truck, service or name" style={{ ...inp, width: 210 }} />
+            <Btn tone="ghost" onClick={csv} disabled={!shown.length}>CSV</Btn>
+          </div>
+        </div>
+      </div>
+
+      {rows === null ? (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                      padding: "20px 16px", color: C.muted, fontSize: 13.5 }}>Loading…</div>
+      ) : !shown.length ? (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                      padding: "24px 16px" }}>
+          <div style={{ fontFamily: FD, fontSize: 20, fontWeight: 700, color: C.green900 }}>
+            Nothing recorded in that range
+          </div>
+          <p style={{ fontSize: 13.5, color: C.muted, marginTop: 6, maxWidth: 640,
+                      lineHeight: 1.55 }}>
+            A service lands here two ways: the office records one with{" "}
+            <b>Record a service</b> on the Due tab, or a mechanic ticks{" "}
+            <b>PM SERVICE</b> against a truck on his timecard and says which one
+            he did. Widen the dates if you are looking for something older.
+          </p>
+        </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                      overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>
+                {["Date", "Truck", "Service", "Odometer", "Engine hrs",
+                  "Labour", "Done by", "Note", ""].map((h, i) => (
+                  <th key={h + i} style={{ ...th, textAlign: i >= 3 && i <= 5 ? "right" : "left" }}>
+                    {h}
+                  </th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                    <td style={{ ...td, whiteSpace: "nowrap" }}>{fmtDate(r.date)}</td>
+                    <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{r.truck}</td>
+                    <td style={td}>
+                      {r.program}
+                      {r.category && (
+                        <div style={{ fontSize: 11.5, color: C.muted }}>{r.category}</div>
+                      )}
+                    </td>
+                    <td style={{ ...td, ...tdNum }}>
+                      {r.odo != null ? nf(r.odo) : <span style={{ color: C.muted }}>—</span>}
+                    </td>
+                    <td style={{ ...td, ...tdNum }}>
+                      {r.engineHours != null
+                        ? nf(r.engineHours, 1)
+                        : <span style={{ color: C.muted }}>—</span>}
+                    </td>
+                    <td style={{ ...td, ...tdNum }}>
+                      {r.hours != null ? nf(r.hours, 2) : <span style={{ color: C.muted }}>—</span>}
+                    </td>
+                    <td style={{ ...td, color: C.muted, whiteSpace: "nowrap" }}>{r.by || "—"}</td>
+                    <td style={{ ...td, color: C.muted, fontSize: 12.5, maxWidth: 320 }}>
+                      {r.note}
+                    </td>
+                    <td style={{ ...td, textAlign: "right" }}>
+                      {/* Deleting one moves the baseline: the service reverts
+                          to whatever was done before it, and the truck can
+                          go from "ok" to overdue on the next load. Worth a
+                          confirm, and worth saying why. */}
+                      <button disabled={busy} onClick={() => setConfirming(r)}
+                        style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {confirming && (
+        <Modal title="Delete this service record?" width={520}
+          onClose={() => setConfirming(null)}>
+          <p style={{ fontSize: 14, lineHeight: 1.6 }}>
+            <b>{confirming.program}</b> on <b>{confirming.truck}</b>,{" "}
+            {fmtDate(confirming.date)}
+            {confirming.by && ` — recorded by ${confirming.by}`}.
+          </p>
+          <p style={{ fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>
+            This is the baseline the next one counts from. Deleting it moves that
+            clock back to whatever was done before — {confirming.truck} may go
+            straight to overdue on that service. Only do this for one recorded by
+            mistake.
+          </p>
+          <div className="flex justify-end" style={{ gap: 8, marginTop: 4 }}>
+            <Btn tone="ghost" onClick={() => setConfirming(null)}>CANCEL</Btn>
+            <Btn onClick={() => { const r = confirming; setConfirming(null); onDelete(r); }}>
+              DELETE IT
+            </Btn>
+          </div>
+        </Modal>
       )}
     </>
   );

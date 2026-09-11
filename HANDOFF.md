@@ -1996,6 +1996,35 @@ The proper fix is in Motive, by setting the odometer offset on those three devic
 Until then their mileage on the truck screen is wrong in an obvious way rather than a
 subtle one, which is the failure worth having.
 
+### PM → History
+
+The Due board answers *what is coming*. History answers *what got done*, which is a
+different question and the one somebody asks when a truck comes back with the same
+fault, or when a warranty claim wants the service record.
+
+Every completion, newest first, whatever produced it: the office using **Record a
+service** on the Due tab, or a mechanic ticking **PM SERVICE** on his timecard. They
+are the same row in the same table, so there is deliberately no "source" column — it
+would be a distinction without a difference to anybody reading this screen.
+
+Filters are a date range, a truck and a service, because those are the three ways
+people arrive: *what did we do last month*, *what has DT-885 had*, *when did we last
+grease anything*. The range defaults to the last three months so the screen opens on
+something rather than on everything. A free-text box searches truck, service,
+category, who did it and the note, and **CSV** exports exactly what is on screen.
+
+`pmHistory()` is a separate read from `listCompletions()` on purpose: that one answers
+"this truck, this service", this one crosses every truck and program. Two plain reads
+and a join in memory, the usual shape here. Vehicles and programs are looked up whole
+rather than filtered to the active ones — a service done on a truck since taken off
+the roster, or a program since turned off, still happened and still has to render.
+
+**Deleting one moves a baseline**, so it asks first and says so: the service reverts
+to whatever was done before it, and the truck can go from "ok" straight to overdue on
+the next load. The dialog names the service, the truck, the date and who recorded it,
+and says it is for one recorded by mistake. That is the only destructive control on
+the screen.
+
 ### Ticking PM SERVICE now records the PM
 
 Jason asked the right question: *if a mechanic timecards a piece of equipment and
