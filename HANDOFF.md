@@ -1924,6 +1924,47 @@ The proper fix is in Motive, by setting the odometer offset on those three devic
 Until then their mileage on the truck screen is wrong in an obvious way rather than a
 subtle one, which is the failure worth having.
 
+### Two numbers that both read as "hours"
+
+Jason opened **Record a service** on DT-885, typed the odometer (356,872) and the
+hour meter (16,409), and got
+
+> That did not save — numeric field overflow
+
+He was not doing anything wrong. The dialog had one box called **Hours** sitting
+directly under **Odometer**, and in a shop that pair means the two readings off the
+dash. It actually meant labour hours — how long the job took — and
+`tw_pm_completions.hours` is `numeric(5,2)`, which stops at 999.99.
+
+Both halves of that were wrong, and both are fixed:
+
+**The label invited the mistake.** There are now two fields. **Engine hours** sits
+next to the odometer, because that is where the eye looks for it, and **Labour hours**
+is named for what it is. A line under them says which is which.
+
+**The error gave nobody anything to act on.** `src/dbError.js` has two functions.
+`tooBig()` catches it in the form, while the person is still looking at the box —
+*"Labour hours cannot be more than 999.99."* — and greys out the save. `saySo()`
+translates what the database says when something gets past that, naming the field and
+the limit. It deliberately passes through anything it does not recognise: a wrong
+translation sends somebody looking in the wrong place, which is worse than a raw
+error. `scripts/test-dberror.mjs` checks both, including that it never says "numeric
+field overflow" again.
+
+**The meter reading is now kept.** `tw_pm_completions.engine_hours` is
+`numeric(9,1)` with a check that it is neither negative nor over a million, and
+`tw_pm_due.last_engine_hours` carries the latest one through so the board can show it
+beside the last odometer — otherwise it would be write-only. **Nothing comes due on
+engine hours.** PM is still miles and months. Jason asked for the readings to start
+accumulating now so they are there when hour-based intervals get built, and that is
+all this does.
+
+Two of the same narrow columns are still out there behind other screens —
+`tw_time_entries.hours` and `tw_defects.repair_hours` are both `numeric(5,2)`, and
+`tw_pm_programs.est_hours` is `numeric(4,1)` (that one is guarded now, since it is on
+the same screen). A fat-fingered entry in the first two would produce the same
+unhelpful error. `tooBig` is the tool for it when somebody hits it.
+
 ### What this does not fix
 
 **PM still needs a first completion recorded by a human.** The due board works off the

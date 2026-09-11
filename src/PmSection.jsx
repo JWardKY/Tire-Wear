@@ -5,6 +5,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as shop from "./shopData.js";
+import { saySo, tooBig } from "./dbError.js";
 
 /* ── The PM section ───────────────────────────────────────────────
    A program is a service and how often it is due, by miles or by
@@ -116,7 +117,13 @@ export default function PmSection({ who, tab, onBusy }) {
       await reload();
       setErr(null);
     } catch (e) {
-      setErr(`That did not save — ${e.message || e}`);
+      /* "numeric field overflow" is what this used to say, which is
+         true and no use. Name the field and the limit. */
+      setErr(`That did not save — ${saySo(e, {
+        engine_hours: { label: "Engine hours", limit: "the meter tops out at 999,999.9" },
+        hours: { label: "Labour hours", limit: "a service cannot take more than 999.99 hours" },
+        done_odometer: { label: "The odometer", limit: "it cannot be more than 9,999,999" },
+      })}`);
     } finally {
       setBusy(false);
     }
@@ -242,6 +249,14 @@ function Board({ shown, counts, q, setQ, busy, setRecording }) {
                       {r.lastOdo != null && (
                         <span style={{ fontFamily: FM, fontSize: 11 }}> · {nf(r.lastOdo)}</span>
                       )}
+                      {/* What the dash said last time. Shown so the
+                          reading is not write-only — nothing comes due
+                          on it yet. */}
+                      {r.lastEngineHours != null && (
+                        <span style={{ fontFamily: FM, fontSize: 11 }}>
+                          {" · "}{nf(r.lastEngineHours, 1)} hr
+                        </span>
+                      )}
                     </td>
                     <td style={{ ...td, ...tdNum, color: C.muted }}>
                       {r.odo != null ? nf(r.odo) : "—"}
@@ -356,7 +371,11 @@ function ProgramDialog({ p, busy, onClose, onSave }) {
   /* The same rule the database keeps in tw_pm_needs_an_interval. Said
      here too so somebody finds out before they press Save, not after. */
   const noInterval = f.miles === "" && f.months === "";
-  const ready = f.name.trim() && !noInterval && !badMiles && !badMonths;
+  /* est_hours is numeric(4,1) and tops out at 999.9 — the same narrow
+     column that answered somebody with "numeric field overflow" on the
+     other dialog. Said here, in the box, rather than there. */
+  const tooLong = tooBig(f.estHours, { label: "Estimated hours", max: 999.9, decimals: 1 });
+  const ready = f.name.trim() && !noInterval && !badMiles && !badMonths && !tooLong;
 
   return (
     <Modal title={editing ? `Edit ${p.name}` : "New service"}
@@ -400,9 +419,16 @@ function ProgramDialog({ p, busy, onClose, onSave }) {
         </Field>
         <Field label="Estimated hours">
           <input type="number" min="0" step="0.5" style={{ ...inp, fontFamily: FM }}
-            value={f.estHours} onChange={set("estHours")} placeholder="optional" />
+            value={f.estHours} onChange={set("estHours")}
+            placeholder="how long it takes — optional" />
         </Field>
       </div>
+
+      {tooLong && (
+        <p style={{ fontSize: 13, color: C.pull, fontWeight: 700, marginTop: 12 }}>
+          {tooLong}
+        </p>
+      )}
 
       <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, margin: "12px 0 0" }}>
         Fill in miles, months, or both — both means whichever comes first. Leave the
@@ -443,12 +469,19 @@ function RecordServiceDialog({ row, programs, vehicles, busy, onClose, onSave })
     programId: row?.programId || "",
     date: todayISO(),
     odo: row?.odo != null ? String(row.odo) : "",
+    engineHours: "",
     hours: row?.estHours != null ? String(row.estHours) : "",
     note: "",
   });
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const ok = f.vehId && f.programId && f.date;
   const prog = programs.find((p) => p.id === f.programId);
+
+  /* Caught here, where the person is still looking at the box, rather
+     than by the database three screens later in its own language. */
+  const wrong = tooBig(f.hours, { label: "Labour hours", max: 999.99 })
+    || tooBig(f.engineHours, { label: "Engine hours", max: 999999.9, decimals: 1 })
+    || tooBig(f.odo, { label: "Odometer", max: 9999999, decimals: 0 });
+  const ok = f.vehId && f.programId && f.date && !wrong;
 
   return (
     <Modal title="Record a service"
@@ -479,9 +512,22 @@ function RecordServiceDialog({ row, programs, vehicles, busy, onClose, onSave })
             placeholder={prog?.miles ? "needed for mileage services" : "optional"}
             style={{ ...inp, fontFamily: FM }} />
         </Field>
-        <Field label="Hours">
+        {/* Two numbers that both used to be called "Hours". The meter
+            reading sits next to the odometer because that is where the
+            eye looks for it — the pair is what you read off the dash —
+            and the labour figure is named for what it is. A single
+            "Hours" box under "Odometer" got read as the meter, which is
+            the reasonable reading, and the database answered with
+            "numeric field overflow". */}
+        <Field label="Engine hours">
+          <input type="number" step="0.1" min="0" value={f.engineHours}
+            onChange={set("engineHours")} placeholder="off the dash — optional"
+            style={{ ...inp, fontFamily: FM }} />
+        </Field>
+        <Field label="Labour hours">
           <input type="number" step="0.25" min="0" value={f.hours} onChange={set("hours")}
-            placeholder="optional" style={{ ...inp, fontFamily: FM }} />
+            placeholder="how long it took — optional"
+            style={{ ...inp, fontFamily: FM }} />
         </Field>
         <div style={{ gridColumn: "1 / -1" }}>
           <Field label="Note">
@@ -497,7 +543,19 @@ function RecordServiceDialog({ row, programs, vehicles, busy, onClose, onSave })
         </p>
       )}
 
+      {wrong && (
+        <p style={{ fontSize: 13, color: C.pull, fontWeight: 700, marginTop: 12 }}>
+          {wrong}
+        </p>
+      )}
+
       <p style={{ fontSize: 12, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
+        <b>Engine hours</b> is the meter reading off the dash. <b>Labour hours</b> is how
+        long this service took somebody. Neither is required, and nothing comes due on
+        engine hours yet — the readings are being kept so they are there when it does.
+      </p>
+
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
         This becomes the baseline the next one counts from. Recording an older service you know
         about is the way to start the clock on a truck that has never been logged.
       </p>
