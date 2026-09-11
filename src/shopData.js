@@ -259,6 +259,7 @@ const toDue = (r) => ({
   estHours: r.est_hours == null ? null : Number(r.est_hours),
   lastDate: r.last_date,
   lastOdo: r.last_odometer,
+  lastEngineHours: r.last_engine_hours == null ? null : Number(r.last_engine_hours),
   lastBy: r.last_by || "",
   odo: r.current_odometer,
   odoDate: r.odometer_date,
@@ -324,7 +325,11 @@ export async function recordService(s, who) {
       done_date: s.date,
       done_odometer: s.odo === "" || s.odo == null ? null : Number(s.odo),
       done_by: who,
+      /* Two different numbers that both read as "hours". This one is
+         how long the job took; engine_hours is what the dash said. */
       hours: s.hours === "" || s.hours == null ? null : Number(s.hours),
+      engine_hours: s.engineHours === "" || s.engineHours == null
+        ? null : Number(s.engineHours),
       note: s.note || null,
     })
   );
@@ -344,6 +349,7 @@ export async function listCompletions(vehicleId, programId) {
     odo: r.done_odometer,
     by: r.done_by || "",
     hours: r.hours == null ? null : Number(r.hours),
+    engineHours: r.engine_hours == null ? null : Number(r.engine_hours),
     note: r.note || "",
   }));
 }
