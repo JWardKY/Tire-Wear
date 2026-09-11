@@ -2,6 +2,12 @@ import { supabase } from "./supabase.js";
 import { fetchAll } from "./data.js";
 import * as parts from "./partsData.js";
 
+/* The payroll column order and the two costing paths live in their own
+   file so a test can load them without a database. Re-exported here
+   because every screen already reaches for time.* */
+export { PAYROLL_COLUMNS, payrollRow, DETAIL_COLUMNS, detailRow }
+  from "./payrollFormat.js";
+
 /* Mechanics, PINs, cost codes and timecards.
    ─────────────────────────────────────────────────────────────────
    What the PIN is and is not, so nobody builds on a wrong idea of it:
@@ -346,13 +352,6 @@ export async function partsForEntry(entryId) {
    deliberate: an hour missing its cost code is exactly the row payroll
    needs to chase, so nothing may quietly drop it. */
 
-export const PAYROLL_COLUMNS = [
-  "Date", "Employee #", "Mechanic", "Cost code", "Cost code name", "Unit",
-  "Shop or service call", "Job/location", "Hours", "True clocked hours",
-  "Segments", "Work order", "Type of work", "DVIR", "PM", "Parts used",
-  "Work performed",
-];
-
 const WHERE_LABEL = {
   shop: "Shop", field: "Field", road: "Outside service call", plant: "Plant",
 };
@@ -392,14 +391,21 @@ export async function payrollLines(from, to) {
     workPerformed: r.work_performed || "",
     entryId: r.entry_id,
     mechanicId: r.mechanic_id,
+    /* The payroll half. Blank rather than guessed when a mechanic has
+       no payroll record yet: a missing employee number is a line the
+       office has to chase, and inventing one would send somebody's
+       hours to the wrong person. */
+    payGroup: r.pay_group || "",
+    payClass: r.pay_class || "",
+    payClassName: r.pay_class_name || "",
+    jobNumber: r.job_number || "",
+    jobName: r.job_name || "",
+    phase: r.phase || "",
+    phaseName: r.phase_name || "",
+    equipment: r.equipment || "",
+    eqDescription: r.eq_description || "",
   }));
 }
-
-export const payrollRow = (r) => [
-  r.date, r.empNo, r.mechanic, r.costCode, r.costCodeName, r.unit, r.where,
-  r.jobLocation, r.hours, r.trueHours, r.segments, r.workOrder, r.workTypes,
-  r.dvir, r.pm, r.parts, r.workPerformed,
-];
 
 /* ── The day, clocked against booked ───────────────────────────────
    Rule 5: the shift clock is what payroll pays and the sub-clock is

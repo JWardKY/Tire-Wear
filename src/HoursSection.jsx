@@ -130,6 +130,7 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
      list. */
   const [exporting, setExporting] = useState(false);
   const [blocked, setBlocked] = useState(null);   // the cards standing in the way
+  const [missing, setMissing] = useState(null);   // people with no payroll record
   async function exportCsv() {
     setExporting(true);
     try {
@@ -148,9 +149,41 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
       a.download = `allen-payroll-${from}-to-${to}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
+
+      /* Anybody the import will reject. It goes out beside the file
+         rather than instead of it — the run still happens, and the
+         office knows which lines to chase before it does. */
+      const gaps = lines.filter((r) => !r.empNo || !r.payClass || !r.jobNumber);
+      setMissing(gaps.length ? [...new Map(gaps.map((r) => [r.mechanic, {
+        mechanic: r.mechanic,
+        what: [!r.empNo && "employee number", !r.payClass && "class",
+               !r.jobNumber && "job"].filter(Boolean).join(", "),
+        lines: gaps.filter((g) => g.mechanic === r.mechanic).length,
+      }])).values()] : null);
       setErr(null);
     } catch (e) {
       setErr(`Could not build the payroll export — ${e.message || e}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  /* The columns the payroll import has no room for. Same rows, same
+     range — this is the one somebody reads when a line is questioned. */
+  async function exportDetail() {
+    setExporting(true);
+    try {
+      const lines = await time.payrollLines(from, to);
+      const rows = [time.DETAIL_COLUMNS, ...lines.map(time.detailRow)];
+      const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `allen-hours-detail-${from}-to-${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setErr(null);
+    } catch (e) {
+      setErr(`Could not build the detail export — ${e.message || e}`);
     } finally {
       setExporting(false);
     }
@@ -191,10 +224,14 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
             <Btn tone="ghost" onClick={exportCsv} disabled={exporting || !rows.length}>
               {exporting ? "Checking…" : "Payroll CSV"}
             </Btn>
+            <Btn tone="ghost" onClick={exportDetail} disabled={exporting || !rows.length}>
+              Detail CSV
+            </Btn>
           </div>
         </div>
 
         {blocked && <NotApproved rows={blocked} onClose={() => setBlocked(null)} />}
+        {missing && <NoPayrollRecord rows={missing} onClose={() => setMissing(null)} />}
 
         {tab === "cards" ? (
           <Cards from={from} to={to} q={q} who={supervisor?.name || who} onErr={setErr} />
@@ -477,6 +514,39 @@ function UnapproveDialog({ d, busy, onClose, onDone }) {
    cards, and says which of them cannot be approved yet and why —
    because "go and approve them" is not an instruction if one of them is
    somebody who is still on the clock. */
+/* The file went out. These are the lines the import will bounce, named
+   while there is still time to fix them — a warning after the download
+   rather than a block before it, because a payroll run that stops dead
+   on a missing class is worse than one that goes out with a note. */
+function NoPayrollRecord({ rows, onClose }) {
+  return (
+    <div style={{ background: "#FFF8E1", borderBottom: `1px solid ${C.watch}55`,
+                  padding: "12px 20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between",
+                    alignItems: "baseline", gap: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.watch }}>
+          The file downloaded, but {rows.length}{" "}
+          {rows.length === 1 ? "person has" : "people have"} no payroll record
+        </div>
+        <button onClick={onClose} style={{ ...linkBtn, fontSize: 12 }}>dismiss</button>
+      </div>
+      <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6 }}>
+        {rows.map((r) => (
+          <li key={r.mechanic}>
+            <b>{r.mechanic}</b> — no {r.what} ({r.lines}{" "}
+            {r.lines === 1 ? "line" : "lines"})
+          </li>
+        ))}
+      </ul>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+        Fill these in under <b>Mechanics → EDIT</b>. Their hours are in the file
+        with those columns empty, so the import will reject those rows rather
+        than pay them to the wrong person.
+      </div>
+    </div>
+  );
+}
+
 function NotApproved({ rows, onClose }) {
   const open = rows.filter((r) => r.stillOpen).length;
   const uncoded = rows.filter((r) => r.uncodedLines > 0).length;

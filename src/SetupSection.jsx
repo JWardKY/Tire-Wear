@@ -82,7 +82,8 @@ function Roster({ roster, run, supervisor }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead><tr>
             <th style={th}>Name</th><th style={th}>Emp #</th>
-            <th style={th}>Cell</th><th style={th}>Role</th>
+            <th style={th}>Cell</th><th style={th}>Class</th>
+            <th style={th}>Role</th>
             <th style={th}>PIN</th><th style={th}>On the roster</th>
             <th style={th}></th>
           </tr></thead>
@@ -106,6 +107,18 @@ function Roster({ roster, run, supervisor }) {
                   {m.cell
                     ? <a href={`tel:${m.cell.replace(/[^\d+]/g, "")}`}
                          style={{ color: C.green700 }}>{m.cell}</a>
+                    : <span style={{ color: C.muted }}>—</span>}
+                </td>
+                <td style={td}>
+                  {m.payClass
+                    ? <>
+                        <span style={{ fontFamily: FM }}>{m.payClass}</span>
+                        {m.payClassName && (
+                          <div style={{ fontSize: 11, color: C.muted }}>
+                            {m.payClassName}
+                          </div>
+                        )}
+                      </>
                     : <span style={{ color: C.muted }}>—</span>}
                 </td>
                 <td style={td}>
@@ -141,7 +154,7 @@ function Roster({ roster, run, supervisor }) {
               </tr>
             ))}
             {!roster.length && (
-              <tr><td style={{ ...td, color: C.muted }} colSpan={7}>
+              <tr><td style={{ ...td, color: C.muted }} colSpan={8}>
                 Nobody on the roster yet. Add somebody and they set their own PIN
                 the first time they tap their name on the timecard tab.
               </td></tr>
@@ -231,6 +244,11 @@ function EditMechanic({ m, run, supervisor, onClose }) {
   const [email, setEmail] = useState(m.email || "");
   const [empNo, setEmpNo] = useState(m.empNo || "");
   const [cell, setCell] = useState(m.cell || "");
+  const [pay, setPay] = useState({
+    payClass: m.payClass || "", payClassName: m.payClassName || "",
+    payGroup: m.payGroup || "", payJob: m.payJob || "",
+    payJobName: m.payJobName || "",
+  });
 
   const [pin, setPin] = useState("");
   const [priv, setPriv] = useState(null);      // null until unlocked
@@ -241,7 +259,10 @@ function EditMechanic({ m, run, supervisor, onClose }) {
   const changed = name.trim() !== (m.name || "")
     || email.trim() !== (m.email || "")
     || empNo.trim() !== (m.empNo || "")
-    || cell.trim() !== (m.cell || "");
+    || cell.trim() !== (m.cell || "")
+    || Object.entries(pay).some(([k, v]) => v.trim() !== (m[k] || ""));
+
+  const setP = (k) => (e) => setPay((v) => ({ ...v, [k]: e.target.value }));
 
   const unlock = async () => {
     setPrivErr(""); setUnlocking(true);
@@ -281,6 +302,40 @@ function EditMechanic({ m, run, supervisor, onClose }) {
         <Field label="Cell phone">
           <input style={{ ...inp, fontFamily: FM }} value={cell} placeholder="optional"
                  inputMode="tel" onChange={(e) => setCell(e.target.value)} />
+        </Field>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.line}`, margin: "16px 0 12px" }} />
+      <SectionLabel>Payroll</SectionLabel>
+      {/* Not personal data, so not behind the PIN: this is what the
+          payroll export puts in every row for them. The class is what
+          the hour gets priced at and the job is the shop it charges to,
+          so a blank one is a line the office has to chase rather than a
+          line that quietly pays wrong. */}
+      <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 8px", maxWidth: 520 }}>
+        Straight off the payroll workbook. The employee number above is what the
+        import matches on; these ride along in every row of the export.
+      </p>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 2fr" }}>
+        <Field label="Class">
+          <input style={{ ...inp, fontFamily: FM }} value={pay.payClass}
+            placeholder="710" onChange={setP("payClass")} />
+        </Field>
+        <Field label="Class name">
+          <input style={inp} value={pay.payClassName} placeholder="Greaser"
+            onChange={setP("payClassName")} />
+        </Field>
+        <Field label="Pay group">
+          <input style={{ ...inp, fontFamily: FM }} value={pay.payGroup}
+            placeholder="PR CFS" onChange={setP("payGroup")} />
+        </Field>
+        <Field label="Home shop job">
+          <div style={{ display: "flex", gap: 6 }}>
+            <input style={{ ...inp, fontFamily: FM, width: 110 }} value={pay.payJob}
+              placeholder="100710." onChange={setP("payJob")} />
+            <input style={inp} value={pay.payJobName} placeholder="Clay's Ferry Shop"
+              onChange={setP("payJobName")} />
+          </div>
         </Field>
       </div>
 
@@ -356,7 +411,9 @@ function EditMechanic({ m, run, supervisor, onClose }) {
           <Btn disabled={!name.trim() || (!changed && !priv)}
             onClick={() => {
               const wanted = { name: name.trim(), email: email.trim(),
-                               empNo: empNo.trim(), cell: cell.trim() };
+                               empNo: empNo.trim(), cell: cell.trim(),
+                               ...Object.fromEntries(
+                                 Object.entries(pay).map(([k, v]) => [k, v.trim()])) };
               const p = priv;
               onClose();
               run(async () => {

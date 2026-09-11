@@ -75,6 +75,15 @@ create table if not exists tw_mechanics (
   created_at timestamptz default now() not null,
   role text default 'mechanic'::text not null,
   emp_no text,
+  -- What the payroll export puts in every row for them. Not personal
+  -- data and not behind the PIN: pay_class is what the hour is priced
+  -- at, pay_job is the shop it charges to, and a blank one is a line
+  -- the office has to chase rather than one that quietly pays wrong.
+  pay_group text,
+  pay_class text,
+  pay_class_name text,
+  pay_job text,
+  pay_job_name text,
   -- The work cell. Roster data, not personal: it is how the shop rings
   -- somebody about a job, so it is granted to the browser alongside the
   -- name. The home phone below is not.
@@ -2470,7 +2479,8 @@ create policy "tw_work_orders_auth_all" on tw_work_orders for all to authenticat
 -- SECURITY DEFINER functions above.
 revoke all on tw_mechanics from anon, authenticated;
 grant select (id, name, email, emp_no, cell_phone, role, active, pin_set,
-              locked_until, created_at, motive_user_id)
+              locked_until, created_at, motive_user_id,
+              pay_group, pay_class, pay_class_name, pay_job, pay_job_name)
   on tw_mechanics to anon, authenticated;
 
 
@@ -2719,6 +2729,54 @@ grant select (id, name, email, emp_no, cell_phone, role, active, pin_set,
 -- functions of the same name.
 drop function if exists public.tw_mechanic_update(uuid, text, text, text);
 
+-- ── The payroll export, column for column ──────────────────────
+-- Re-runnable for a database that predates it.
+--
+-- Vista's Payroll Workbook maps on its header row, so the columns are
+-- not ours to rename. Two of them are new work here.
+--
+-- Equipment is the unit number with its letters and dash stripped,
+-- behind a 10: DT-889 becomes 10889, HT-1119 becomes 101119, T-674
+-- becomes 10674. EQ DESCRIPTION is the unit number as the shop says it.
+--
+-- Class, CLASS NAME and GROUP are properties of the person, and Job is
+-- the shop they charge to, so they live on tw_mechanics. Job is
+-- overridden when the hour is booked to a shop cost code, because
+-- somebody covering the other shop for a day charges it there.
+alter table tw_mechanics add column if not exists pay_group text;
+alter table tw_mechanics add column if not exists pay_class text;
+alter table tw_mechanics add column if not exists pay_class_name text;
+alter table tw_mechanics add column if not exists pay_job text;
+alter table tw_mechanics add column if not exists pay_job_name text;
+
+alter table tw_cost_codes add column if not exists job_number text;
+alter table tw_cost_codes add column if not exists job_name text;
+
+grant select (id, name, email, emp_no, cell_phone, role, active, pin_set,
+              locked_until, created_at, motive_user_id,
+              pay_group, pay_class, pay_class_name, pay_job, pay_job_name)
+  on tw_mechanics to anon, authenticated;
+
+-- Anything with no digits in it is not a unit — a shop-time label such
+-- as "Parts run / pickup" gets nothing rather than a bare "10".
+create or replace function public.tw_equipment_number(p_unit text)
+ returns text language sql immutable
+ set search_path to 'public', 'pg_temp'
+as $fn$
+  select case when nullif(regexp_replace(coalesce(p_unit, ''), '\D', '', 'g'), '') is null
+              then null
+              else '10' || regexp_replace(p_unit, '\D', '', 'g') end;
+$fn$;
+
+-- Five arguments became ten. The old signature is dropped rather than
+-- left as an overload; PostgREST cannot choose between two functions of
+-- the same name.
+drop function if exists public.tw_mechanic_update(uuid, text, text, text, text);
+
+update tw_cost_codes set job_number = '100710.', job_name = 'Clay''s Ferry Shop'
+ where code = 'SHOP-CF' and job_number is null;
+update tw_cost_codes set job_number = '100740.', job_name = 'Nicholasville Shop'
+ where code = 'SHOP-NIC' and job_number is null;
 -- ── The hour meter on a PM service ─────────────────────────────
 -- Re-runnable for a database that predates it.
 --

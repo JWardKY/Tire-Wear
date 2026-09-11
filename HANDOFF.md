@@ -869,11 +869,72 @@ two new timecard types.
 
 ### The payroll export
 
-Seventeen columns, and the column list is Jason's, not ours:
+Sixteen columns, and they are Vista's, not ours — the import maps on the header row,
+so neither the order nor the spelling is available to tidy:
 
-`Date · Employee # · Mechanic · Cost code · Cost code name · Unit · Shop or service
-call · Job/location · Hours · True clocked hours · Segments · Work order · Type of
-work · DVIR · PM · Parts used · Work performed`
+`Employee · EMPLOYEE NAME · GROUP · Work Date · Hours · EARN CODE · Job · JOB NAME ·
+Phase · PHASE NAME · Equipment · EQ DESCRIPTION · Cost Code · EM COST CODE · Class ·
+CLASS NAME`
+
+**Two shapes of row, and filling both halves would charge the hour twice.** Equipment
+work is costed through the equipment module and shop work through job phases:
+
+| | Job | JOB NAME | Phase | PHASE NAME | Equipment | EQ DESCRIPTION | Cost Code | EM COST CODE |
+|---|---|---|---|---|---|---|---|---|
+| **against a truck** | ✓ | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| **shop or yard** | ✓ | ✓ | ✓ | ✓ | — | — | — | — |
+
+Which one a row is on is decided by whether there is a vehicle behind it, in the
+view, so no screen can get it wrong.
+
+**Equipment is the unit number with its letters and dash stripped, behind a 10.**
+DT-889 → `10889`, HT-1119 → `101119`, T-674 → `10674`, DT-1800 → `101800`.
+`tw_equipment_number()` does it, and returns nothing rather than a bare `10` for a
+shop-time label with no digits in it. Note that the prefix is discarded, so DT-1119
+and HT-1119 would both be `101119` — that is Vista's numbering, not a bug here, and
+worth knowing before somebody adds a unit that collides.
+
+**EQ DESCRIPTION is the unit number as the shop says it** — `DT-889`. Not the make,
+not the model: the description column in Vista holds the number.
+
+**Every line is `Regular`.** Holiday, vacation and sick pay are added in payroll,
+where they already live. Nobody clocks in for a holiday, so an earn code from us
+would only ever be a guess.
+
+**Class, CLASS NAME and GROUP belong to the person; Job is the shop they charge to.**
+All four live on `tw_mechanics` (`pay_class`, `pay_class_name`, `pay_group`,
+`pay_job`/`pay_job_name`) and are edited under Mechanics → EDIT, in the half of the
+dialog that saves without a PIN — this is not personal data. Job is overridden when
+the hour is booked to a shop cost code, because somebody covering the other shop for
+a day charges it there; `tw_cost_codes.job_number`/`job_name` carry that, and
+Clay's Ferry (`100710.`) and Nicholasville (`100740.`) are filled in.
+
+**A mechanic with no payroll record exports blanks, never guesses.** An invented
+employee number pays somebody else. The export still runs — a payroll run that stops
+dead on a missing class is worse than one that goes out with a note — and a panel
+under the button names everybody whose lines the import will reject and what they
+are missing.
+
+**The detail file is the other half.** Work order, DVIR, parts off the shelf, what
+the mechanic wrote, the clock against the booking: none of it has a column in the
+import, and all of it is what somebody reaches for when a line is questioned. So
+**Detail CSV** sits beside **Payroll CSV** over the same rows and the same range.
+
+The formatting is in `src/payrollFormat.js`, deliberately with no database import, so
+`scripts/test-payrollformat.mjs` can load it with no credentials and no browser. That
+test does not assert what I believed the format to be: it takes rows straight out of
+Jason's own detail review — read out of the PDF by the report's own ruling positions
+into `scripts/fixtures/payroll-workbook.json` — rebuilds each through the real export
+code, and diffs all sixteen columns.
+
+> **Two traps that test had to be taught.** It re-execs itself under
+> `TZ=America/New_York` before asserting on a date, because `new Date("2026-09-01")`
+> is UTC midnight — 8/31 in Eastern — and the container this runs in is UTC, where
+> that bug looks correct. It was caught only by reintroducing it and noticing the
+> test still passed. And the fixture keeps only rows where no cell overflows its
+> column: long text like `Transmission / Power Train` spills visually into Class, so
+> reading it back gives a fragment, and a test asserting on a fragment asserts on
+> something the report does not hold.
 
 It reads `tw_payroll_lines` rather than rebuilding the rows out of whatever is on
 the Hours screen, and it always exports the whole range: **the search box narrows
@@ -1543,6 +1604,16 @@ It saves in two halves, and the split is the point:
   anon key ships in the page. `tw_mechanic_private_get` / `_set` are the only way
   in, and they refuse anybody whose role is not `dashboard` or `admin`.
 
+**The payroll half of the record.** Employee number, class, class name, pay group
+and home shop job all came off Jason's payroll workbook, and all eleven people in
+that file are filled in — Alex Oswald 28896 / 710 Greaser, Dylan Barnes 4283 / 700
+Mechanic - Non-Union, and so on. Three of them are spelled differently there than on
+our roster (Dillon C Barnes, Isiaih L Deer, Steven R Winkler) and Jason confirmed
+each is the same person; the employee number is the key the import matches on, so
+getting one of those wrong would pay the wrong person. Jason Ward, Grant Gabbard and
+Will Strong are not in that file and are deliberately left blank rather than guessed
+at. See *The payroll export* above for what each field does.
+
 **Why the cell is in the open half and the home phone is not.** They are not the
 same kind of number. A work cell is how the shop rings somebody about a job —
 looked up far more often than it is edited, and by whoever is standing at the
@@ -1741,7 +1812,8 @@ Two more views:
 - **`tw_work_order_crew`** — who is on a work order, one row per pair of hands.
   `tw_work_orders.assigned_to` is the lead, kept in step by `tw_wo_crew_sync()` —
   write the crew, never the order. See *A job takes a crew* above.
-- **`tw_payroll_lines`** — the seventeen-column payroll export.
+- **`tw_payroll_lines`** — the payroll export. Carries both the sixteen Vista
+  columns and the detail ones, and decides which costing path each row is on.
 - **`tw_timecard_days`** — one row per mechanic per day, clocked against booked.
   Its day keys come from a UNION of both sides on purpose: a mechanic who
   clocked in and booked nothing is the most important row on the board, and
@@ -2112,8 +2184,9 @@ so the **gap** column is the point and the KPI strip states it before you read a
 The range is real from/to dates with presets as a shortcut, because payroll runs on
 pay periods and a pay period does not line up with "this week".
 
-Two exports, deliberately: **Payroll CSV** is Jason's seventeen columns for the
-office system, **Summary CSV** is one row per mechanic per cost code for the person
+Three exports, deliberately: **Payroll CSV** is Vista's sixteen columns for the
+office system, **Detail CSV** is the same rows with everything the import has no
+column for, and **Summary CSV** is one row per mechanic per cost code for the person
 who just wants to read it. The summary honours the mechanic filter and the search
 box; the payroll export never does — a filtered payroll run is a wrong one, and that
 asymmetry is intentional rather than an oversight.
