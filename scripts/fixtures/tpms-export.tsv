@@ -1,0 +1,689 @@
+Customer	Fleet	Vehicle Name	VIN	Vehicle Type	Vehicle Group	Axle	Tyre position	Sensor ID	Sensor Type	Tyre Brand	Tyre Size	Tyre Model	Retread	DOT	Mounted On	Odometer	Last Seen	Last Measured	Temperature	Temperature Unit	Battery	Signal	Gateway	Firmware	Hub	Trailer	Driver	Depot	Region	Country	Notes	Ticket	Created	Updated	Source	Status	Severity	Cold inflation pressure	Pressure deviation	Compensated Pressure	Pressure Unit	Pressure (non-compensated)
+The Allen Company	Haul Division	DT 864		Truck		1	1L	C100000	Gen2		11R24.5							2026-09-08 06:14	70	F	60%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 864		Truck		2	2L	C100001	Gen2		11R24.5							2026-09-08 06:14	71	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 864		Truck		3	3LI	C100002	Gen2		11R24.5							2026-09-08 06:14	72	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 864		Truck		3	3RI	C100003	Gen2		11R24.5							2026-09-08 06:14	73	F	63%														ContiConnect	Low pressure	Medium	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 864		Truck		3	3LO	C100004	Gen2		11R24.5							2026-09-08 06:14	74	F	64%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 864		Truck		1	1R	C100005	Gen2		11R24.5							2026-09-08 06:14	75	F	65%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 864		Truck		3	3RO	C100006	Gen2		11R24.5							2026-09-08 06:14	76	F	66%														ContiConnect	Low pressure	Medium	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT 864		Truck		4	4RO	C100007	Gen2		11R24.5							2026-09-08 06:14	77	F	67%														ContiConnect	Very low pressure	High	110.0		2.0	psi	0.0
+The Allen Company	Haul Division	DT 864		Truck		4	4LI	C100008	Gen2		11R24.5							2026-09-08 06:14	78	F	68%														ContiConnect	Low pressure	Medium	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 864		Truck		4	4LO	C100009	Gen2		11R24.5							2026-09-08 06:14	79	F	69%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 864		Truck		4	4RI	C100010	Gen2		11R24.5							2026-09-08 06:14	80	F	70%														ContiConnect	Low pressure	Medium	110.0		99.0	psi	97.0
+The Allen Company	Haul Division	DT 864		Truck		2	2R	C100011	Gen2		11R24.5							2026-09-08 06:14	81	F	71%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 893		Truck		4	4LI	C100012	Gen2		11R24.5							2026-09-08 06:14	82	F	72%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 893		Truck		3	3RO	C100013	Gen2		11R24.5							2026-09-08 06:14	83	F	73%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 893		Truck		3	3RI	C100014	Gen2		11R24.5							2026-09-08 06:14	84	F	74%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 893		Truck		2	2L	C100015	Gen2		11R24.5							2026-09-08 06:14	85	F	75%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 893		Truck		3	3LI	C100016	Gen2		11R24.5							2026-09-08 06:14	86	F	76%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 893		Truck		1	1L	C100017	Gen2		11R24.5							2026-09-08 06:14	87	F	77%														ContiConnect	No alerts	None	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT 893		Truck		4	4RI	C100018	Gen2		11R24.5							2026-09-08 06:14	88	F	78%														ContiConnect	Very low pressure	High	110.0		51.0	psi	49.0
+The Allen Company	Haul Division	DT 893		Truck		4	4RO	C100019	Gen2		11R24.5							2026-09-08 06:14	89	F	79%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT 893		Truck		2	2R	C100020	Gen2		11R24.5							2026-09-08 06:14	90	F	80%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 893		Truck		3	3LO	C100021	Gen2		11R24.5							2026-09-08 06:14	91	F	81%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 893		Truck		1	1R	C100022	Gen2		11R24.5							2026-09-08 06:14	92	F	82%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 893		Truck		4	4LO	C100023	Gen2		11R24.5							2026-09-08 06:14	93	F	83%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 898		Truck		4	4LO	C100024	Gen2		11R24.5							2026-09-08 06:14	94	F	84%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 898		Truck		4	4RI	C100025	Gen2		11R24.5							2026-09-08 06:14	95	F	85%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 898		Truck		3	3RI	C100026	Gen2		11R24.5							2026-09-08 06:14	96	F	86%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 898		Truck		3	3RO	C100027	Gen2		11R24.5							2026-09-08 06:14	97	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 898		Truck		1	1R	C100028	Gen2		11R24.5							2026-09-08 06:14	98	F	88%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 898		Truck		3	3LI	C100029	Gen2		11R24.5							2026-09-08 06:14	99	F	89%														ContiConnect	Very low pressure	High	110.0		94.0	psi	92.0
+The Allen Company	Haul Division	DT 898		Truck		3	3LO	C100030	Gen2		11R24.5							2026-09-08 06:14	70	F	90%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 898		Truck		4	4RO	C100031	Gen2		11R24.5							2026-09-08 06:14	71	F	91%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 898		Truck		4	4LI	C100032	Gen2		11R24.5							2026-09-08 06:14	72	F	92%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 898		Truck		1	1L	C100033	Gen2		11R24.5							2026-09-08 06:14	73	F	93%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 898		Truck		2	2R	C100034	Gen2		11R24.5							2026-09-08 06:14	74	F	94%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 898		Truck		2	2L	C100035	Gen2		11R24.5							2026-09-08 06:14	75	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 865		Truck		3	3RO	C100036	Gen2		11R24.5							2026-09-08 06:14	76	F	96%														ContiConnect	Low pressure	Medium	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 865		Truck		3	3RI	C100037	Gen2		11R24.5							2026-09-08 06:14	77	F	97%														ContiConnect	No alerts	None	110.0		121.0	psi	119.0
+The Allen Company	Haul Division	DT 865		Truck		3	3LI	C100038	Gen2		11R24.5							2026-09-08 06:14	78	F	98%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 865		Truck		1	1L	C100039	Gen2		11R24.5							2026-09-08 06:14	79	F	99%														ContiConnect	Very low pressure	High	110.0		91.0	psi	89.0
+The Allen Company	Haul Division	DT 865		Truck		4	4RO	C100040	Gen2		11R24.5							2026-09-08 06:14	80	F	60%														ContiConnect	Low pressure	Medium	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 865		Truck		3	3LO	C100041	Gen2		11R24.5							2026-09-08 06:14	81	F	61%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 865		Truck		1	1R	C100042	Gen2		11R24.5							2026-09-08 06:14	82	F	62%														ContiConnect	Low pressure	Medium	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 865		Truck		2	2R	C100043	Gen2		11R24.5							2026-09-08 06:14	83	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 865		Truck		4	4LO	C100044	Gen2		11R24.5							2026-09-08 06:14	84	F	64%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 865		Truck		2	2L	C100045	Gen2		11R24.5							2026-09-08 06:14	85	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 865		Truck		4	4RI	C100046	Gen2		11R24.5							2026-09-08 06:14	86	F	66%														ContiConnect	Very low pressure	High	110.0		2.0	psi	0.0
+The Allen Company	Haul Division	DT 865		Truck		4	4LI	C100047	Gen2		11R24.5							2026-09-08 06:14	87	F	67%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 889		Truck		4	4RI	C100048	Gen2		11R24.5							2026-09-08 06:14	88	F	68%														ContiConnect	Very low pressure	High	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 889		Truck		3	3RO	C100049	Gen2		11R24.5							2026-09-08 06:14	89	F	69%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		1	1L	C100050	Gen2		11R24.5							2026-09-08 06:14	90	F	70%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT 889		Truck		4	4LO	C100051	Gen2		11R24.5							2026-09-08 06:14	91	F	71%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		1	1R	C100052	Gen2		11R24.5							2026-09-08 06:14	92	F	72%														ContiConnect	Very low pressure	High	110.0		68.0	psi	66.0
+The Allen Company	Haul Division	DT 889		Truck		4	4LI	C100053	Gen2		11R24.5							2026-09-08 06:14	93	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		4	4RO	C100054	Gen2		11R24.5							2026-09-08 06:14	94	F	74%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		2	2R	C100055	Gen2		11R24.5							2026-09-08 06:14	95	F	75%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		2	2L	C100056	Gen2		11R24.5							2026-09-08 06:14	96	F	76%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		3	3RI	C100057	Gen2		11R24.5							2026-09-08 06:14	97	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 889		Truck		3	3LI	C100058	Gen2		11R24.5							2026-09-08 06:14	98	F	78%														ContiConnect	Low pressure	Medium	110.0		101.0	psi	99.0
+The Allen Company	Haul Division	DT 889		Truck		3	3LO	C100059	Gen2		11R24.5							2026-09-08 06:14	99	F	79%														ContiConnect	Low pressure	Medium	110.0		95.0	psi	93.0
+The Allen Company	Haul Division	DT 884		Truck		2	2L	C100060	Gen2		11R24.5							2026-09-08 06:14	70	F	80%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 884		Truck		3	3LO	C100061	Gen2		11R24.5							2026-09-08 06:14	71	F	81%														ContiConnect	Very low pressure	High	110.0		87.0	psi	85.0
+The Allen Company	Haul Division	DT 884		Truck		3	3RO	C100062	Gen2		11R24.5							2026-09-08 06:14	72	F	82%														ContiConnect	Very low pressure	High	110.0		89.0	psi	87.0
+The Allen Company	Haul Division	DT 884		Truck		4	4LI	C100063	Gen2		11R24.5							2026-09-08 06:14	73	F	83%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 884		Truck		4	4RO	C100064	Gen2		11R24.5							2026-09-08 06:14	74	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 884		Truck		3	3RI	C100065	Gen2		11R24.5							2026-09-08 06:14	75	F	85%														ContiConnect	Low pressure	Medium	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 884		Truck		3	3LI	C100066	Gen2		11R24.5							2026-09-08 06:14	76	F	86%														ContiConnect	Very low pressure	High	110.0		86.0	psi	84.0
+The Allen Company	Haul Division	DT 884		Truck		4	4RI	C100067	Gen2		11R24.5							2026-09-08 06:14	77	F	87%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 884		Truck		1	1R	C100068	Gen2		11R24.5							2026-09-08 06:14	78	F	88%														ContiConnect	Very low pressure	High	110.0		82.0	psi	80.0
+The Allen Company	Haul Division	DT 884		Truck		2	2R	C100069	Gen2		11R24.5							2026-09-08 06:14	79	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 884		Truck		4	4LO	C100070	Gen2		11R24.5							2026-09-08 06:14	80	F	90%														ContiConnect	Very low pressure	High	110.0		2.0	psi	0.0
+The Allen Company	Haul Division	DT 884		Truck		1	1L	C100071	Gen2		11R24.5							2026-09-08 06:14	81	F	91%														ContiConnect	Low pressure	Medium	110.0		94.0	psi	92.0
+The Allen Company	Haul Division	DT 890		Truck		1	1R	C100072	Gen2		11R24.5							2026-09-08 06:14	82	F	92%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 890		Truck		4	4RO	C100073	Gen2		11R24.5							2026-09-08 06:14	83	F	93%														ContiConnect	Very low pressure	High	110.0		85.0	psi	83.0
+The Allen Company	Haul Division	DT 890		Truck		2	2R	C100074	Gen2		11R24.5							2026-09-08 06:14	84	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 890		Truck		4	4LO	C100075	Gen2		11R24.5							2026-09-08 06:14	85	F	95%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 890		Truck		2	2L	C100076	Gen2		11R24.5							2026-09-08 06:14	86	F	96%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 890		Truck		3	3LO	C100077	Gen2		11R24.5							2026-09-08 06:14	87	F	97%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 890		Truck		4	4LI	C100078	Gen2		11R24.5							2026-09-08 06:14	88	F	98%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 890		Truck		3	3RO	C100079	Gen2		11R24.5							2026-09-08 06:14	89	F	99%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 890		Truck		4	4RI	C100080	Gen2		11R24.5							2026-09-08 06:14	90	F	60%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 890		Truck		3	3LI	C100081	Gen2		11R24.5							2026-09-08 06:14	91	F	61%														ContiConnect	No alerts	None	110.0		118.0	psi	116.0
+The Allen Company	Haul Division	DT 890		Truck		3	3RI	C100082	Gen2		11R24.5							2026-09-08 06:14	92	F	62%														ContiConnect	No alerts	None	110.0		123.0	psi	121.0
+The Allen Company	Haul Division	DT 890		Truck		1	1L	C100083	Gen2		11R24.5							2026-09-08 06:14	93	F	63%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 881		Truck		4	4LO	C100084	Gen2		11R24.5							2026-09-08 06:14	94	F	64%														ContiConnect	Low pressure	Medium	110.0		97.0	psi	95.0
+The Allen Company	Haul Division	DT 881		Truck		2	2L	C100085	Gen2		11R24.5							2026-09-08 06:14	95	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 881		Truck		4	4RO	C100086	Gen2		11R24.5							2026-09-08 06:14	96	F	66%														ContiConnect	Very low pressure	High	110.0		44.0	psi	42.0
+The Allen Company	Haul Division	DT 881		Truck		4	4LI	C100087	Gen2		11R24.5							2026-09-08 06:14	97	F	67%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 881		Truck		1	1R	C100088	Gen2		11R24.5							2026-09-08 06:14	98	F	68%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 881		Truck		1	1L	C100089	Gen2		11R24.5							2026-09-08 06:14	99	F	69%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 881		Truck		3	3LO	C100090	Gen2		11R24.5							2026-09-08 06:14	70	F	70%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 881		Truck		4	4RI	C100091	Gen2		11R24.5							2026-09-08 06:14	71	F	71%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 881		Truck		3	3RI	C100092	Gen2		11R24.5							2026-09-08 06:14	72	F	72%														ContiConnect	No alerts	None	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT 881		Truck		3	3LI	C100093	Gen2		11R24.5							2026-09-08 06:14	73	F	73%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 881		Truck		2	2R	C100094	Gen2		11R24.5							2026-09-08 06:14	74	F	74%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 881		Truck		3	3RO	C100095	Gen2		11R24.5							2026-09-08 06:14	75	F	75%														ContiConnect	Very low pressure	High	110.0		89.0	psi	87.0
+The Allen Company	Haul Division	DT 870		Truck		4	4RO	C100096	Gen2		11R24.5							2026-09-08 06:14	76	F	76%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 870		Truck		3	3RO	C100097	Gen2		11R24.5							2026-09-08 06:14	77	F	77%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 870		Truck		4	4LO	C100098	Gen2		11R24.5							2026-09-08 06:14	78	F	78%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 870		Truck		3	3LI	C100099	Gen2		11R24.5							2026-09-08 06:14	79	F	79%														ContiConnect	No alerts	None	110.0		118.0	psi	116.0
+The Allen Company	Haul Division	DT 870		Truck		3	3LO	C100100	Gen2		11R24.5							2026-09-08 06:14	80	F	80%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 870		Truck		4	4RI	C100101	Gen2		11R24.5							2026-09-08 06:14	81	F	81%														ContiConnect	Very low pressure	High	110.0		89.0	psi	87.0
+The Allen Company	Haul Division	DT 870		Truck		2	2R	C100102	Gen2		11R24.5							2026-09-08 06:14	82	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 870		Truck		2	2L	C100103	Gen2		11R24.5							2026-09-08 06:14	83	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 870		Truck		3	3RI	C100104	Gen2		11R24.5							2026-09-08 06:14	84	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 870		Truck		1	1R	C100105	Gen2		11R24.5							2026-09-08 06:14	85	F	85%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 870		Truck		1	1L	C100106	Gen2		11R24.5							2026-09-08 06:14	86	F	86%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 870		Truck		4	4LI	C100107	Gen2		11R24.5							2026-09-08 06:14	87	F	87%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 891		Truck		1	1L	C100108	Gen2		11R24.5							2026-09-08 06:14	88	F	88%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 891		Truck		2	2R	C100109	Gen2		11R24.5							2026-09-08 06:14	89	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 891		Truck		4	4RO	C100110	Gen2		11R24.5							2026-09-08 06:14	90	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 891		Truck		2	2L	C100111	Gen2		11R24.5							2026-09-08 06:14	91	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 891		Truck		4	4LI	C100112	Gen2		11R24.5							2026-09-08 06:14	92	F	92%														ContiConnect	Low pressure	Medium	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 891		Truck		3	3LI	C100113	Gen2		11R24.5							2026-09-08 06:14	93	F	93%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 891		Truck		4	4RI	C100114	Gen2		11R24.5							2026-09-08 06:14	94	F	94%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 891		Truck		3	3LO	C100115	Gen2		11R24.5							2026-09-08 06:14	95	F	95%														ContiConnect	Very low pressure	High	110.0		91.0	psi	89.0
+The Allen Company	Haul Division	DT 891		Truck		1	1R	C100116	Gen2		11R24.5							2026-09-08 06:14	96	F	96%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 891		Truck		3	3RI	C100117	Gen2		11R24.5							2026-09-08 06:14	97	F	97%														ContiConnect	Low pressure	Medium	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 891		Truck		3	3RO	C100118	Gen2		11R24.5							2026-09-08 06:14	98	F	98%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 891		Truck		4	4LO	C100119	Gen2		11R24.5							2026-09-08 06:14	99	F	99%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT-1807		Truck		4	4RI	C100120	Gen2		11R24.5							2026-09-08 06:14	70	F	60%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT-1807		Truck		2	2RI	C100121	Gen2		11R24.5							2026-09-08 06:14	71	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1807		Truck		3	3RI	C100122	Gen2		11R24.5							2026-09-08 06:14	72	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1807		Truck		2	2RO	C100123	Gen2		11R24.5							2026-09-08 06:14	73	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1807		Truck		3	3LO	C100124	Gen2		11R24.5							2026-09-08 06:14	74	F	64%														ContiConnect	Low pressure	Medium	110.0		97.0	psi	95.0
+The Allen Company	Haul Division	DT-1807		Truck		4	4LI	C100125	Gen2		11R24.5							2026-09-08 06:14	75	F	65%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT-1807		Truck		2	2LO	C100126	Gen2		11R24.5							2026-09-08 06:14	76	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1807		Truck		1	1R	C100127	Gen2		11R24.5							2026-09-08 06:14	77	F	67%														ContiConnect	Very low pressure	High	110.0		96.0	psi	94.0
+The Allen Company	Haul Division	DT-1807		Truck		4	4LO	C100128	Gen2		11R24.5							2026-09-08 06:14	78	F	68%														ContiConnect	Low pressure	Medium	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT-1807		Truck		4	4RO	C100129	Gen2		11R24.5							2026-09-08 06:14	79	F	69%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT-1807		Truck		3	3RO	C100130	Gen2		11R24.5							2026-09-08 06:14	80	F	70%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1807		Truck		1	1L	C100131	Gen2		11R24.5							2026-09-08 06:14	81	F	71%														ContiConnect	Low pressure	Medium	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT-1807		Truck		3	3LI	C100132	Gen2		11R24.5							2026-09-08 06:14	82	F	72%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT-1807		Truck		2	2LI	C100133	Gen2		11R24.5							2026-09-08 06:14	83	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1804		Truck		2	2RO	C100134	Gen2		11R24.5							2026-09-08 06:14	84	F	74%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1804		Truck		4	4RO	C100135	Gen2		11R24.5							2026-09-08 06:14	85	F	75%														ContiConnect	Low pressure	Medium	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT-1804		Truck		3	3RI	C100136	Gen2		11R24.5							2026-09-08 06:14	86	F	76%														ContiConnect	Very low pressure	High	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT-1804		Truck		2	2LI	C100137	Gen2		11R24.5							2026-09-08 06:14	87	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1804		Truck		2	2LO	C100138	Gen2		11R24.5							2026-09-08 06:14	88	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1804		Truck		4	4RI	C100139	Gen2		11R24.5							2026-09-08 06:14	89	F	79%														ContiConnect	Low pressure	Medium	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT-1804		Truck		1	1R	C100140	Gen2		11R24.5							2026-09-08 06:14	90	F	80%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT-1804		Truck		2	2RI	C100141	Gen2		11R24.5							2026-09-08 06:14	91	F	81%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1804		Truck		3	3LO	C100142	Gen2		11R24.5							2026-09-08 06:14	92	F	82%														ContiConnect	Low pressure	Medium	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT-1804		Truck		3	3RO	C100143	Gen2		11R24.5							2026-09-08 06:14	93	F	83%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT-1804		Truck		4	4LI	C100144	Gen2		11R24.5							2026-09-08 06:14	94	F	84%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT-1804		Truck		4	4LO	C100145	Gen2		11R24.5							2026-09-08 06:14	95	F	85%														ContiConnect	Low pressure	Medium	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT-1804		Truck		3	3LI	C100146	Gen2		11R24.5							2026-09-08 06:14	96	F	86%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT-1804		Truck		1	1L	C100147	Gen2		11R24.5							2026-09-08 06:14	97	F	87%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 874		Truck		2	2RO	C100148	Gen2		11R24.5							2026-09-08 06:14	98	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 874		Truck		3	3RI	C100149	Gen2		11R24.5							2026-09-08 06:14	99	F	89%														ContiConnect	Very low pressure	High	110.0		77.0	psi	75.0
+The Allen Company	Haul Division	DT 874		Truck		3	3RO	C100150	Gen2		11R24.5							2026-09-08 06:14	70	F	90%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 874		Truck		4	4RO	C100151	Gen2		11R24.5							2026-09-08 06:14	71	F	91%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 874		Truck		4	4RI	C100152	Gen2		11R24.5							2026-09-08 06:14	72	F	92%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 874		Truck		4	4LI	C100153	Gen2		11R24.5							2026-09-08 06:14	73	F	93%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 874		Truck		2	2RI	C100154	Gen2		11R24.5							2026-09-08 06:14	74	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 874		Truck		3	3LO	C100155	Gen2		11R24.5							2026-09-08 06:14	75	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 874		Truck		2	2LO	C100156	Gen2		11R24.5							2026-09-08 06:14	76	F	96%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 874		Truck		3	3LI	C100157	Gen2		11R24.5							2026-09-08 06:14	77	F	97%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 874		Truck		1	1L	C100158	Gen2		11R24.5							2026-09-08 06:14	78	F	98%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 874		Truck		4	4LO	C100159	Gen2		11R24.5							2026-09-08 06:14	79	F	99%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 874		Truck		2	2LI	C100160	Gen2		11R24.5							2026-09-08 06:14	80	F	60%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 874		Truck		1	1R	C100161	Gen2		11R24.5							2026-09-08 06:14	81	F	61%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 873		Truck		4	4RI	C100162	Gen2		11R24.5							2026-09-08 06:14	82	F	62%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		4	4LI	C100163	Gen2		11R24.5							2026-09-08 06:14	83	F	63%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		2	2LO	C100164	Gen2		11R24.5							2026-09-08 06:14	84	F	64%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		2	2RI	C100165	Gen2		11R24.5							2026-09-08 06:14	85	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		2	2RO	C100166	Gen2		11R24.5							2026-09-08 06:14	86	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		2	2LI	C100167	Gen2		11R24.5							2026-09-08 06:14	87	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		1	1R	C100168	Gen2		11R24.5							2026-09-08 06:14	88	F	68%														ContiConnect	No alerts	None	110.0		123.0	psi	121.0
+The Allen Company	Haul Division	DT 873		Truck		3	3RI	C100169	Gen2		11R24.5							2026-09-08 06:14	89	F	69%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		4	4LO	C100170	Gen2		11R24.5							2026-09-08 06:14	90	F	70%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 873		Truck		3	3LO	C100171	Gen2		11R24.5							2026-09-08 06:14	91	F	71%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		4	4RO	C100172	Gen2		11R24.5							2026-09-08 06:14	92	F	72%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		3	3LI	C100173	Gen2		11R24.5							2026-09-08 06:14	93	F	73%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		3	3RO	C100174	Gen2		11R24.5							2026-09-08 06:14	94	F	74%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 873		Truck		1	1L	C100175	Gen2		11R24.5							2026-09-08 06:14	95	F	75%														ContiConnect	No alerts	None	110.0		123.0	psi	121.0
+The Allen Company	Haul Division	DT 888		Truck		1	1L	C100176	Gen2		11R24.5							2026-09-08 06:14	96	F	76%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 888		Truck		4	4RI	C100177	Gen2		11R24.5							2026-09-08 06:14	97	F	77%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	DT 888		Truck		2	2R	C100178	Gen2		11R24.5							2026-09-08 06:14	98	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 888		Truck		3	3RI	C100179	Gen2		11R24.5							2026-09-08 06:14	99	F	79%														ContiConnect	Low pressure	Medium	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 888		Truck		3	3LO	C100180	Gen2		11R24.5							2026-09-08 06:14	70	F	80%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT 888		Truck		4	4LO	C100181	Gen2		11R24.5							2026-09-08 06:14	71	F	81%														ContiConnect	Very low pressure	High	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 888		Truck		2	2L	C100182	Gen2		11R24.5							2026-09-08 06:14	72	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 888		Truck		4	4LI	C100183	Gen2		11R24.5							2026-09-08 06:14	73	F	83%														ContiConnect	Very low pressure	High	110.0		81.0	psi	79.0
+The Allen Company	Haul Division	DT 888		Truck		1	1R	C100184	Gen2		11R24.5							2026-09-08 06:14	74	F	84%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 888		Truck		3	3LI	C100185	Gen2		11R24.5							2026-09-08 06:14	75	F	85%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 888		Truck		4	4RO	C100186	Gen2		11R24.5							2026-09-08 06:14	76	F	86%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 888		Truck		3	3RO	C100187	Gen2		11R24.5							2026-09-08 06:14	77	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 886		Truck		3	3LO	C100188	Gen2		11R24.5							2026-09-08 06:14	78	F	88%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 886		Truck		3	3RO	C100189	Gen2		11R24.5							2026-09-08 06:14	79	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 886		Truck		4	4LI	C100190	Gen2		11R24.5							2026-09-08 06:14	80	F	90%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 886		Truck		3	3LI	C100191	Gen2		11R24.5							2026-09-08 06:14	81	F	91%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 886		Truck		1	1L	C100192	Gen2		11R24.5							2026-09-08 06:14	82	F	92%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 886		Truck		3	3RI	C100193	Gen2		11R24.5							2026-09-08 06:14	83	F	93%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 886		Truck		4	4LO	C100194	Gen2		11R24.5							2026-09-08 06:14	84	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 886		Truck		4	4RO	C100195	Gen2		11R24.5							2026-09-08 06:14	85	F	95%														ContiConnect	No alerts	None	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 886		Truck		4	4RI	C100196	Gen2		11R24.5							2026-09-08 06:14	86	F	96%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 886		Truck		1	1R	C100197	Gen2		11R24.5							2026-09-08 06:14	87	F	97%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 886		Truck		2	2L	C100198	Gen2		11R24.5							2026-09-08 06:14	88	F	98%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 886		Truck		2	2R	C100199	Gen2		11R24.5							2026-09-08 06:14	89	F	99%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		2	2RO	C100200	Gen2		11R24.5							2026-09-08 06:14	90	F	60%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		1	1L	C100201	Gen2		11R24.5							2026-09-08 06:14	91	F	61%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 808		Truck		2	2LO	C100202	Gen2		11R24.5							2026-09-08 06:14	92	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		4	4LO	C100203	Gen2		11R24.5							2026-09-08 06:14	93	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		2	2RI	C100204	Gen2		11R24.5							2026-09-08 06:14	94	F	64%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		2	2LI	C100205	Gen2		11R24.5							2026-09-08 06:14	95	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		4	4RI	C100206	Gen2		11R24.5							2026-09-08 06:14	96	F	66%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 808		Truck		3	3LO	C100207	Gen2		11R24.5							2026-09-08 06:14	97	F	67%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 808		Truck		3	3LI	C100208	Gen2		11R24.5							2026-09-08 06:14	98	F	68%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 808		Truck		1	1R	C100209	Gen2		11R24.5							2026-09-08 06:14	99	F	69%														ContiConnect	Very low pressure	High	110.0		89.0	psi	87.0
+The Allen Company	Haul Division	DT 808		Truck		4	4RO	C100210	Gen2		11R24.5							2026-09-08 06:14	70	F	70%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		3	3RO	C100211	Gen2		11R24.5							2026-09-08 06:14	71	F	71%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 808		Truck		3	3RI	C100212	Gen2		11R24.5							2026-09-08 06:14	72	F	72%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 808		Truck		4	4LI	C100213	Gen2		11R24.5							2026-09-08 06:14	73	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 876		Truck		3	3RI	C100214	Gen2		11R24.5							2026-09-08 06:14	74	F	74%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 876		Truck		3	3LO	C100215	Gen2		11R24.5							2026-09-08 06:14	75	F	75%														ContiConnect	Low pressure	Medium	110.0		101.0	psi	99.0
+The Allen Company	Haul Division	DT 876		Truck		4	4LI	C100216	Gen2		11R24.5							2026-09-08 06:14	76	F	76%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 876		Truck		2	2L	C100217	Gen2		11R24.5							2026-09-08 06:14	77	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 876		Truck		1	1L	C100218	Gen2		11R24.5							2026-09-08 06:14	78	F	78%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	DT 876		Truck		4	4RO	C100219	Gen2		11R24.5							2026-09-08 06:14	79	F	79%														ContiConnect	Very low pressure	High	110.0		43.0	psi	41.0
+The Allen Company	Haul Division	DT 876		Truck		4	4LO	C100220	Gen2		11R24.5							2026-09-08 06:14	80	F	80%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 876		Truck		3	3LI	C100221	Gen2		11R24.5							2026-09-08 06:14	81	F	81%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	DT 876		Truck		1	1R	C100222	Gen2		11R24.5							2026-09-08 06:14	82	F	82%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT 876		Truck		4	4RI	C100223	Gen2		11R24.5							2026-09-08 06:14	83	F	83%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	DT 876		Truck		2	2R	C100224	Gen2		11R24.5							2026-09-08 06:14	84	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 876		Truck		3	3RO	C100225	Gen2		11R24.5							2026-09-08 06:14	85	F	85%														ContiConnect	No alerts	None	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 887		Truck		1	1R	C100226	Gen2		11R24.5							2026-09-08 06:14	86	F	86%														ContiConnect	No alerts	None	110.0		133.0	psi	131.0
+The Allen Company	Haul Division	DT 887		Truck		1	1L	C100227	Gen2		11R24.5							2026-09-08 06:14	87	F	87%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		4	4RO	C100228	Gen2		11R24.5							2026-09-08 06:14	88	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		3	3RO	C100229	Gen2		11R24.5							2026-09-08 06:14	89	F	89%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		2	2L	C100230	Gen2		11R24.5							2026-09-08 06:14	90	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		3	3RI	C100231	Gen2		11R24.5							2026-09-08 06:14	91	F	91%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		4	4LO	C100232	Gen2		11R24.5							2026-09-08 06:14	92	F	92%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 887		Truck		3	3LI	C100233	Gen2		11R24.5							2026-09-08 06:14	93	F	93%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		4	4LI	C100234	Gen2		11R24.5							2026-09-08 06:14	94	F	94%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		4	4RI	C100235	Gen2		11R24.5							2026-09-08 06:14	95	F	95%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		3	3LO	C100236	Gen2		11R24.5							2026-09-08 06:14	96	F	96%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 887		Truck		2	2R	C100237	Gen2		11R24.5							2026-09-08 06:14	97	F	97%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-674		Truck		1	1LI	C100238	Gen2		11R24.5							2026-09-08 06:14	98	F	98%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-674		Truck		2	2LO	C100239	Gen2		11R24.5							2026-09-08 06:14	99	F	99%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	T-674		Truck		1	1RO	C100240	Gen2		11R24.5							2026-09-08 06:14	70	F	60%														ContiConnect	Very low pressure	High	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	T-674		Truck		1	1RI	C100241	Gen2		11R24.5							2026-09-08 06:14	71	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-674		Truck		2	2LI	C100242	Gen2		11R24.5							2026-09-08 06:14	72	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-674		Truck		2	2RO	C100243	Gen2		11R24.5							2026-09-08 06:14	73	F	63%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	T-674		Truck		2	2RI	C100244	Gen2		11R24.5							2026-09-08 06:14	74	F	64%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	T-674		Truck		1	1LO	C100245	Gen2		11R24.5							2026-09-08 06:14	75	F	65%														ContiConnect	Very low pressure	High	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 866		Truck		3	3RI	C100246	Gen2		11R24.5							2026-09-08 06:14	76	F	66%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT 866		Truck		3	3LI	C100247	Gen2		11R24.5							2026-09-08 06:14	77	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		4	4LI	C100248	Gen2		11R24.5							2026-09-08 06:14	78	F	68%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 866		Truck		1	1L	C100249	Gen2		11R24.5							2026-09-08 06:14	79	F	69%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		1	1R	C100250	Gen2		11R24.5							2026-09-08 06:14	80	F	70%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		4	4RO	C100251	Gen2		11R24.5							2026-09-08 06:14	81	F	71%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		4	4LO	C100252	Gen2		11R24.5							2026-09-08 06:14	82	F	72%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		3	3LO	C100253	Gen2		11R24.5							2026-09-08 06:14	83	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		4	4RI	C100254	Gen2		11R24.5							2026-09-08 06:14	84	F	74%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 866		Truck		2	2L	C100255	Gen2		11R24.5							2026-09-08 06:14	85	F	75%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		3	3RO	C100256	Gen2		11R24.5							2026-09-08 06:14	86	F	76%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 866		Truck		2	2R	C100257	Gen2		11R24.5							2026-09-08 06:14	87	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 862		Truck		1	1R	C100258	Gen2		11R24.5							2026-09-08 06:14	88	F	78%														ContiConnect	No alerts	None	110.0		121.0	psi	119.0
+The Allen Company	Haul Division	DT 862		Truck		4	4LO	C100259	Gen2		11R24.5							2026-09-08 06:14	89	F	79%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 862		Truck		2	2L	C100260	Gen2		11R24.5							2026-09-08 06:14	90	F	80%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 862		Truck		3	3LO	C100261	Gen2		11R24.5							2026-09-08 06:14	91	F	81%														ContiConnect	No alerts	None	110.0		120.0	psi	118.0
+The Allen Company	Haul Division	DT 862		Truck		3	3RO	C100262	Gen2		11R24.5							2026-09-08 06:14	92	F	82%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 862		Truck		4	4RI	C100263	Gen2		11R24.5							2026-09-08 06:14	93	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 862		Truck		1	1L	C100264	Gen2		11R24.5							2026-09-08 06:14	94	F	84%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 862		Truck		4	4LI	C100265	Gen2		11R24.5							2026-09-08 06:14	95	F	85%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 862		Truck		2	2R	C100266	Gen2		11R24.5							2026-09-08 06:14	96	F	86%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 862		Truck		4	4RO	C100267	Gen2		11R24.5							2026-09-08 06:14	97	F	87%														ContiConnect	Low pressure	Medium	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 862		Truck		3	3RI	C100268	Gen2		11R24.5							2026-09-08 06:14	98	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 862		Truck		3	3LI	C100269	Gen2		11R24.5							2026-09-08 06:14	99	F	89%														ContiConnect	No alerts	None	110.0		122.0	psi	120.0
+The Allen Company	Haul Division	DT-1811		Truck		4	4LI	C100270	Gen2		11R24.5							2026-09-08 06:14	70	F	90%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT-1811		Truck		2	2L	C100271	Gen2		11R24.5							2026-09-08 06:14	71	F	91%														ContiConnect	No alerts	None	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT-1811		Truck		3	3LI	C100272	Gen2		11R24.5							2026-09-08 06:14	72	F	92%														ContiConnect	Low pressure	Medium	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT-1811		Truck		4	4RO	C100273	Gen2		11R24.5							2026-09-08 06:14	73	F	93%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT-1811		Truck		3	3RO	C100274	Gen2		11R24.5							2026-09-08 06:14	74	F	94%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT-1811		Truck		3	3RI	C100275	Gen2		11R24.5							2026-09-08 06:14	75	F	95%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT-1811		Truck		3	3LO	C100276	Gen2		11R24.5							2026-09-08 06:14	76	F	96%														ContiConnect	Low pressure	Medium	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT-1811		Truck		1	1L	C100277	Gen2		11R24.5							2026-09-08 06:14	77	F	97%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT-1811		Truck		4	4LO	C100278	Gen2		11R24.5							2026-09-08 06:14	78	F	98%														ContiConnect	Low pressure	Medium	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT-1811		Truck		1	1R	C100279	Gen2		11R24.5							2026-09-08 06:14	79	F	99%														ContiConnect	Low pressure	Medium	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT-1811		Truck		2	2R	C100280	Gen2		11R24.5							2026-09-08 06:14	80	F	60%														ContiConnect	No alerts	None	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT-1811		Truck		4	4RI	C100281	Gen2		11R24.5							2026-09-08 06:14	81	F	61%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 880		Truck		3	3RI	C100282	Gen2		11R24.5							2026-09-08 06:14	82	F	62%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 880		Truck		3	3LO	C100283	Gen2		11R24.5							2026-09-08 06:14	83	F	63%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 880		Truck		4	4LO	C100284	Gen2		11R24.5							2026-09-08 06:14	84	F	64%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 880		Truck		4	4RI	C100285	Gen2		11R24.5							2026-09-08 06:14	85	F	65%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 880		Truck		3	3LI	C100286	Gen2		11R24.5							2026-09-08 06:14	86	F	66%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 880		Truck		2	2L	C100287	Gen2		11R24.5							2026-09-08 06:14	87	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 880		Truck		1	1L	C100288	Gen2		11R24.5							2026-09-08 06:14	88	F	68%														ContiConnect	Low pressure	Medium	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 880		Truck		4	4LI	C100289	Gen2		11R24.5							2026-09-08 06:14	89	F	69%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 880		Truck		4	4RO	C100290	Gen2		11R24.5							2026-09-08 06:14	90	F	70%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 880		Truck		1	1R	C100291	Gen2		11R24.5							2026-09-08 06:14	91	F	71%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 880		Truck		3	3RO	C100292	Gen2		11R24.5							2026-09-08 06:14	92	F	72%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 880		Truck		2	2R	C100293	Gen2		11R24.5							2026-09-08 06:14	93	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T 673		Truck		2	2RI	C100294	Gen2		11R24.5							2026-09-08 06:14	94	F	74%														ContiConnect	No alerts	None	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	T 673		Truck		1	1RO	C100295	Gen2		11R24.5							2026-09-08 06:14	95	F	75%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	T 673		Truck		2	2LO	C100296	Gen2		11R24.5							2026-09-08 06:14	96	F	76%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T 673		Truck		2	2RO	C100297	Gen2		11R24.5							2026-09-08 06:14	97	F	77%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	T 673		Truck		1	1LO	C100298	Gen2		11R24.5							2026-09-08 06:14	98	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T 673		Truck		1	1RI	C100299	Gen2		11R24.5							2026-09-08 06:14	99	F	79%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	T 673		Truck		2	2LI	C100300	Gen2		11R24.5							2026-09-08 06:14	70	F	80%														ContiConnect	Low pressure	Medium	110.0		99.0	psi	97.0
+The Allen Company	Haul Division	T 673		Truck		1	1LI	C100301	Gen2		11R24.5							2026-09-08 06:14	71	F	81%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	DT-1803		Truck		1	1R	C100302	Gen2		11R24.5							2026-09-08 06:14	72	F	82%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT-1803		Truck		3	3LO	C100303	Gen2		11R24.5							2026-09-08 06:14	73	F	83%														ContiConnect	Low pressure	Medium	110.0		119.0	psi	117.0
+The Allen Company	Haul Division	DT-1803		Truck		3	3LI	C100304	Gen2		11R24.5							2026-09-08 06:14	74	F	84%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT-1803		Truck		1	1L	C100305	Gen2		11R24.5							2026-09-08 06:14	75	F	85%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT-1803		Truck		4	4LI	C100306	Gen2		11R24.5							2026-09-08 06:14	76	F	86%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT-1803		Truck		4	4RI	C100307	Gen2		11R24.5							2026-09-08 06:14	77	F	87%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT-1803		Truck		3	3RO	C100308	Gen2		11R24.5							2026-09-08 06:14	78	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1803		Truck		2	2R	C100309	Gen2		11R24.5							2026-09-08 06:14	79	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1803		Truck		3	3RI	C100310	Gen2		11R24.5							2026-09-08 06:14	80	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1803		Truck		2	2L	C100311	Gen2		11R24.5							2026-09-08 06:14	81	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1803		Truck		4	4LO	C100312	Gen2		11R24.5							2026-09-08 06:14	82	F	92%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT-1803		Truck		4	4RO	C100313	Gen2		11R24.5							2026-09-08 06:14	83	F	93%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 875		Truck		2	2RI	C100314	Gen2		11R24.5							2026-09-08 06:14	84	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 875		Truck		3	3RO	C100315	Gen2		11R24.5							2026-09-08 06:14	85	F	95%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 875		Truck		3	3LI	C100316	Gen2		11R24.5							2026-09-08 06:14	86	F	96%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 875		Truck		1	1L	C100317	Gen2		11R24.5							2026-09-08 06:14	87	F	97%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 875		Truck		1	1R	C100318	Gen2		11R24.5							2026-09-08 06:14	88	F	98%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 875		Truck		3	3RI	C100319	Gen2		11R24.5							2026-09-08 06:14	89	F	99%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 875		Truck		3	3LO	C100320	Gen2		11R24.5							2026-09-08 06:14	90	F	60%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 875		Truck		4	4LO	C100321	Gen2		11R24.5							2026-09-08 06:14	91	F	61%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 875		Truck		4	4LI	C100322	Gen2		11R24.5							2026-09-08 06:14	92	F	62%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 875		Truck		4	4RO	C100323	Gen2		11R24.5							2026-09-08 06:14	93	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 875		Truck		4	4RI	C100324	Gen2		11R24.5							2026-09-08 06:14	94	F	64%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 875		Truck		2	2LO	C100325	Gen2		11R24.5							2026-09-08 06:14	95	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 875		Truck		2	2LI	C100326	Gen2		11R24.5							2026-09-08 06:14	96	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 875		Truck		2	2RO	C100327	Gen2		11R24.5							2026-09-08 06:14	97	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 878		Truck		4	4RI	C100328	Gen2		11R24.5							2026-09-08 06:14	98	F	68%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 878		Truck		3	3RI	C100329	Gen2		11R24.5							2026-09-08 06:14	99	F	69%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 878		Truck		3	3LO	C100330	Gen2		11R24.5							2026-09-08 06:14	70	F	70%														ContiConnect	Low pressure	Medium	110.0		99.0	psi	97.0
+The Allen Company	Haul Division	DT 878		Truck		4	4RO	C100331	Gen2		11R24.5							2026-09-08 06:14	71	F	71%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 878		Truck		1	1L	C100332	Gen2		11R24.5							2026-09-08 06:14	72	F	72%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 878		Truck		2	2L	C100333	Gen2		11R24.5							2026-09-08 06:14	73	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 878		Truck		1	1R	C100334	Gen2		11R24.5							2026-09-08 06:14	74	F	74%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 878		Truck		2	2R	C100335	Gen2		11R24.5							2026-09-08 06:14	75	F	75%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 878		Truck		3	3RO	C100336	Gen2		11R24.5							2026-09-08 06:14	76	F	76%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 878		Truck		3	3LI	C100337	Gen2		11R24.5							2026-09-08 06:14	77	F	77%														ContiConnect	No alerts	None	110.0		119.0	psi	117.0
+The Allen Company	Haul Division	DT 878		Truck		4	4LI	C100338	Gen2		11R24.5							2026-09-08 06:14	78	F	78%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 878		Truck		4	4LO	C100339	Gen2		11R24.5							2026-09-08 06:14	79	F	79%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	HT 1119		Truck		3	3LI	C100340	Gen2		11R24.5							2026-09-08 06:14	80	F	80%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		3	3RO	C100341	Gen2		11R24.5							2026-09-08 06:14	81	F	81%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		3	3RI	C100342	Gen2		11R24.5							2026-09-08 06:14	82	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		1	1R	C100343	Gen2		11R24.5							2026-09-08 06:14	83	F	83%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	HT 1119		Truck		2	2LO	C100344	Gen2		11R24.5							2026-09-08 06:14	84	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		2	2LI	C100345	Gen2		11R24.5							2026-09-08 06:14	85	F	85%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		2	2RO	C100346	Gen2		11R24.5							2026-09-08 06:14	86	F	86%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		3	3LO	C100347	Gen2		11R24.5							2026-09-08 06:14	87	F	87%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	HT 1119		Truck		1	1L	C100348	Gen2		11R24.5							2026-09-08 06:14	88	F	88%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	HT 1119		Truck		2	2RI	C100349	Gen2		11R24.5							2026-09-08 06:14	89	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 883		Truck		3	3LO	C100350	Gen2		11R24.5							2026-09-08 06:14	90	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 883		Truck		1	1R	C100351	Gen2		11R24.5							2026-09-08 06:14	91	F	91%														ContiConnect	No alerts	None	110.0		121.0	psi	119.0
+The Allen Company	Haul Division	DT 883		Truck		2	2R	C100352	Gen2		11R24.5							2026-09-08 06:14	92	F	92%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 883		Truck		3	3LI	C100353	Gen2		11R24.5							2026-09-08 06:14	93	F	93%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 883		Truck		4	4LI	C100354	Gen2		11R24.5							2026-09-08 06:14	94	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 883		Truck		2	2L	C100355	Gen2		11R24.5							2026-09-08 06:14	95	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 883		Truck		3	3RO	C100356	Gen2		11R24.5							2026-09-08 06:14	96	F	96%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 883		Truck		3	3RI	C100357	Gen2		11R24.5							2026-09-08 06:14	97	F	97%														ContiConnect	Low pressure	Medium	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 883		Truck		4	4RO	C100358	Gen2		11R24.5							2026-09-08 06:14	98	F	98%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 883		Truck		4	4LO	C100359	Gen2		11R24.5							2026-09-08 06:14	99	F	99%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 883		Truck		1	1L	C100360	Gen2		11R24.5							2026-09-08 06:14	70	F	60%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 883		Truck		4	4RI	C100361	Gen2		11R24.5							2026-09-08 06:14	71	F	61%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 1800		Truck		4	4LO	C100362	Gen2		11R24.5							2026-09-08 06:14	72	F	62%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 1800		Truck		3	3LI	C100363	Gen2		11R24.5							2026-09-08 06:14	73	F	63%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 1800		Truck		3	3RI	C100364	Gen2		11R24.5							2026-09-08 06:14	74	F	64%														ContiConnect	Low pressure	Medium	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 1800		Truck		4	4RI	C100365	Gen2		11R24.5							2026-09-08 06:14	75	F	65%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 1800		Truck		2	2L	C100366	Gen2		11R24.5							2026-09-08 06:14	76	F	66%														ContiConnect	Sensor defect	None	110.0			psi	
+The Allen Company	Haul Division	DT 1800		Truck		4	4RO	C100367	Gen2		11R24.5							2026-09-08 06:14	77	F	67%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 1800		Truck		4	4LI	C100368	Gen2		11R24.5							2026-09-08 06:14	78	F	68%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 1800		Truck		1	1R	C100369	Gen2		11R24.5							2026-09-08 06:14	79	F	69%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 1800		Truck		3	3LO	C100370	Gen2		11R24.5							2026-09-08 06:14	80	F	70%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 1800		Truck		1	1L	C100371	Gen2		11R24.5							2026-09-08 06:14	81	F	71%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 1800		Truck		3	3RO	C100372	Gen2		11R24.5							2026-09-08 06:14	82	F	72%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 1800		Truck		2	2R	C100373	Gen2		11R24.5							2026-09-08 06:14	83	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 868		Truck		4	4LI	C100374	Gen2		11R24.5							2026-09-08 06:14	84	F	74%														ContiConnect	No alerts	None	110.0		127.0	psi	125.0
+The Allen Company	Haul Division	DT 868		Truck		2	2R	C100375	Gen2		11R24.5							2026-09-08 06:14	85	F	75%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 868		Truck		4	4RO	C100376	Gen2		11R24.5							2026-09-08 06:14	86	F	76%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 868		Truck		1	1R	C100377	Gen2		11R24.5							2026-09-08 06:14	87	F	77%														ContiConnect	No alerts	None	110.0		121.0	psi	119.0
+The Allen Company	Haul Division	DT 868		Truck		3	3LI	C100378	Gen2		11R24.5							2026-09-08 06:14	88	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 868		Truck		4	4RI	C100379	Gen2		11R24.5							2026-09-08 06:14	89	F	79%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 868		Truck		2	2L	C100380	Gen2		11R24.5							2026-09-08 06:14	90	F	80%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 868		Truck		3	3RI	C100381	Gen2		11R24.5							2026-09-08 06:14	91	F	81%														ContiConnect	No alerts	None	110.0		125.0	psi	123.0
+The Allen Company	Haul Division	DT 868		Truck		1	1L	C100382	Gen2		11R24.5							2026-09-08 06:14	92	F	82%														ContiConnect	No alerts	None	110.0		122.0	psi	120.0
+The Allen Company	Haul Division	DT 868		Truck		4	4LO	C100383	Gen2		11R24.5							2026-09-08 06:14	93	F	83%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 868		Truck		3	3RO	C100384	Gen2		11R24.5							2026-09-08 06:14	94	F	84%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 868		Truck		3	3LO	C100385	Gen2		11R24.5							2026-09-08 06:14	95	F	85%														ContiConnect	No alerts	None	110.0		118.0	psi	116.0
+The Allen Company	Haul Division	DT 885		Truck		4	4LI	C100386	Gen2		11R24.5							2026-09-08 06:14	96	F	86%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		2	2R	C100387	Gen2		11R24.5							2026-09-08 06:14	97	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		4	4LO	C100388	Gen2		11R24.5							2026-09-08 06:14	98	F	88%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		1	1L	C100389	Gen2		11R24.5							2026-09-08 06:14	99	F	89%														ContiConnect	No alerts	None	110.0		118.0	psi	116.0
+The Allen Company	Haul Division	DT 885		Truck		4	4RO	C100390	Gen2		11R24.5							2026-09-08 06:14	70	F	90%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		2	2L	C100391	Gen2		11R24.5							2026-09-08 06:14	71	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		3	3RI	C100392	Gen2		11R24.5							2026-09-08 06:14	72	F	92%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		4	4RI	C100393	Gen2		11R24.5							2026-09-08 06:14	73	F	93%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		3	3LO	C100394	Gen2		11R24.5							2026-09-08 06:14	74	F	94%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		1	1R	C100395	Gen2		11R24.5							2026-09-08 06:14	75	F	95%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 885		Truck		3	3RO	C100396	Gen2		11R24.5							2026-09-08 06:14	76	F	96%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 885		Truck		3	3LI	C100397	Gen2		11R24.5							2026-09-08 06:14	77	F	97%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 895		Truck		4	4RO	C100398	Gen2		11R24.5							2026-09-08 06:14	78	F	98%														ContiConnect	No alerts	None	110.0		118.0	psi	116.0
+The Allen Company	Haul Division	DT 895		Truck		1	1L	C100399	Gen2		11R24.5							2026-09-08 06:14	79	F	99%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 895		Truck		1	1R	C100400	Gen2		11R24.5							2026-09-08 06:14	80	F	60%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 895		Truck		2	2R	C100401	Gen2		11R24.5							2026-09-08 06:14	81	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 895		Truck		4	4LO	C100402	Gen2		11R24.5							2026-09-08 06:14	82	F	62%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 895		Truck		3	3RO	C100403	Gen2		11R24.5							2026-09-08 06:14	83	F	63%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 895		Truck		3	3LI	C100404	Gen2		11R24.5							2026-09-08 06:14	84	F	64%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 895		Truck		2	2L	C100405	Gen2		11R24.5							2026-09-08 06:14	85	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 895		Truck		4	4LI	C100406	Gen2		11R24.5							2026-09-08 06:14	86	F	66%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 895		Truck		3	3RI	C100407	Gen2		11R24.5							2026-09-08 06:14	87	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 895		Truck		3	3LO	C100408	Gen2		11R24.5							2026-09-08 06:14	88	F	68%														ContiConnect	No alerts	None	110.0		118.0	psi	116.0
+The Allen Company	Haul Division	DT 895		Truck		4	4RI	C100409	Gen2		11R24.5							2026-09-08 06:14	89	F	69%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		2	2L	C100410	Gen2		11R24.5							2026-09-08 06:14	90	F	70%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		4	4LI	C100411	Gen2		11R24.5							2026-09-08 06:14	91	F	71%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 896		Truck		1	1R	C100412	Gen2		11R24.5							2026-09-08 06:14	92	F	72%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 896		Truck		4	4RI	C100413	Gen2		11R24.5							2026-09-08 06:14	93	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		4	4LO	C100414	Gen2		11R24.5							2026-09-08 06:14	94	F	74%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 896		Truck		3	3RO	C100415	Gen2		11R24.5							2026-09-08 06:14	95	F	75%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 896		Truck		3	3LO	C100416	Gen2		11R24.5							2026-09-08 06:14	96	F	76%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 896		Truck		4	4RO	C100417	Gen2		11R24.5							2026-09-08 06:14	97	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		1	1L	C100418	Gen2		11R24.5							2026-09-08 06:14	98	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		3	3RI	C100419	Gen2		11R24.5							2026-09-08 06:14	99	F	79%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		2	2R	C100420	Gen2		11R24.5							2026-09-08 06:14	70	F	80%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 896		Truck		3	3LI	C100421	Gen2		11R24.5							2026-09-08 06:14	71	F	81%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 1808		Truck		1	1R	C100422	Gen2		11R24.5							2026-09-08 06:14	72	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1808		Truck		4	4LO	C100423	Gen2		11R24.5							2026-09-08 06:14	73	F	83%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 1808		Truck		1	1L	C100424	Gen2		11R24.5							2026-09-08 06:14	74	F	84%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 1808		Truck		3	3LO	C100425	Gen2		11R24.5							2026-09-08 06:14	75	F	85%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 1808		Truck		2	2R	C100426	Gen2		11R24.5							2026-09-08 06:14	76	F	86%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1808		Truck		2	2L	C100427	Gen2		11R24.5							2026-09-08 06:14	77	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1808		Truck		4	4RO	C100428	Gen2		11R24.5							2026-09-08 06:14	78	F	88%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 1808		Truck		3	3RO	C100429	Gen2		11R24.5							2026-09-08 06:14	79	F	89%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 1808		Truck		3	3RI	C100430	Gen2		11R24.5							2026-09-08 06:14	80	F	90%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 1808		Truck		4	4RI	C100431	Gen2		11R24.5							2026-09-08 06:14	81	F	91%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 1808		Truck		3	3LI	C100432	Gen2		11R24.5							2026-09-08 06:14	82	F	92%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 1808		Truck		4	4LI	C100433	Gen2		11R24.5							2026-09-08 06:14	83	F	93%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 861		Truck		3	3RO	C100434	Gen2		11R24.5							2026-09-08 06:14	84	F	94%														ContiConnect	Low pressure	Medium	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 861		Truck		3	3LO	C100435	Gen2		11R24.5							2026-09-08 06:14	85	F	95%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 861		Truck		4	4RI	C100436	Gen2		11R24.5							2026-09-08 06:14	86	F	96%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 861		Truck		2	2R	C100437	Gen2		11R24.5							2026-09-08 06:14	87	F	97%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 861		Truck		3	3LI	C100438	Gen2		11R24.5							2026-09-08 06:14	88	F	98%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 861		Truck		2	2L	C100439	Gen2		11R24.5							2026-09-08 06:14	89	F	99%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 861		Truck		4	4LI	C100440	Gen2		11R24.5							2026-09-08 06:14	90	F	60%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 861		Truck		4	4LO	C100441	Gen2		11R24.5							2026-09-08 06:14	91	F	61%														ContiConnect	Low pressure	Medium	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 861		Truck		1	1L	C100442	Gen2		11R24.5							2026-09-08 06:14	92	F	62%														ContiConnect	Low pressure	Medium	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 861		Truck		1	1R	C100443	Gen2		11R24.5							2026-09-08 06:14	93	F	63%														ContiConnect	Low pressure	Medium	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 861		Truck		4	4RO	C100444	Gen2		11R24.5							2026-09-08 06:14	94	F	64%														ContiConnect	Low pressure	Medium	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 861		Truck		3	3RI	C100445	Gen2		11R24.5							2026-09-08 06:14	95	F	65%														ContiConnect	Low pressure	Medium	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 871		Truck		3	3RO	C100446	Gen2		11R24.5							2026-09-08 06:14	96	F	66%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 871		Truck		2	2L	C100447	Gen2		11R24.5							2026-09-08 06:14	97	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 871		Truck		2	2R	C100448	Gen2		11R24.5							2026-09-08 06:14	98	F	68%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 871		Truck		4	4RI	C100449	Gen2		11R24.5							2026-09-08 06:14	99	F	69%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 871		Truck		3	3LI	C100450	Gen2		11R24.5							2026-09-08 06:14	70	F	70%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 871		Truck		1	1L	C100451	Gen2		11R24.5							2026-09-08 06:14	71	F	71%														ContiConnect	No alerts	None	110.0		125.0	psi	123.0
+The Allen Company	Haul Division	DT 871		Truck		4	4LO	C100452	Gen2		11R24.5							2026-09-08 06:14	72	F	72%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 871		Truck		4	4RO	C100453	Gen2		11R24.5							2026-09-08 06:14	73	F	73%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 871		Truck		1	1R	C100454	Gen2		11R24.5							2026-09-08 06:14	74	F	74%														ContiConnect	Low pressure	Medium	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 871		Truck		3	3LO	C100455	Gen2		11R24.5							2026-09-08 06:14	75	F	75%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 871		Truck		4	4LI	C100456	Gen2		11R24.5							2026-09-08 06:14	76	F	76%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 871		Truck		3	3RI	C100457	Gen2		11R24.5							2026-09-08 06:14	77	F	77%														ContiConnect	Low pressure	Medium	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 877		Truck		2	2L	C100458	Gen2		11R24.5							2026-09-08 06:14	78	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 877		Truck		3	3LI	C100459	Gen2		11R24.5							2026-09-08 06:14	79	F	79%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 877		Truck		1	1L	C100460	Gen2		11R24.5							2026-09-08 06:14	80	F	80%														ContiConnect	Low pressure	Medium	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 877		Truck		4	4LI	C100461	Gen2		11R24.5							2026-09-08 06:14	81	F	81%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 877		Truck		3	3RI	C100462	Gen2		11R24.5							2026-09-08 06:14	82	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 877		Truck		4	4RI	C100463	Gen2		11R24.5							2026-09-08 06:14	83	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 877		Truck		4	4RO	C100464	Gen2		11R24.5							2026-09-08 06:14	84	F	84%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 877		Truck		4	4LO	C100465	Gen2		11R24.5							2026-09-08 06:14	85	F	85%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 877		Truck		3	3LO	C100466	Gen2		11R24.5							2026-09-08 06:14	86	F	86%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 877		Truck		1	1R	C100467	Gen2		11R24.5							2026-09-08 06:14	87	F	87%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 877		Truck		3	3RO	C100468	Gen2		11R24.5							2026-09-08 06:14	88	F	88%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 877		Truck		2	2R	C100469	Gen2		11R24.5							2026-09-08 06:14	89	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1801		Truck		3	3LO	C100470	Gen2		11R24.5							2026-09-08 06:14	90	F	90%														ContiConnect	No alerts	None	110.0		124.0	psi	122.0
+The Allen Company	Haul Division	DT 1801		Truck		3	3RO	C100471	Gen2		11R24.5							2026-09-08 06:14	91	F	91%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 1801		Truck		4	4LI	C100472	Gen2		11R24.5							2026-09-08 06:14	92	F	92%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 1801		Truck		3	3LI	C100473	Gen2		11R24.5							2026-09-08 06:14	93	F	93%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 1801		Truck		1	1L	C100474	Gen2		11R24.5							2026-09-08 06:14	94	F	94%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 1801		Truck		2	2L	C100475	Gen2		11R24.5							2026-09-08 06:14	95	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1801		Truck		3	3RI	C100476	Gen2		11R24.5							2026-09-08 06:14	96	F	96%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 1801		Truck		4	4RI	C100477	Gen2		11R24.5							2026-09-08 06:14	97	F	97%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 1801		Truck		4	4LO	C100478	Gen2		11R24.5							2026-09-08 06:14	98	F	98%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 1801		Truck		4	4RO	C100479	Gen2		11R24.5							2026-09-08 06:14	99	F	99%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 1801		Truck		2	2R	C100480	Gen2		11R24.5							2026-09-08 06:14	70	F	60%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1801		Truck		1	1R	C100481	Gen2		11R24.5							2026-09-08 06:14	71	F	61%														ContiConnect	Low pressure	Medium	110.0		93.0	psi	91.0
+The Allen Company	Haul Division	DT 1809		Truck		3	3LI	C100482	Gen2		11R24.5							2026-09-08 06:14	72	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		3	3LO	C100483	Gen2		11R24.5							2026-09-08 06:14	73	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		4	4RO	C100484	Gen2		11R24.5							2026-09-08 06:14	74	F	64%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		2	2LI	C100485	Gen2		11R24.5							2026-09-08 06:14	75	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		3	3RI	C100486	Gen2		11R24.5							2026-09-08 06:14	76	F	66%														ContiConnect	Low pressure	Medium	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 1809		Truck		4	4LO	C100487	Gen2		11R24.5							2026-09-08 06:14	77	F	67%														ContiConnect	No alerts	None	110.0		101.0	psi	99.0
+The Allen Company	Haul Division	DT 1809		Truck		1	1L	C100488	Gen2		11R24.5							2026-09-08 06:14	78	F	68%														ContiConnect	Low pressure	Medium	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 1809		Truck		2	2RI	C100489	Gen2		11R24.5							2026-09-08 06:14	79	F	69%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		4	4RI	C100490	Gen2		11R24.5							2026-09-08 06:14	80	F	70%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 1809		Truck		3	3RO	C100491	Gen2		11R24.5							2026-09-08 06:14	81	F	71%														ContiConnect	Low pressure	Medium	110.0		99.0	psi	97.0
+The Allen Company	Haul Division	DT 1809		Truck		4	4LI	C100492	Gen2		11R24.5							2026-09-08 06:14	82	F	72%														ContiConnect	Low pressure	Medium	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 1809		Truck		2	2RO	C100493	Gen2		11R24.5							2026-09-08 06:14	83	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		2	2LO	C100494	Gen2		11R24.5							2026-09-08 06:14	84	F	74%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1809		Truck		1	1R	C100495	Gen2		11R24.5							2026-09-08 06:14	85	F	75%														ContiConnect	Low pressure	Medium	110.0		96.0	psi	94.0
+The Allen Company	Haul Division	DT-1810		Truck		2	2RO	C100496	Gen2		11R24.5							2026-09-08 06:14	86	F	76%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		4	4RO	C100497	Gen2		11R24.5							2026-09-08 06:14	87	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		2	2LO	C100498	Gen2		11R24.5							2026-09-08 06:14	88	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		3	3LI	C100499	Gen2		11R24.5							2026-09-08 06:14	89	F	79%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		1	1L	C100500	Gen2		11R24.5							2026-09-08 06:14	90	F	80%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT-1810		Truck		3	3LO	C100501	Gen2		11R24.5							2026-09-08 06:14	91	F	81%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		2	2RI	C100502	Gen2		11R24.5							2026-09-08 06:14	92	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		4	4LO	C100503	Gen2		11R24.5							2026-09-08 06:14	93	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		4	4LI	C100504	Gen2		11R24.5							2026-09-08 06:14	94	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		2	2LI	C100505	Gen2		11R24.5							2026-09-08 06:14	95	F	85%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		1	1R	C100506	Gen2		11R24.5							2026-09-08 06:14	96	F	86%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT-1810		Truck		3	3RI	C100507	Gen2		11R24.5							2026-09-08 06:14	97	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		4	4RI	C100508	Gen2		11R24.5							2026-09-08 06:14	98	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1810		Truck		3	3RO	C100509	Gen2		11R24.5							2026-09-08 06:14	99	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		4	4LI	C100510	Gen2		11R24.5							2026-09-08 06:14	70	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		4	4LO	C100511	Gen2		11R24.5							2026-09-08 06:14	71	F	91%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		3	3RI	C100512	Gen2		11R24.5							2026-09-08 06:14	72	F	92%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 879		Truck		1	1R	C100513	Gen2		11R24.5							2026-09-08 06:14	73	F	93%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 879		Truck		2	2L	C100514	Gen2		11R24.5							2026-09-08 06:14	74	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		3	3LO	C100515	Gen2		11R24.5							2026-09-08 06:14	75	F	95%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 879		Truck		1	1L	C100516	Gen2		11R24.5							2026-09-08 06:14	76	F	96%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		4	4RI	C100517	Gen2		11R24.5							2026-09-08 06:14	77	F	97%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 879		Truck		3	3LI	C100518	Gen2		11R24.5							2026-09-08 06:14	78	F	98%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		3	3RO	C100519	Gen2		11R24.5							2026-09-08 06:14	79	F	99%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 879		Truck		2	2R	C100520	Gen2		11R24.5							2026-09-08 06:14	80	F	60%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 879		Truck		4	4RO	C100521	Gen2		11R24.5							2026-09-08 06:14	81	F	61%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 897		Truck		1	1L	C100522	Gen2		11R24.5							2026-09-08 06:14	82	F	62%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 897		Truck		4	4RO	C100523	Gen2		11R24.5							2026-09-08 06:14	83	F	63%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 897		Truck		4	4RI	C100524	Gen2		11R24.5							2026-09-08 06:14	84	F	64%														ContiConnect	Low pressure	Medium	110.0		104.0	psi	102.0
+The Allen Company	Haul Division	DT 897		Truck		4	4LO	C100525	Gen2		11R24.5							2026-09-08 06:14	85	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 897		Truck		3	3LO	C100526	Gen2		11R24.5							2026-09-08 06:14	86	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 897		Truck		1	1R	C100527	Gen2		11R24.5							2026-09-08 06:14	87	F	67%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 897		Truck		2	2L	C100528	Gen2		11R24.5							2026-09-08 06:14	88	F	68%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 897		Truck		2	2R	C100529	Gen2		11R24.5							2026-09-08 06:14	89	F	69%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 897		Truck		3	3LI	C100530	Gen2		11R24.5							2026-09-08 06:14	90	F	70%														ContiConnect	No alerts	None	110.0		120.0	psi	118.0
+The Allen Company	Haul Division	DT 897		Truck		3	3RO	C100531	Gen2		11R24.5							2026-09-08 06:14	91	F	71%														ContiConnect	Low pressure	Medium	110.0		99.0	psi	97.0
+The Allen Company	Haul Division	DT 892		Truck		4	4RO	C100532	Gen2		11R24.5							2026-09-08 06:14	92	F	72%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 892		Truck		4	4RI	C100533	Gen2		11R24.5							2026-09-08 06:14	93	F	73%														ContiConnect	No alerts	None	110.0		123.0	psi	121.0
+The Allen Company	Haul Division	DT 892		Truck		4	4LI	C100534	Gen2		11R24.5							2026-09-08 06:14	94	F	74%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	DT 892		Truck		1	1R	C100535	Gen2		11R24.5							2026-09-08 06:14	95	F	75%														ContiConnect	No alerts	None	110.0		134.0	psi	132.0
+The Allen Company	Haul Division	DT 892		Truck		2	2R	C100536	Gen2		11R24.5							2026-09-08 06:14	96	F	76%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 892		Truck		3	3LI	C100537	Gen2		11R24.5							2026-09-08 06:14	97	F	77%														ContiConnect	Low pressure	Medium	110.0		102.0	psi	100.0
+The Allen Company	Haul Division	DT 892		Truck		3	3LO	C100538	Gen2		11R24.5							2026-09-08 06:14	98	F	78%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 892		Truck		2	2L	C100539	Gen2		11R24.5							2026-09-08 06:14	99	F	79%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 892		Truck		3	3RO	C100540	Gen2		11R24.5							2026-09-08 06:14	70	F	80%														ContiConnect	No alerts	None	110.0		119.0	psi	117.0
+The Allen Company	Haul Division	DT 892		Truck		4	4LO	C100541	Gen2		11R24.5							2026-09-08 06:14	71	F	81%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 892		Truck		3	3RI	C100542	Gen2		11R24.5							2026-09-08 06:14	72	F	82%														ContiConnect	No alerts	None	110.0		120.0	psi	118.0
+The Allen Company	Haul Division	DT 892		Truck		1	1L	C100543	Gen2		11R24.5							2026-09-08 06:14	73	F	83%														ContiConnect	No alerts	None	110.0		130.0	psi	128.0
+The Allen Company	Haul Division	DT 869		Truck		3	3LO	C100544	Gen2		11R24.5							2026-09-08 06:14	74	F	84%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 869		Truck		3	3LI	C100545	Gen2		11R24.5							2026-09-08 06:14	75	F	85%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 869		Truck		3	3RI	C100546	Gen2		11R24.5							2026-09-08 06:14	76	F	86%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 869		Truck		4	4LI	C100547	Gen2		11R24.5							2026-09-08 06:14	77	F	87%														ContiConnect	No alerts	None	110.0		114.0	psi	112.0
+The Allen Company	Haul Division	DT 869		Truck		2	2L	C100548	Gen2		11R24.5							2026-09-08 06:14	78	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 869		Truck		1	1L	C100549	Gen2		11R24.5							2026-09-08 06:14	79	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 869		Truck		4	4LO	C100550	Gen2		11R24.5							2026-09-08 06:14	80	F	90%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 869		Truck		2	2R	C100551	Gen2		11R24.5							2026-09-08 06:14	81	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 869		Truck		3	3RO	C100552	Gen2		11R24.5							2026-09-08 06:14	82	F	92%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 869		Truck		4	4RO	C100553	Gen2		11R24.5							2026-09-08 06:14	83	F	93%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 869		Truck		1	1R	C100554	Gen2		11R24.5							2026-09-08 06:14	84	F	94%														ContiConnect	No alerts	None	110.0		116.0	psi	114.0
+The Allen Company	Haul Division	DT 869		Truck		4	4RI	C100555	Gen2		11R24.5							2026-09-08 06:14	85	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1802		Truck		3	3LO	C100556	Gen2		11R24.5							2026-09-08 06:14	86	F	96%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT-1802		Truck		4	4LO	C100557	Gen2		11R24.5							2026-09-08 06:14	87	F	97%														ContiConnect	Low pressure	Medium	110.0		103.0	psi	101.0
+The Allen Company	Haul Division	DT-1802		Truck		3	3LI	C100558	Gen2		11R24.5							2026-09-08 06:14	88	F	98%														ContiConnect	No alerts	None	110.0		119.0	psi	117.0
+The Allen Company	Haul Division	DT-1802		Truck		4	4LI	C100559	Gen2		11R24.5							2026-09-08 06:14	89	F	99%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT-1802		Truck		4	4RO	C100560	Gen2		11R24.5							2026-09-08 06:14	90	F	60%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT-1802		Truck		4	4RI	C100561	Gen2		11R24.5							2026-09-08 06:14	91	F	61%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT-1802		Truck		3	3RO	C100562	Gen2		11R24.5							2026-09-08 06:14	92	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1802		Truck		3	3RI	C100563	Gen2		11R24.5							2026-09-08 06:14	93	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1802		Truck		1	1L	C100564	Gen2		11R24.5							2026-09-08 06:14	94	F	64%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT-1802		Truck		2	2L	C100565	Gen2		11R24.5							2026-09-08 06:14	95	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1802		Truck		2	2R	C100566	Gen2		11R24.5							2026-09-08 06:14	96	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-1802		Truck		1	1R	C100567	Gen2		11R24.5							2026-09-08 06:14	97	F	67%														ContiConnect	No alerts	None	110.0		125.0	psi	123.0
+The Allen Company	Haul Division	DT 872		Truck		2	2RI	C100568	Gen2		11R24.5							2026-09-08 06:14	98	F	68%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		2	2RO	C100569	Gen2		11R24.5							2026-09-08 06:14	99	F	69%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		4	4RI	C100570	Gen2		11R24.5							2026-09-08 06:14	70	F	70%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		3	3RI	C100571	Gen2		11R24.5							2026-09-08 06:14	71	F	71%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		3	3LO	C100572	Gen2		11R24.5							2026-09-08 06:14	72	F	72%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		4	4LO	C100573	Gen2		11R24.5							2026-09-08 06:14	73	F	73%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		2	2LI	C100574	Gen2		11R24.5							2026-09-08 06:14	74	F	74%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		1	1R	C100575	Gen2		11R24.5							2026-09-08 06:14	75	F	75%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		3	3LI	C100576	Gen2		11R24.5							2026-09-08 06:14	76	F	76%														ContiConnect	Low pressure	Medium	110.0		98.0	psi	96.0
+The Allen Company	Haul Division	DT 872		Truck		3	3RO	C100577	Gen2		11R24.5							2026-09-08 06:14	77	F	77%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		1	1L	C100578	Gen2		11R24.5							2026-09-08 06:14	78	F	78%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 872		Truck		2	2LO	C100579	Gen2		11R24.5							2026-09-08 06:14	79	F	79%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		4	4LI	C100580	Gen2		11R24.5							2026-09-08 06:14	80	F	80%														ContiConnect	Sensor defect	None	110.0			psi	
+The Allen Company	Haul Division	DT 872		Truck		4	4RO	C100581	Gen2		11R24.5							2026-09-08 06:14	81	F	81%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		3	3RO	C100582	Gen2		11R24.5							2026-09-08 06:14	82	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		2	2L	C100583	Gen2		11R24.5							2026-09-08 06:14	83	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		1	1R	C100584	Gen2		11R24.5							2026-09-08 06:14	84	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		3	3RI	C100585	Gen2		11R24.5							2026-09-08 06:14	85	F	85%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		4	4RO	C100586	Gen2		11R24.5							2026-09-08 06:14	86	F	86%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 1806		Truck		3	3LI	C100587	Gen2		11R24.5							2026-09-08 06:14	87	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		1	1L	C100588	Gen2		11R24.5							2026-09-08 06:14	88	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		2	2R	C100589	Gen2		11R24.5							2026-09-08 06:14	89	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		4	4RI	C100590	Gen2		11R24.5							2026-09-08 06:14	90	F	90%														ContiConnect	No alerts	None	110.0		108.0	psi	106.0
+The Allen Company	Haul Division	DT 1806		Truck		3	3LO	C100591	Gen2		11R24.5							2026-09-08 06:14	91	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1806		Truck		4	4LI	C100592	Gen2		11R24.5							2026-09-08 06:14	92	F	92%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 1806		Truck		4	4LO	C100593	Gen2		11R24.5							2026-09-08 06:14	93	F	93%														ContiConnect	No current reading	None	110.0			psi	
+The Allen Company	Haul Division	DT 882		Truck		4	4LI	C100594	Gen2		11R24.5							2026-09-08 06:14	94	F	94%														ContiConnect	No alerts	None	110.0		119.0	psi	117.0
+The Allen Company	Haul Division	DT 882		Truck		4	4RI	C100595	Gen2		11R24.5							2026-09-08 06:14	95	F	95%														ContiConnect	Low pressure	Medium	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 882		Truck		3	3RI	C100596	Gen2		11R24.5							2026-09-08 06:14	96	F	96%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 882		Truck		1	1R	C100597	Gen2		11R24.5							2026-09-08 06:14	97	F	97%														ContiConnect	No alerts	None	110.0		120.0	psi	118.0
+The Allen Company	Haul Division	DT 882		Truck		2	2L	C100598	Gen2		11R24.5							2026-09-08 06:14	98	F	98%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 882		Truck		3	3LO	C100599	Gen2		11R24.5							2026-09-08 06:14	99	F	99%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 882		Truck		1	1L	C100600	Gen2		11R24.5							2026-09-08 06:14	70	F	60%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 882		Truck		2	2R	C100601	Gen2		11R24.5							2026-09-08 06:14	71	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 882		Truck		4	4RO	C100602	Gen2		11R24.5							2026-09-08 06:14	72	F	62%														ContiConnect	No alerts	None	110.0		119.0	psi	117.0
+The Allen Company	Haul Division	DT 882		Truck		3	3LI	C100603	Gen2		11R24.5							2026-09-08 06:14	73	F	63%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 882		Truck		3	3RO	C100604	Gen2		11R24.5							2026-09-08 06:14	74	F	64%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 882		Truck		4	4LO	C100605	Gen2		11R24.5							2026-09-08 06:14	75	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 867		Truck		2	2L	C100606	Gen2		11R24.5							2026-09-08 06:14	76	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 867		Truck		4	4RI	C100607	Gen2		11R24.5							2026-09-08 06:14	77	F	67%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 867		Truck		1	1L	C100608	Gen2		11R24.5							2026-09-08 06:14	78	F	68%														ContiConnect	No alerts	None	110.0		117.0	psi	115.0
+The Allen Company	Haul Division	DT 867		Truck		1	1R	C100609	Gen2		11R24.5							2026-09-08 06:14	79	F	69%														ContiConnect	No alerts	None	110.0		115.0	psi	113.0
+The Allen Company	Haul Division	DT 867		Truck		4	4RO	C100610	Gen2		11R24.5							2026-09-08 06:14	80	F	70%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 867		Truck		4	4LI	C100611	Gen2		11R24.5							2026-09-08 06:14	81	F	71%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 867		Truck		3	3LI	C100612	Gen2		11R24.5							2026-09-08 06:14	82	F	72%														ContiConnect	No alerts	None	110.0		100.0	psi	98.0
+The Allen Company	Haul Division	DT 867		Truck		3	3RI	C100613	Gen2		11R24.5							2026-09-08 06:14	83	F	73%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 867		Truck		2	2R	C100614	Gen2		11R24.5							2026-09-08 06:14	84	F	74%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 867		Truck		4	4LO	C100615	Gen2		11R24.5							2026-09-08 06:14	85	F	75%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 867		Truck		3	3RO	C100616	Gen2		11R24.5							2026-09-08 06:14	86	F	76%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	DT 867		Truck		3	3LO	C100617	Gen2		11R24.5							2026-09-08 06:14	87	F	77%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	HT 746		Truck		2	2LI	C100618	Gen2		11R24.5							2026-09-08 06:14	88	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 746		Truck		1	1L	C100619	Gen2		11R24.5							2026-09-08 06:14	89	F	79%														ContiConnect	Sensor loose/flipped	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	HT 746		Truck		1	1R	C100620	Gen2		11R24.5							2026-09-08 06:14	90	F	80%														ContiConnect	Sensor loose/flipped	None	110.0		63.0	psi	61.0
+The Allen Company	Haul Division	HT 746		Truck		2	2RI	C100621	Gen2		11R24.5							2026-09-08 06:14	91	F	81%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 746		Truck		2	2RO	C100622	Gen2		11R24.5							2026-09-08 06:14	92	F	82%														ContiConnect	No pressure data	None	110.0			psi	
+The Allen Company	Haul Division	HT 746		Truck		2	2LO	C100623	Gen2		11R24.5							2026-09-08 06:14	93	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		2	2RI	C100624	Gen2		11R24.5							2026-09-08 06:14	94	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		1	1L	C100625	Gen2		11R24.5							2026-09-08 06:14	95	F	85%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		2	2RO	C100626	Gen2		11R24.5							2026-09-08 06:14	96	F	86%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		2	2LO	C100627	Gen2		11R24.5							2026-09-08 06:14	97	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		3	3RI	C100628	Gen2		11R24.5							2026-09-08 06:14	98	F	88%														ContiConnect	Sensor loose/flipped	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		3	3LO	C100629	Gen2		11R24.5							2026-09-08 06:14	99	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		2	2LI	C100630	Gen2		11R24.5							2026-09-08 06:14	70	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		1	1R	C100631	Gen2		11R24.5							2026-09-08 06:14	71	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		3	3LI	C100632	Gen2		11R24.5							2026-09-08 06:14	72	F	92%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1148		Truck		3	3RO	C100633	Gen2		11R24.5							2026-09-08 06:14	73	F	93%														ContiConnect	Multiple alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		1	1L	C100634	Gen2		11R24.5							2026-09-08 06:14	74	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		2	2R	C100635	Gen2		11R24.5							2026-09-08 06:14	75	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		2	2L	C100636	Gen2		11R24.5							2026-09-08 06:14	76	F	96%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		3	3RI	C100637	Gen2		11R24.5							2026-09-08 06:14	77	F	97%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		3	3RO	C100638	Gen2		11R24.5							2026-09-08 06:14	78	F	98%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		4	4LO	C100639	Gen2		11R24.5							2026-09-08 06:14	79	F	99%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		3	3LO	C100640	Gen2		11R24.5							2026-09-08 06:14	80	F	60%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		1	1R	C100641	Gen2		11R24.5							2026-09-08 06:14	81	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		4	4LI	C100642	Gen2		11R24.5							2026-09-08 06:14	82	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		4	4RI	C100643	Gen2		11R24.5							2026-09-08 06:14	83	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		4	4RO	C100644	Gen2		11R24.5							2026-09-08 06:14	84	F	64%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	996940	1NPCX4EX5PD860400	Truck		3	3LI	C100645	Gen2		11R24.5							2026-09-08 06:14	85	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1805		Truck		4	4LO	C100646	Gen2		11R24.5							2026-09-08 06:14	86	F	66%														ContiConnect	No alerts	None	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT 1805		Truck		4	4RI	C100647	Gen2		11R24.5							2026-09-08 06:14	87	F	67%														ContiConnect	No alerts	None	110.0		109.0	psi	107.0
+The Allen Company	Haul Division	DT 1805		Truck		3	3RI	C100648	Gen2		11R24.5							2026-09-08 06:14	88	F	68%														ContiConnect	No alerts	None	110.0		111.0	psi	109.0
+The Allen Company	Haul Division	DT 1805		Truck		3	3LI	C100649	Gen2		11R24.5							2026-09-08 06:14	89	F	69%														ContiConnect	No alerts	None	110.0		110.0	psi	108.0
+The Allen Company	Haul Division	DT 1805		Truck		3	3LO	C100650	Gen2		11R24.5							2026-09-08 06:14	90	F	70%														ContiConnect	No alerts	None	110.0		112.0	psi	110.0
+The Allen Company	Haul Division	DT 1805		Truck		4	4RO	C100651	Gen2		11R24.5							2026-09-08 06:14	91	F	71%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 1805		Truck		2	2L	C100652	Gen2		11R24.5							2026-09-08 06:14	92	F	72%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT 1805		Truck		1	1R	C100653	Gen2		11R24.5							2026-09-08 06:14	93	F	73%														ContiConnect	No alerts	None	110.0		106.0	psi	104.0
+The Allen Company	Haul Division	DT 1805		Truck		1	1L	C100654	Gen2		11R24.5							2026-09-08 06:14	94	F	74%														ContiConnect	No alerts	None	110.0		105.0	psi	103.0
+The Allen Company	Haul Division	DT 1805		Truck		3	3RO	C100655	Gen2		11R24.5							2026-09-08 06:14	95	F	75%														ContiConnect	No alerts	None	110.0		107.0	psi	105.0
+The Allen Company	Haul Division	DT 1805		Truck		4	4LI	C100656	Gen2		11R24.5							2026-09-08 06:14	96	F	76%														ContiConnect	No alerts	None	110.0		113.0	psi	111.0
+The Allen Company	Haul Division	DT 1805		Truck		2	2R	C100657	Gen2		11R24.5							2026-09-08 06:14	97	F	77%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		3	3LI	C100658	Gen2		11R24.5							2026-09-08 06:14	98	F	78%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		3	3RI	C100659	Gen2		11R24.5							2026-09-08 06:14	99	F	79%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		4	4RI	C100660	Gen2		11R24.5							2026-09-08 06:14	70	F	80%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		3	3LO	C100661	Gen2		11R24.5							2026-09-08 06:14	71	F	81%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		2	2L	C100662	Gen2		11R24.5							2026-09-08 06:14	72	F	82%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		4	4LO	C100663	Gen2		11R24.5							2026-09-08 06:14	73	F	83%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		2	2R	C100664	Gen2		11R24.5							2026-09-08 06:14	74	F	84%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		4	4RO	C100665	Gen2		11R24.5							2026-09-08 06:14	75	F	85%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		1	1L	C100666	Gen2		11R24.5							2026-09-08 06:14	76	F	86%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		1	1R	C100667	Gen2		11R24.5							2026-09-08 06:14	77	F	87%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		3	3RO	C100668	Gen2		11R24.5							2026-09-08 06:14	78	F	88%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	DT-899		Truck		4	4LI	C100669	Gen2		11R24.5							2026-09-08 06:14	79	F	89%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		3	3LO	C100670	Gen2		11R24.5							2026-09-08 06:14	80	F	90%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		1	1R	C100671	Gen2		11R24.5							2026-09-08 06:14	81	F	91%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		1	1L	C100672	Gen2		11R24.5							2026-09-08 06:14	82	F	92%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		3	3RI	C100673	Gen2		11R24.5							2026-09-08 06:14	83	F	93%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		2	2RO	C100674	Gen2		11R24.5							2026-09-08 06:14	84	F	94%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		2	2LO	C100675	Gen2		11R24.5							2026-09-08 06:14	85	F	95%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		3	3RO	C100676	Gen2		11R24.5							2026-09-08 06:14	86	F	96%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		2	2LI	C100677	Gen2		11R24.5							2026-09-08 06:14	87	F	97%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		2	2RI	C100678	Gen2		11R24.5							2026-09-08 06:14	88	F	98%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	HT 1348		Truck		3	3LI	C100679	Gen2		11R24.5							2026-09-08 06:14	89	F	99%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		2	2LI	C100680	Gen2		11R24.5							2026-09-08 06:14	90	F	60%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		1	1RO	C100681	Gen2		11R24.5							2026-09-08 06:14	91	F	61%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		1	1LO	C100682	Gen2		11R24.5							2026-09-08 06:14	92	F	62%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		1	1RI	C100683	Gen2		11R24.5							2026-09-08 06:14	93	F	63%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		2	2RI	C100684	Gen2		11R24.5							2026-09-08 06:14	94	F	64%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		2	2RO	C100685	Gen2		11R24.5							2026-09-08 06:14	95	F	65%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		2	2LO	C100686	Gen2		11R24.5							2026-09-08 06:14	96	F	66%														ContiConnect	No alerts	None	110.0			psi	
+The Allen Company	Haul Division	T-1272		Truck		1	1LI	C100687	Gen2		11R24.5							2026-09-08 06:14	97	F	67%														ContiConnect	No alerts	None	110.0			psi	

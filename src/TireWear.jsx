@@ -10,6 +10,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as db from "./data.js";
+import { parseDelimited, guessMapping, planPressures } from "./tpmsImport.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -72,6 +73,20 @@ const MILS_PER_32ND = 31.25;
 
 const DEFAULTS = { pullSteer: 6, pullOther: 4, newDepth: 28, unit: "32nd" };
 
+/* The colour on a pressure comes from what the TPMS itself said, not
+   from a threshold we made up. Continental knows each truck's target
+   cold pressure; we do not, and a 100 psi drive tire is fine while a
+   100 psi steer may not be. An unrecognised status stays neutral. */
+const psiTone = (status) => {
+  const s = String(status || "").toLowerCase();
+  if (s.includes("very low") || s.includes("critical")) return "pull";
+  if (s.includes("low") || s.includes("high") || s.includes("multiple")) return "watch";
+  if (s.includes("no alert") || s.includes("ok") || s.includes("normal")) return "good";
+  return "none";
+};
+const PSI_COLOR = { good: C.good, watch: C.watch, pull: C.pull, none: C.muted };
+const PSI_ON_DARK = { good: C.goodOnDark, watch: C.watchOnDark, pull: C.pullOnDark, none: C.noneOnDark };
+
 function statusOf(depth, pull) {
   if (depth === null || depth === undefined) return "none";
   if (depth <= pull) return "pull";
@@ -104,6 +119,7 @@ export default function TireWear({ who, tab, onBusy }) {
   const [readings, setReadings] = useState([]);
   const [odos, setOdos] = useState([]);
   const [wear, setWear] = useState({});
+  const [pressures, setPressures] = useState({});
   const [brands, setBrands] = useState([]);
   const [settings, setSettings] = useState(DEFAULTS);
 
@@ -114,6 +130,7 @@ export default function TireWear({ who, tab, onBusy }) {
     setReadings(d.readings);
     setOdos(d.odos);
     setWear(d.wear);
+    setPressures(d.pressures);
     setBrands(d.brands);
     setSettings({ ...DEFAULTS, ...d.settings });
   }, []);
@@ -145,8 +162,10 @@ export default function TireWear({ who, tab, onBusy }) {
       await fn();
       await reload();
       setErr(null);
+      return true;
     } catch (e) {
       setErr(`That did not save — ${e.message || e}`);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -162,6 +181,7 @@ export default function TireWear({ who, tab, onBusy }) {
       run(() => db.saveInspection(vehId, date, odo, entries, who)),
     deleteReading: (id) => run(() => db.deleteReading(id)),
     logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
+    savePressures: (entries, date) => run(() => db.savePressures(entries, date, who)),
     updateSettings: (patch) => run(() => db.updateSettings(patch)),
     eraseAll: () => run(() => db.eraseAll()),
   }), [run, who]);
@@ -213,6 +233,13 @@ export default function TireWear({ who, tab, onBusy }) {
     tires.forEach((t) => { if (!t.offDate) m[`${t.veh}|${t.pos}`] = t; });
     return m;
   }, [tires]);
+
+  /* What the weekly TPMS file is allowed to write to: every tire that is
+     on a truck right now. A wheel that is not in here is left alone. */
+  const mounted = useMemo(
+    () => tires.filter((t) => !t.offDate).map((t) => ({ id: t.id, veh: t.veh, pos: t.pos })),
+    [tires]
+  );
 
   const lastOdoFor = useMemo(() => {
     const m = {};
@@ -279,8 +306,11 @@ export default function TireWear({ who, tab, onBusy }) {
           <FleetView
             {...{ filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
               byNum, activeTireAt, tireStats, settings, attention, brands,
-              actions, busy, lastOdoFor }}
+              actions, busy, lastOdoFor, pressures }}
           />
+        )}
+        {tab === "pressure" && (
+          <PressureView {...{ tires, mounted, pressures, actions, busy }} />
         )}
         {tab === "analysis" && (
           <Analysis {...{ tires, tireStats, settings, byNum }} />
@@ -297,7 +327,7 @@ export default function TireWear({ who, tab, onBusy }) {
 function FleetView(props) {
   const { filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
     byNum, activeTireAt, tireStats, settings, attention, brands,
-    actions, busy, lastOdoFor } = props;
+    actions, busy, lastOdoFor, pressures } = props;
 
   const dtCount = filtered.filter((v) => v.div === "DT").length;
 
@@ -357,7 +387,8 @@ function FleetView(props) {
             <VehicleDetail
               key={sel}
               v={byNum[sel]} summary={vehSummary[sel]}
-              {...{ activeTireAt, tireStats, settings, brands, actions, busy, lastOdoFor }}
+              {...{ activeTireAt, tireStats, settings, brands, actions, busy, lastOdoFor,
+                pressures }}
             />
           ) : (
             <StartHere attention={attention} setSel={setSel} byNum={byNum} />
@@ -436,7 +467,7 @@ function StartHere({ attention, setSel, byNum }) {
 /* ── Vehicle detail ───────────────────────────────────────────── */
 function VehicleDetail(props) {
   const { v, summary, activeTireAt, tireStats, settings, brands,
-    actions, busy, lastOdoFor } = props;
+    actions, busy, lastOdoFor, pressures } = props;
 
   const [mode, setMode] = useState("view"); // view | inspect
   const [openTire, setOpenTire] = useState(null);
@@ -549,6 +580,7 @@ function VehicleDetail(props) {
           <TruckDiagram
             v={v} positions={positions} activeTireAt={activeTireAt} tireStats={tireStats}
             settings={settings} mode={mode} draft={draft} setDraft={setDraft}
+            pressures={pressures}
             onTire={(t) => setOpenTire(t)} onEmpty={(pos) => setMountPos(pos)}
           />
         </div>
@@ -557,7 +589,7 @@ function VehicleDetail(props) {
       {/* Position table */}
       <PositionTable
         v={v} positions={positions} activeTireAt={activeTireAt} tireStats={tireStats}
-        settings={settings} onTire={setOpenTire} onEmpty={setMountPos}
+        settings={settings} pressures={pressures} onTire={setOpenTire} onEmpty={setMountPos}
       />
 
       {mountPos && (
@@ -575,7 +607,7 @@ function VehicleDetail(props) {
         <TireDialog
           tire={activeTireAt[`${v.num}|${openTire.pos}`] || openTire}
           stats={tireStats[openTire.id]} settings={settings}
-          busy={busy}
+          psi={pressures[openTire.id]} busy={busy}
           onClose={() => setOpenTire(null)}
           onPull={async (off) => {
             await actions.pullTire(openTire.id, off);
@@ -597,7 +629,7 @@ function VehicleDetail(props) {
 }
 
 /* ── Truck diagram — overhead, nose left, R side up ───────────── */
-function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, draft, setDraft, onTire, onEmpty }) {
+function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, pressures, mode, draft, setDraft, onTire, onEmpty }) {
   const axles = (CONFIGS[v.cfg] || CONFIGS.dump12).axles;
   const CARD_W = 150;
   const GAP = 10;
@@ -610,6 +642,7 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
     const t = activeTireAt[`${v.num}|${p.id}`];
     return (
       <TireCard key={p.id} pos={p} tire={t} stats={t ? tireStats[t.id] : null}
+        psi={t ? pressures[t.id] : null}
         settings={settings} mode={mode} draft={draft} setDraft={setDraft}
         onTire={onTire} onEmpty={onEmpty} width={CARD_W} />
     );
@@ -657,7 +690,7 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
   );
 }
 
-function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, onEmpty, width }) {
+function TireCard({ pos, tire, stats, psi, settings, mode, draft, setDraft, onTire, onEmpty, width }) {
   const st = stats?.status || "none";
   const col = STATUS_COLOR[st];      // the solid badge, white text on it
   const colOnDark = STATUS_ON_DARK[st]; // the tread numeral, on the card itself
@@ -711,15 +744,27 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
               {stats?.miPer32 ? `${nf(stats.miPer32 / 1000, 1)}k/32` : "—"}
             </span>
           </div>
-          <div style={{ fontSize: 10.5, color: C.onDark, marginTop: 3, whiteSpace: "nowrap",
-            overflow: "hidden", textOverflow: "ellipsis" }}>
-            {/* A note is no use if nobody knows it is there — flag it on the
-                diagram, since that is the screen people actually look at. */}
-            {tire.notes && (
-              <span title={tire.notes}
-                style={{ color: C.yellowHi, fontWeight: 700, marginRight: 4 }}>●</span>
+          <div className="flex items-baseline" style={{ gap: 5, marginTop: 3 }}>
+            <span style={{ fontSize: 10.5, color: C.onDark, whiteSpace: "nowrap",
+              overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>
+              {/* A note is no use if nobody knows it is there — flag it on the
+                  diagram, since that is the screen people actually look at. */}
+              {tire.notes && (
+                <span title={tire.notes}
+                  style={{ color: C.yellowHi, fontWeight: 700, marginRight: 4 }}>●</span>
+              )}
+              {tire.brand || "Unbranded"}{tire.type === "retread" ? " · retread" : ""}
+            </span>
+            {/* Air only appears once a TPMS file has landed on this wheel —
+                an empty slot would read as "flat" on a fleet where most
+                trucks have no sensor data yet. */}
+            {psi && (
+              <span title={`${psi.psi} psi · ${psi.status || "no status"} · ${fmtDate(psi.date)}`}
+                style={{ fontFamily: FM, fontSize: 10.5, fontWeight: 600, flexShrink: 0,
+                  letterSpacing: "-0.03em", color: PSI_ON_DARK[psiTone(psi.status)] }}>
+                {nf(psi.psi)}<span style={{ fontSize: 8.5, fontWeight: 400, color: C.onDarkSoft }}>psi</span>
+              </span>
             )}
-            {tire.brand || "Unbranded"}{tire.type === "retread" ? " · retread" : ""}
           </div>
         </button>
       )}
@@ -728,28 +773,34 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
 }
 
 /* ── Position table ───────────────────────────────────────────── */
-function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire, onEmpty }) {
+function PositionTable({ v, positions, activeTireAt, tireStats, settings, pressures, onTire, onEmpty }) {
   const rows = positions.map((p) => {
     const t = activeTireAt[`${v.num}|${p.id}`];
-    return { p, t, s: t ? tireStats[t.id] : null };
+    return { p, t, s: t ? tireStats[t.id] : null, air: t ? pressures[t.id] : null };
   });
+  const anyAir = rows.some((r) => r.air);
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
-      <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+      <div className="flex items-center justify-between" style={{ padding: "11px 16px",
+        borderBottom: `1px solid ${C.lineSoft}`, gap: 12 }}>
         <SectionLabel noMargin>Wheel positions</SectionLabel>
+        <span style={{ fontSize: 11.5, color: C.muted }}>
+          {anyAir ? "Air is the last TPMS file read for this wheel"
+            : "No TPMS pressures for this truck yet"}
+        </span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
           <thead>
             <tr>
-              {["Pos", "Role", "Brand / model", "Type", "Tread", "Miles per 32nd",
+              {["Pos", "Role", "Brand / model", "Type", "Tread", "Air", "Miles per 32nd",
                 "Miles run", "Est. miles left", "Status"].map((h, i) => (
-                <th key={h} style={{ ...th, textAlign: i >= 4 && i <= 7 ? "right" : "left" }}>{h}</th>
+                <th key={h} style={{ ...th, textAlign: i >= 4 && i <= 8 ? "right" : "left" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ p, t, s }) => (
+            {rows.map(({ p, t, s, air }) => (
               <tr key={p.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                 <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>
                   {t ? (
@@ -773,6 +824,11 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
                 <td style={{ ...td, color: C.muted }}>{t ? (t.type === "retread" ? "Retread" : "Virgin") : "—"}</td>
                 <td style={{ ...td, ...tdNum, color: s ? STATUS_COLOR[s.status] : C.muted, fontWeight: 600 }}>
                   {s?.depth != null ? `${s.depth}/32` : "—"}
+                </td>
+                <td style={{ ...td, ...tdNum, color: air ? PSI_COLOR[psiTone(air.status)] : C.muted,
+                  fontWeight: air ? 600 : 400 }}
+                  title={air ? `${air.status || "no status"} · read ${fmtDate(air.date)}` : ""}>
+                  {air ? `${nf(air.psi)} psi` : "—"}
                 </td>
                 <td style={{ ...td, ...tdNum }}>{s?.miPer32 ? nf(s.miPer32) : "—"}</td>
                 <td style={{ ...td, ...tdNum, color: C.muted }}>{s?.miles ? nf(s.miles) : "—"}</td>
@@ -946,8 +1002,20 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
   );
 }
 
-function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes, onDeleteReading }) {
+function TireDialog({ tire, stats, psi, settings, busy, onClose, onPull, onSaveNotes, onDeleteReading }) {
   const [pulling, setPulling] = useState(false);
+
+  /* The fleet screen carries only the newest pressure per tire — there is
+     no reason to load a year of Mondays for every wheel on every truck.
+     The history is read here, by whoever actually opened the wheel. */
+  const [air, setAir] = useState(null);
+  useEffect(() => {
+    let live = true;
+    db.pressureHistory(tire.id)
+      .then((r) => { if (live) setAir(r); })
+      .catch(() => { if (live) setAir([]); });
+    return () => { live = false; };
+  }, [tire.id]);
   const [note, setNote] = useState(tire.notes || "");
   const noteDirty = note.trim() !== (tire.notes || "").trim();
 
@@ -979,6 +1047,9 @@ function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes,
         <Stat label="Miles per mil" value={stats?.miPer32 ? nf(stats.miPer32 / MILS_PER_32ND) : "—"} unit="mi" />
         <Stat label="Miles on tire" value={stats?.miles ? nf(stats.miles) : "—"} unit="mi" />
         <Stat label="Est. miles left" value={stats?.remain ? nf(stats.remain) : "—"} unit="mi" />
+        <Stat label="Air pressure" value={psi ? nf(psi.psi) : "—"} unit={psi ? "psi" : undefined}
+          sub={psi ? `${psi.status || "no status"} · ${fmtDate(psi.date)}` : undefined}
+          color={psi ? PSI_COLOR[psiTone(psi.status)] : undefined} />
         {cpm && <Stat label="Cost per mile" value={`$${nf(cpm, 3)}`} />}
       </div>
 
@@ -1016,6 +1087,29 @@ function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes,
           {noteDirty ? "Save note" : "Saved"}
         </Btn>
       </div>
+
+      {air && air.length > 0 && (
+        <>
+          <SectionLabel>Air pressure</SectionLabel>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
+            <thead><tr>
+              {["Read", "Pressure", "What the sensor said"].map((h, i) => (
+                <th key={h} style={{ ...th, textAlign: i === 1 ? "right" : "left" }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {air.slice(0, 8).map((a) => (
+                <tr key={a.date} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                  <td style={{ ...td, fontFamily: FM }}>{fmtDate(a.date)}</td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 600,
+                    color: PSI_COLOR[psiTone(a.status)] }}>{nf(a.psi)} psi</td>
+                  <td style={{ ...td, color: C.muted }}>{a.status || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       <SectionLabel>Readings</SectionLabel>
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14 }}>
@@ -1104,6 +1198,263 @@ function OdoDialog({ veh, lastOdo, busy, onClose, onSave }) {
           onSave({ date, odo: Number(odo) })}>Save mileage</Btn>
       </div>
     </Modal>
+  );
+}
+
+/* ── Air pressure ─────────────────────────────────────────────── */
+/* The weekly ContiConnect file. The rule the whole screen exists to
+   show: a pressure is only ever recorded against a tire already entered
+   on the site. A truck whose tires are not in yet is counted, named, and
+   left alone — no tire is invented to hang a reading on. */
+function PressureView({ tires, mounted, pressures, actions, busy }) {
+  const [text, setText] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [mapping, setMapping] = useState({});
+  const [date, setDate] = useState(todayISO());
+  const [plan, setPlan] = useState(null);
+  const [done, setDone] = useState(null);
+
+  function read(t) {
+    setText(t);
+    setDone(null);
+    setPlan(null);
+    const p = parseDelimited(t);
+    if (!p.headers.length) { setParsed(null); return; }
+    setParsed(p);
+    setMapping(guessMapping(p.headers));
+  }
+
+  async function onFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    read(await file.text());
+  }
+
+  const canPlan = parsed && mapping.truck && mapping.pos && mapping.psi;
+
+  const tireById = useMemo(() => Object.fromEntries(tires.map((t) => [t.id, t])), [tires]);
+
+  /* Everything on record now, worst first — what a supervisor actually
+     wants off this screen once the file is in. */
+  const onRecord = useMemo(() => {
+    const rows = Object.entries(pressures)
+      .map(([id, p]) => ({ ...p, t: tireById[id] }))
+      .filter((r) => r.t && !r.t.offDate);
+    const rank = { pull: 0, watch: 1, none: 2, good: 3 };
+    rows.sort((a, b) =>
+      rank[psiTone(a.status)] - rank[psiTone(b.status)] || a.psi - b.psi);
+    return rows;
+  }, [pressures, tireById]);
+
+  const trucksOnRecord = new Set(onRecord.map((r) => r.t.veh)).size;
+  const lastRead = onRecord.reduce((a, r) => (a && a > r.date ? a : r.date), null);
+
+  return (
+    <div className="grid gap-4" style={{ maxWidth: 980, gridTemplateColumns: "minmax(0,1fr)" }}>
+      <Card title="This week's tire pressure file"
+        note="Export the pressure report out of ContiConnect and drop it here. Column names are read rather than dictated, and nothing is written until you have seen exactly which wheels it will touch.">
+        <div className="flex flex-wrap items-center" style={{ gap: 10 }}>
+          <input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={onFile}
+            style={{ fontSize: 13 }} />
+          <span style={{ fontSize: 12.5, color: C.muted }}>or paste it below</span>
+        </div>
+        <textarea value={text} onChange={(e) => read(e.target.value)} rows={4}
+          placeholder="Vehicle Name	Tyre position	Pressure (non-compensated)	Status…"
+          style={{ ...inp, marginTop: 10, fontFamily: FM, fontSize: 12, resize: "vertical" }} />
+        <div style={{ marginTop: 10, maxWidth: 220 }}>
+          <Field label="Readings are from">
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} />
+          </Field>
+        </div>
+        <p style={{ fontSize: 12, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+          One reading per tire per date. Running the same file twice on the same
+          date corrects it rather than doubling it up.
+        </p>
+      </Card>
+
+      {parsed && (
+        <Card title="Which column is which"
+          note={`${parsed.rows.length} row${parsed.rows.length === 1 ? "" : "s"} read, ${parsed.headers.length} columns.`}>
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))" }}>
+            {[["truck", "Truck number", true],
+              ["pos", "Wheel position", true],
+              ["psi", "Air pressure", true],
+              ["status", "What the sensor says", false]].map(([key, label, required]) => (
+              <Field key={key} label={required ? `${label} (needed)` : label}>
+                <select value={mapping[key] || ""}
+                  onChange={(e) => setMapping((m) => ({ ...m, [key]: e.target.value }))}
+                  style={{ ...inp, borderColor: required && !mapping[key] ? C.pull : C.line }}>
+                  <option value="">— not in this file —</option>
+                  {parsed.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </Field>
+            ))}
+          </div>
+          {!mapping.psi && (
+            <p style={{ fontSize: 12.5, color: C.pull, marginTop: 10, lineHeight: 1.5 }}>
+              Pick the pressure column yourself. The export carries three — cold
+              inflation pressure is the target, compensated pressure is corrected
+              to a reference temperature, and only the non-compensated one is what
+              the gauge would read at the wheel. Guessing wrong here is worse than
+              asking.
+            </p>
+          )}
+          <div className="flex mt-4" style={{ gap: 8 }}>
+            <Btn disabled={!canPlan} onClick={() => setPlan(planPressures(parsed.rows, mapping, mounted))}>
+              See what this will record
+            </Btn>
+          </div>
+        </Card>
+      )}
+
+      {plan && !done && (
+        <Card title="What this will record"
+          note="Nothing has been written yet.">
+          <div className="flex flex-wrap" style={{ gap: 26, marginBottom: 14 }}>
+            <Stat label="Pressures to record" value={plan.record.length} color={C.good} />
+            <Stat label="Sensor reported nothing" value={plan.noReading.length} />
+            <Stat label="Wheel not entered yet" value={plan.noTire.length} />
+            <Stat label="Trucks with no tires entered" value={plan.noTruck.length}
+              color={plan.noTruck.length ? C.watch : undefined} />
+          </div>
+
+          {plan.noTruck.length > 0 && (
+            <div style={{ background: "#FDF6E3", border: `1px solid ${C.watch}44`, borderRadius: 6,
+              padding: "10px 12px", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
+              <strong>Skipped — no tires entered on the site for these trucks.</strong> Nothing
+              is recorded for them. Enter their tires and next week's file will pick them up.
+              <div style={{ fontFamily: FM, fontSize: 11.5, marginTop: 5, color: C.muted }}>
+                {plan.noTruck.map((x) => `${x.truck} (${x.wheels})`).join(", ")}
+              </div>
+            </div>
+          )}
+
+          {plan.noTire.length > 0 && (
+            <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
+              <strong style={{ color: C.ink }}>These wheels have no tire entered.</strong> The
+              truck is on the site but this position is empty, so there is nothing to
+              hang a reading on:{" "}
+              <span style={{ fontFamily: FM, fontSize: 11.5 }}>
+                {plan.noTire.slice(0, 20).map((x) => `${x.truck} ${x.pos}`).join(", ")}
+                {plan.noTire.length > 20 ? `, and ${plan.noTire.length - 20} more` : ""}
+              </span>
+            </div>
+          )}
+
+          {plan.bad.length > 0 && (
+            <div style={{ background: "#FDECEA", border: `1px solid ${C.pull}33`, borderRadius: 6,
+              padding: "10px 12px", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
+              <strong>Rows that could not be read:</strong>
+              <div style={{ fontFamily: FM, fontSize: 11.5, marginTop: 4 }}>
+                {plan.bad.slice(0, 8).map((b) => <div key={b.line}>line {b.line} — {b.why}</div>)}
+                {plan.bad.length > 8 && <div>…and {plan.bad.length - 8} more</div>}
+              </div>
+            </div>
+          )}
+
+          {plan.duplicates > 0 && (
+            <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 12 }}>
+              {plan.duplicates} row{plan.duplicates === 1 ? " was" : "s were"} a
+              second reading for a wheel already in this file — the last one is kept.
+            </div>
+          )}
+
+          {plan.record.length > 0 && (
+            <div style={{ overflowX: "auto", marginBottom: 12 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+                <thead>
+                  <tr>{["Truck", "Pos", "Now on record", "File says", "Sensor"].map((h, i) => (
+                    <th key={h} style={{ ...th, textAlign: i === 2 || i === 3 ? "right" : "left" }}>{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody>
+                  {plan.record.slice(0, 15).map((e) => {
+                    const had = pressures[e.tireId];
+                    return (
+                      <tr key={e.tireId} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                        <td style={{ ...td, fontFamily: FM }}>{e.truck}</td>
+                        <td style={{ ...td, fontFamily: FM, color: C.muted }}>{e.pos}</td>
+                        <td style={{ ...td, ...tdNum, color: C.muted }}>
+                          {had ? `${nf(had.psi)} psi` : "—"}
+                        </td>
+                        <td style={{ ...td, ...tdNum, fontWeight: 600,
+                          color: PSI_COLOR[psiTone(e.status)] }}>{nf(e.psi)} psi</td>
+                        <td style={{ ...td, color: C.muted, fontSize: 12.5 }}>{e.status || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {plan.record.length > 15 && (
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+                  …and {plan.record.length - 15} more.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end" style={{ gap: 8 }}>
+            <Btn tone="ghost" onClick={() => setPlan(null)}>Back</Btn>
+            <Btn disabled={busy || !plan.record.length}
+              onClick={async () => {
+                /* The banner at the top of the screen says what went wrong,
+                   so all this needs to know is whether to move on. */
+                if (!(await actions.savePressures(plan.record, date))) return;
+                setDone({ recorded: plan.record.length, skipped: plan.noTruck.length });
+                setPlan(null);
+              }}>
+              Record {plan.record.length} pressure{plan.record.length === 1 ? "" : "s"}
+            </Btn>
+          </div>
+        </Card>
+      )}
+
+      {done && (
+        <Card title="Recorded"
+          note="Each one is on its wheel in the diagram and the position table.">
+          <div className="flex flex-wrap" style={{ gap: 26 }}>
+            <Stat label="Pressures recorded" value={done.recorded} color={C.good} />
+            <Stat label="Trucks skipped" value={done.skipped}
+              sub="no tires entered yet" />
+          </div>
+        </Card>
+      )}
+
+      <Card title="On record now"
+        note={onRecord.length
+          ? `${onRecord.length} wheel${onRecord.length === 1 ? "" : "s"} across ${trucksOnRecord} truck${trucksOnRecord === 1 ? "" : "s"}, last read ${fmtDate(lastRead)}. Worst first.`
+          : "Nothing yet — bring a file in above."}>
+        {onRecord.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+              <thead>
+                <tr>{["Truck", "Pos", "Brand", "Air", "Sensor", "Read"].map((h, i) => (
+                  <th key={h} style={{ ...th, textAlign: i === 3 ? "right" : "left" }}>{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {onRecord.slice(0, 40).map((r) => (
+                  <tr key={r.tire} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                    <td style={{ ...td, fontFamily: FM }}>{r.t.veh}</td>
+                    <td style={{ ...td, fontFamily: FM, color: C.muted }}>{r.t.pos}</td>
+                    <td style={{ ...td }}>{r.t.brand || "Unbranded"}</td>
+                    <td style={{ ...td, ...tdNum, fontWeight: 600,
+                      color: PSI_COLOR[psiTone(r.status)] }}>{nf(r.psi)} psi</td>
+                    <td style={{ ...td, color: C.muted, fontSize: 12.5 }}>{r.status || "—"}</td>
+                    <td style={{ ...td, color: C.muted, fontFamily: FM, fontSize: 12 }}>{fmtDate(r.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {onRecord.length > 40 && (
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+                …and {onRecord.length - 40} more.
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 
