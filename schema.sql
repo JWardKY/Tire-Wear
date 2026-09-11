@@ -155,31 +155,6 @@ create table if not exists tw_tread_readings (
 create index if not exists tw_readings_tire_idx on tw_tread_readings (tire_id, odometer);
 
 
--- Air pressure off the truck's TPMS. Kept apart from tw_tread_readings
--- on purpose: tread is measured by hand against an odometer and drives
--- the wear rate, while pressure arrives from a sensor on a date and
--- drives nothing but the screen. One row per tire per reading date, so
--- re-running the same weekly export corrects the day rather than
--- stacking duplicates on it.
-create table if not exists tw_tire_pressures (
-  id            uuid primary key default gen_random_uuid(),
-  tire_id       uuid not null references tw_tires(id) on delete cascade,
-  reading_date  date not null,
-  psi           numeric(5,1) not null check (psi >= 0 and psi <= 250),
-  sensor_status text,
-  source        text not null default 'tpms' check (source in ('tpms','manual')),
-  recorded_by   text,
-  created_at    timestamptz not null default now(),
-  unique (tire_id, reading_date)
-);
-
-comment on column tw_tire_pressures.sensor_status is
-  'What the TPMS export said about this wheel, e.g. No alerts, Low pressure. Kept verbatim: Continental knows each truck''s target pressure and we do not, so the colour on screen comes from this rather than from a threshold we invented.';
-
-create index if not exists tw_pressures_tire_idx
-  on tw_tire_pressures (tire_id, reading_date desc);
-
-
 create table if not exists tw_odometer_log (
   id           uuid primary key default gen_random_uuid(),
   vehicle_id   uuid not null references tw_vehicles(id) on delete cascade,
@@ -330,23 +305,12 @@ join tw_settings s on s.id = true
 left join tw_tire_wear w on w.tire_id = t.id
 where t.removed_date is null;
 
--- The diagram only ever draws the newest pressure per tire, and the
--- weekly file adds a few hundred rows every Monday. Reading one row per
--- tire keeps the fleet screen the same size in year three as in week one.
-create or replace view tw_tire_pressure_latest as
-select distinct on (tire_id)
-  tire_id, reading_date, psi, sensor_status, source
-from tw_tire_pressures
-order by tire_id, reading_date desc, created_at desc;
-
-
 -- Views run with the caller's rights, not the owner's. Without this a
 -- view is a hole straight through the row level security below: anon
 -- could read every tire by selecting the view instead of the table.
 alter view tw_tire_wear     set (security_invoker = true);
 alter view tw_active_tires  set (security_invoker = true);
 alter view tw_tires_due_out set (security_invoker = true);
-alter view tw_tire_pressure_latest set (security_invoker = true);
 
 
 -- ── Row level security ──────────────────────────────────────
@@ -366,7 +330,6 @@ alter table tw_vehicles       enable row level security;
 alter table tw_tire_brands    enable row level security;
 alter table tw_tires          enable row level security;
 alter table tw_tread_readings enable row level security;
-alter table tw_tire_pressures enable row level security;
 alter table tw_odometer_log   enable row level security;
 alter table tw_settings       enable row level security;
 alter table tw_tire_alerts    enable row level security;
@@ -375,8 +338,8 @@ do $$
 declare t text;
 begin
   foreach t in array array['tw_vehicles','tw_tire_brands','tw_tires',
-                           'tw_tread_readings','tw_tire_pressures',
-                           'tw_odometer_log','tw_settings','tw_tire_alerts']
+                           'tw_tread_readings','tw_odometer_log','tw_settings',
+                           'tw_tire_alerts']
   loop
     execute format('drop policy if exists %I on %I', t || '_authenticated_all', t);
     execute format(

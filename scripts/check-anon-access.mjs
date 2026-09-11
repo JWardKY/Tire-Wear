@@ -25,7 +25,7 @@ const c = createClient(url, key);
 /* Tire Wear's own. The app is anonymous, so these have to be reachable —
    an unreachable one is a broken app, not a safe one. */
 const OPEN_BY_DESIGN = [
-  "tw_vehicles", "tw_tires", "tw_tread_readings", "tw_tire_pressures", "tw_odometer_log",
+  "tw_vehicles", "tw_tires", "tw_tread_readings", "tw_odometer_log",
   "tw_settings", "tw_tire_brands", "tw_defects", "tw_pm_programs",
   "tw_pm_completions", "tw_cost_codes", "tw_time_entries",
   "tw_parts", "tw_part_txns", "tw_shifts",
@@ -35,7 +35,7 @@ const OPEN_BY_DESIGN = [
      column is refused outright and reads as a broken table. Probe the
      columns the app actually asks for. */
   ["tw_mechanics", "id, name, email, active, pin_set"],
-  "tw_active_tires", "tw_tire_wear", "tw_tire_pressure_latest", "tw_vehicle_meter", "tw_pm_due",
+  "tw_active_tires", "tw_tire_wear", "tw_vehicle_meter", "tw_pm_due",
   "tw_hours", "tw_parts_reorder", "tw_on_clock", "tw_part_vendor", "tw_work_history", "tw_shift_days",
   "tw_work_log", "tw_payroll_lines", "tw_timecard_days", "tw_time_entry_parts",
 ];
