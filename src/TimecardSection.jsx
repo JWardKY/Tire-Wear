@@ -48,6 +48,7 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
   const [vehicles, setVehicles] = useState([]);
   const [codes, setCodes] = useState([]);
   const [parts, setParts] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [editing, setEditing] = useState(null);
   const [seedJob, setSeedJob] = useState(null);
   const [changingPin, setChangingPin] = useState(false);
@@ -55,14 +56,20 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
   useEffect(() => {
     (async () => {
       try {
-        const [m, v, cc, pp] = await Promise.all([
+        const [m, v, cc, pp, pr] = await Promise.all([
           time.findMechanic(who), shop.listVehicles(), time.listCostCodes(),
           partsData.listParts(),
+          /* For the card's PM half. A failure here must not take the
+             timecard down with it — a mechanic who cannot book hours
+             because the PM list would not load is the worse outcome by
+             a long way, and the card copes with an empty list. */
+          shop.listPrograms().catch(() => []),
         ]);
         setMechanic(m);
         setVehicles(v);
         setCodes(cc);
         setParts(pp);
+        setPrograms(pr);
       } catch (e) {
         setErr(`Could not load your timecard — ${e.message || e}`);
       }
@@ -204,7 +211,7 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
         onSaved={() => loadDay().catch((e) => setErr(e.message))} />
 
       <EquipmentWorked mechanic={unlocked} date={date}
-        vehicles={vehicles} codes={codes} parts={parts}
+        vehicles={vehicles} codes={codes} parts={parts} programs={programs}
         seed={seedJob} onSeedUsed={() => setSeedJob(null)}
         onErr={setErr}
         onSaved={async () => {

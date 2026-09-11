@@ -26,6 +26,16 @@ import { readFileSync } from "node:fs";
 
 const OK = { "content-type": "application/json" };
 
+/* PostgREST's own query parameters, which are not column names. Missing
+   one of these makes the fake reject a request the real thing accepts,
+   which is its own kind of lie: `columns=` rides along on every bulk
+   insert, and without it here a perfectly good multi-row insert came
+   back as "column tw_pm_completions.columns does not exist". */
+const RESERVED = new Set([
+  "select", "order", "limit", "offset", "on_conflict", "columns",
+  "or", "and", "not",
+]);
+
 /* The real schema, generated from the database. Checking against this
    rather than against the fixture rows is the difference between a test
    that catches an invented column and one that certifies it: a fixture
@@ -113,7 +123,7 @@ export async function fakeRest(ctx, { rows, columns, rpc, after, onWrite } = {})
         }
       }
       for (const k of url.searchParams.keys()) {
-        if (["select", "order", "limit", "offset", "or", "and"].includes(k)) continue;
+        if (RESERVED.has(k)) continue;
         const col = k.split(".")[0];
         if (!known.has(col)) return bad(col);
       }
@@ -131,7 +141,7 @@ export async function fakeRest(ctx, { rows, columns, rpc, after, onWrite } = {})
 
     const matches = (r) => {
       for (const [k, raw] of url.searchParams) {
-        if (["select", "order", "limit", "offset"].includes(k)) continue;
+        if (RESERVED.has(k)) continue;
         const [op, ...rest] = raw.split(".");
         if (!cmp(op, r[k.split(".")[0]], rest.join("."))) return false;
       }
