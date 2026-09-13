@@ -790,6 +790,53 @@ not the clock's opinion.
 
 `scripts/test-now.mjs` measures the skew and asserts the punch does not carry it.
 
+### Forgetting to clock out
+
+The commonest thing that goes wrong with the clock, and it went wrong twice: once
+in the shop and once in the code.
+
+A mechanic clocks in at six, goes home, and never punches out, so `ended_at` stays
+null and the clock runs all night. `tw_on_clock.stale` marks it the next morning
+and the board offers **CLOSE IT**. That button used to call `tw_close_shift`, which
+sets `ended_at = now()` — closing Thursday's punch on Friday morning booked
+twenty-six hours onto somebody's pay, and the dialog said so plainly, which made it
+an honest button that produced a wrong number.
+
+There are now four places a punch can be corrected, all landing on the same
+`correctShift`:
+
+- **The mechanic's own card.** An open punch from an earlier day puts a banner at
+  the top of Timecard whatever day is on screen — the forgotten punch is on
+  yesterday and nobody opens yesterday, so the card comes and finds them.
+- **Typing over the times** on the shift card for that day. Committed on blur, not
+  on change: a time input fires while the hour is typed and before the minutes are.
+- **Supervisor → Timecards**, in the card dialog, which can also put the punches in
+  for a day somebody never clocked in on at all.
+- **The board's CLOSE IT**, which now asks what time they left and shows what that
+  works out to before writing it.
+
+Three rules live in `src/shiftMath.js`, which has no database import so the
+arithmetic can be tested without a browser or a key:
+
+- A stop earlier than the start is the night shift, so it rolls into the next day.
+  The check constraint would refuse a negative shift outright.
+- A clock-out more than a minute in the future is refused.
+- More than **18 hours** on one punch is refused. Not 24: because of the rollover,
+  two times typed against one date can never be more than a day apart, so a cap of
+  24 could never fire — a check that reads as protection and is not. The case it
+  has to catch is ordinary, closing a 06:02 punch and typing 05:00 for 17:00.
+
+`editShift` takes the shift as it stands as well as the patch, and fills in the end
+that was not typed before judging the pair. Without that, a correction touching one
+end — which is almost all of them — is never checked against the other.
+
+Every correction writes a `shift_corrected` line to `tw_work_log` with who did it
+and the times before and after. Clocked hours are a pay figure; a mechanic fixing
+their own and a supervisor fixing it for them are the same act to the database and
+a different one to an auditor. And because `tw_shifts` carries a touch trigger, a
+card approved before the correction reads as unapproved again — a signature over
+numbers that moved afterwards is not a signature.
+
 ### The gap, and putting it on a shop
 
 The "time accounted for" line was a number and a telling-off: *2.50 hrs still need a
@@ -1121,6 +1168,9 @@ none, because somebody follows it.
 | `scripts/test-pins.mjs` | The PIN security properties — run this after any auth change |
 | `scripts/test-timecards.mjs` | Exercises the timecard data layer |
 | `scripts/test-parts.mjs` | The CSV reader, the import planner, and stock movements |
+| `src/shiftMath.js` | A typed "HH:MM" into a punch, and the answers it refuses. Pure |
+| `scripts/test-punch.mjs` | The punch arithmetic, in the shop's timezone. No key needed |
+| `scripts/test-punchboard.mjs` | Fixing a missed punch in a real browser. Needs the app served |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.

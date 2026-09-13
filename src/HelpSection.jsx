@@ -19,6 +19,7 @@ const SECTIONS = [
   ["day", "A normal day"],
   ["approval", "Getting approved"],
   ["clocks", "The two clocks"],
+  ["missed", "Forgot to punch"],
   ["defects", "Defects"],
   ["orders", "Work orders"],
   ["tires", "Tires"],
@@ -194,8 +195,9 @@ export default function HelpSection() {
           rather than leaving it in the gap.
         </p>
         <Note>
-          Forgot to punch? Type over the <i>Clocked in</i> and <i>Clocked out</i> times.
-          The clock only fills them in for you.
+          Forgot to punch? Type over the <i>Clocked in</i> and <i>Clocked out</i> times —
+          the clock only fills them in for you. If you forgot a whole day, see{" "}
+          <B>Forgot to punch</B> below.
         </Note>
         <Note tone="watch">
           Once you have clocked out, anything left over shows a <B>Put those hours on a
@@ -203,6 +205,72 @@ export default function HelpSection() {
           book it. That is how sweeping the bay or waiting on parts gets paid for — and a
           card with hours nobody has charged cannot be approved, so it holds up payroll.
         </Note>
+      </Block>
+
+      <Block id="missed" title="Forgot to punch — fixing a timecard">
+        <p style={p}>
+          It happens. You clock in at six, the day gets away from you, and you go home
+          without clocking out — so the clock keeps running all night. Nothing is
+          broken and nobody has to redo anything. There are three places it can be
+          put right, and they all do the same thing.
+        </p>
+
+        <Step n="1" head="The app tells you the next morning">
+          Open <B>Timecard</B>. If a punch was left open on an earlier day, an orange
+          box sits at the top of your card: <i>You are still clocked in from</i> that
+          day, with the time you punched in. Type the time you actually left, press{" "}
+          <B>FIX IT</B>, and it is done. You do not have to go looking for yesterday —
+          the box finds you.
+        </Step>
+
+        <Step n="2" head="Or open that day and type over the times">
+          Change the date at the top of Timecard to the day in question. Under the
+          clock are three boxes — <i>Clocked in</i>, <i>Clocked out</i> and{" "}
+          <i>Lunch / breaks</i>. Type over whichever is wrong. It saves when you click
+          away from the box.
+        </Step>
+
+        <Step n="3" head="Or ask a supervisor">
+          A supervisor can do it for you from <B>Supervisor → Timecards</B>. They find
+          your day, press <B>OPEN</B>, and the punches at the top of that window have
+          the same three boxes. They can also put the punches in for a day you never
+          clocked in on at all.
+        </Step>
+
+        <p style={p}>
+          There is a fourth way, for a supervisor standing at the board. On <B>NOW</B>,
+          anybody still on the clock from a previous day is marked in orange with a{" "}
+          <B>CLOSE IT</B> button. It asks what time they actually left and shows what
+          that works out to before saving — it does not just stop the clock at the
+          moment the button is pressed.
+        </p>
+
+        <Note>
+          Fixing the clock does <B>not</B> book any hours. The clock says you were
+          here; the cards below say where the time went, and they are still yours to
+          fill in for that day.
+        </Note>
+
+        <Note tone="watch">
+          Every change to a punch is written down with the name of whoever made it and
+          what the times were before — yours if you fixed your own, the supervisor's if
+          they did. That is not suspicion, it is the same rule as everything else
+          touching pay. It shows up under <B>Supervisor → Work log</B> as{" "}
+          <i>Punch corrected</i>.
+        </Note>
+
+        <Note tone="watch">
+          If a card for that day was already approved, correcting the punch takes the
+          approval off and a supervisor has to look at it again. That is on purpose —
+          a signature over numbers that moved afterwards is not a signature.
+        </Note>
+
+        <p style={p}>
+          Two things it will refuse, both because they are almost always a typo. A
+          clock-out time that <B>has not happened yet</B>, and a punch that works out
+          to <B>more than eighteen hours</B>. If a shift genuinely ran that long, put
+          it in as two punches with the break in between.
+        </p>
       </Block>
 
       <Block id="defects" title="Defects — what the drivers write up">

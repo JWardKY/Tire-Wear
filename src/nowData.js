@@ -1,5 +1,11 @@
 import { supabase } from "./supabase.js";
 import { fetchAll } from "./data.js";
+import { hm, shiftTimes, shiftHours } from "./shiftMath.js";
+
+/* Re-exported so every screen keeps reaching for the clock through one
+   module. The arithmetic itself lives in shiftMath.js, which has no
+   database import and can be tested on its own. */
+export { hm, shiftHours };
 
 /* The Now board: who is on the clock, and the numbers across the top.
 
@@ -171,11 +177,19 @@ export async function punchOut(mechanicId) {
 
 /* Closing somebody else's forgotten shift, from the board. Kept
    separate from punchOut because it is a different act: a supervisor
-   tidying up, not a mechanic finishing. */
+   tidying up, not a mechanic finishing.
+
+   This stops the clock at NOW, which is only ever the right answer for
+   a shift that started today. The board offers it on shifts left open
+   from an earlier day, where now() is tomorrow's problem — closing
+   Thursday's punch on Friday morning booked twenty-six hours. Those go
+   through correctShift with a time somebody typed instead. */
 export async function closeShift(shiftId) {
   const r = await rpc("tw_close_shift", { p_shift: shiftId });
   if (r && r.ok === false) throw new Error(r.error);
 }
+
+
 
 /* ── The numbers across the top ────────────────────────────────── */
 
@@ -305,25 +319,129 @@ export async function shiftById(id) {
   };
 }
 
-/* Times come in as "HH:MM" against the shift's own date, which is how
-   somebody types a correction. */
-export async function editShift(shiftId, dateISO, { start, stop, lunch }) {
-  const at = (hm) => (hm ? new Date(`${dateISO}T${hm}:00`).toISOString() : null);
+/* ── Correcting a punch ───────────────────────────────────────────
+   A clock nobody can correct is one they stop using the first morning
+   they forget it, so both times and the lunch deduction are editable —
+   by the mechanic on their own card, and by a supervisor on theirs.
+
+   Everything below funnels through shiftTimes so there is one place
+   that knows how a typed "HH:MM" becomes a timestamp, and one place
+   that refuses the answers that are obviously a typo. */
+
+/* `current` is the shift as it stands, and leaving it out is a mistake
+   worth a comment.
+
+   A correction almost always touches one end: somebody types a
+   clock-out and nothing else. Validating only what was typed means the
+   pair is never looked at, so "05:00" against a 06:02 start rolls into
+   the next day and books twenty-three hours with no check anywhere near
+   it — the exact shape of the bug this whole screen exists to fix.
+   So the half that was not typed is filled in from the shift and the
+   two are judged together. Only the typed half is written. */
+export async function editShift(shiftId, dateISO, { start, stop, lunch }, current) {
+  const effective = {
+    start: start !== undefined ? start : hm(current?.startedAt),
+    stop: stop !== undefined ? stop : hm(current?.endedAt),
+  };
+  const t = shiftTimes(dateISO, effective);
+
   const cols = {};
-  if (start !== undefined) cols.started_at = at(start);
-  if (stop !== undefined) cols.ended_at = at(stop);
+  if (start !== undefined) cols.started_at = t.started_at;
+  if (stop !== undefined) cols.ended_at = t.ended_at;
   if (lunch !== undefined) cols.lunch_minutes = Number(lunch) || 0;
 
-  /* A stop before the start means it ran past midnight, so the stop
-     belongs to the next day. Storing it as typed would give a negative
-     shift, and the check constraint would refuse the row anyway. */
-  if (cols.started_at && cols.ended_at && cols.ended_at < cols.started_at) {
-    const d = new Date(cols.ended_at);
-    d.setUTCDate(d.getUTCDate() + 1);
-    cols.ended_at = d.toISOString();
-  }
   const { error } = await supabase.from("tw_shifts").update(cols).eq("id", shiftId);
   if (error) throw error;
+}
+
+/* The same edit, with a line in the log.
+
+   Clocked hours are a pay figure. A mechanic fixing their own missed
+   punch and a supervisor fixing somebody else's are the same act to the
+   database and a different one to an auditor, so both are written down
+   with who did it and what the numbers were before.
+
+   `was` is the shift as it was read off the screen, so the line says
+   what actually changed rather than what was submitted. */
+export async function correctShift(was, patch, who) {
+  if (!who) throw new Error("A punch can only be corrected by a named person.");
+  await editShift(was.id, was.date, patch, was);
+
+  const after = await shiftById(was.id);
+  const say = (sh) => (sh
+    ? `${hm(sh.startedAt) || "—"}–${sh.endedAt ? hm(sh.endedAt) : "still on"}` +
+      `${sh.lunch ? ` less ${sh.lunch}` : ""}`
+    : "—");
+
+  const { log } = await import("./logData.js");
+  await log({
+    type: "shift_corrected",
+    mechanicId: was.mechanicId || null,
+    actor: who,
+    summary: `${was.mechanic || "A"} punch on ${was.date} changed from ` +
+             `${say(was)} to ${say(after)}`,
+    detail: {
+      work_date: was.date, shift: was.id, mechanic: was.mechanic || null,
+      before: { started_at: was.startedAt, ended_at: was.endedAt,
+                lunch_minutes: was.lunch, clock_hours: was.clockHours },
+      after: after && { started_at: after.startedAt, ended_at: after.endedAt,
+                        lunch_minutes: after.lunch, clock_hours: after.clockHours },
+    },
+  });
+  return after;
+}
+
+/* A day with no punches at all — somebody who never clocked in. The
+   hours may well be on the card already, entered by hand; this puts the
+   clock beside them so the two can be compared.
+
+   Both ends are required. An open-ended shift added after the fact is
+   the same missed punch-out all over again, and it would trip the
+   unique index if the mechanic is on the clock right now. */
+export async function addShift(mechanicId, dateISO, { start, stop, lunch }, who) {
+  if (!who) throw new Error("A punch can only be added by a named person.");
+  if (!start || !stop) throw new Error("A punch added by hand needs both a start and a stop.");
+  const t = shiftTimes(dateISO, { start, stop });
+
+  const { data, error } = await supabase.from("tw_shifts")
+    .insert({ mechanic_id: mechanicId, started_at: t.started_at,
+              ended_at: t.ended_at, lunch_minutes: Number(lunch) || 0 })
+    .select("id").single();
+  if (error) throw error;
+
+  const added = await shiftById(data.id);
+  const { log } = await import("./logData.js");
+  await log({
+    type: "shift_corrected",
+    mechanicId, actor: who,
+    summary: `Punch added by hand for ${dateISO} — ` +
+             `${hm(added?.startedAt) || start}–${hm(added?.endedAt) || stop}`,
+    detail: { work_date: dateISO, shift: data.id, added: true,
+              after: added && { started_at: added.startedAt, ended_at: added.endedAt,
+                                lunch_minutes: added.lunch, clock_hours: added.clockHours } },
+  });
+  return added;
+}
+
+/* The shift somebody is still on, with the day it belongs to.
+
+   openShift answers "are they on the clock"; this answers "since when,
+   and was it today". A shift still open from a previous day is the
+   missed punch-out, and it is the whole reason the banner on a
+   mechanic's own card exists — nobody goes looking for yesterday. */
+export async function openShiftFor(mechanicId) {
+  const { data, error } = await supabase
+    .from("tw_shift_days").select("*")
+    .eq("mechanic_id", mechanicId).is("ended_at", null)
+    .order("started_at", { ascending: false }).limit(1);
+  if (error) throw error;
+  const r = (data || [])[0];
+  if (!r) return null;
+  return {
+    id: r.id, date: r.work_date, mechanicId: r.mechanic_id, mechanic: r.mechanic,
+    startedAt: r.started_at, endedAt: r.ended_at,
+    lunch: Number(r.lunch_minutes), clockHours: Number(r.clock_hours), open: true,
+  };
 }
 
 /* Hours on the clock against hours booked to a truck and a code. The
@@ -360,8 +478,4 @@ export function accountedFor(clockHours, entries) {
   return { total, booked, diff, segments, note, tone };
 }
 
-export const hm = (iso) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
+

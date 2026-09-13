@@ -612,8 +612,14 @@ function Cards({ from, to, q, who, onErr }) {
   const [approving, setApproving] = useState(false);
 
   const load = useCallback(async () => {
-    try { setAll(await time.timecardDays(from, to)); }
-    catch (e) { onErr?.(`Could not load timecards — ${e.message || e}`); }
+    try {
+      const rows = await time.timecardDays(from, to);
+      setAll(rows);
+      return rows;
+    } catch (e) {
+      onErr?.(`Could not load timecards — ${e.message || e}`);
+      return null;
+    }
   }, [from, to, onErr]);
 
   useEffect(() => { load(); }, [load]);
@@ -867,36 +873,176 @@ function Cards({ from, to, q, who, onErr }) {
         <CardDialog day={open} who={who} busy={busy} setBusy={setBusy}
           onClose={() => setOpen(null)}
           onErr={onErr}
-          onDeleted={async () => { setOpen(null); await load(); }} />
+          onDeleted={async () => { setOpen(null); await load(); }}
+          /* A corrected punch changes the clocked hours on the row
+             behind the dialog and can take a card back out of
+             "approved", so the list is re-read without closing it — and
+             the dialog is handed the REFRESHED row, not a copy of the
+             stale one it was opened with. */
+          onEdited={async () => {
+            const rows = await load();
+            if (!rows) return;
+            const fresh = rows.find((r) =>
+              r.mechanicId === open.mechanicId && r.date === open.date);
+            if (fresh) setOpen(fresh);
+          }} />
       )}
     </>
   );
 }
 
-function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted }) {
+/* ── The punches, editable ────────────────────────────────────────
+   A supervisor looking at "clocked 26.4, booked 8" needs to fix it
+   here, not send the mechanic back into his own screen to do it. So the
+   same three boxes a mechanic gets on his card are on this dialog, plus
+   the one thing only a supervisor needs: putting the punches in for a
+   day somebody never clocked in at all.
+
+   Everything commits on blur and is written to the work log with the
+   supervisor's name on it — clocked hours are a pay figure, and this is
+   somebody changing another person's. */
+const LUNCHES = [0, 15, 30, 45, 60];
+
+function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
+  const [adding, setAdding] = useState(false);
+  const [add, setAdd] = useState({ start: "", stop: "", lunch: 30 });
+
+  const run = async (fn) => {
+    setBusy(true);
+    try { await fn(); await onChanged(); onErr?.(null); }
+    catch (e) { onErr?.(e.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const edit = (sh, patch) => run(() =>
+    clock.correctShift({ ...sh, mechanicId: day.mechanicId, mechanic: day.mechanic },
+      patch, who));
+
+  const commit = (sh, field, current) => (e) => {
+    const v = e.target.value;
+    if (v === current) return;
+    edit(sh, { [field]: v });
+  };
+
+  return (
+    <div style={{ marginBottom: 14, paddingBottom: 12,
+      borderBottom: `1px solid ${C.lineSoft}` }}>
+      <div className="flex flex-wrap items-baseline justify-between" style={{ gap: 8 }}>
+        <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600,
+          letterSpacing: "0.09em", textTransform: "uppercase", color: C.muted,
+          marginBottom: 6 }}>
+          Punches
+        </div>
+        <div style={{ fontSize: 11.5, color: C.muted }}>
+          Changes save when you click away, with your name on them
+        </div>
+      </div>
+
+      {shifts.length === 0 && !adding && (
+        <div style={{ fontSize: 13, color: C.muted }}>
+          Never clocked in on this day — the hours below were entered by hand.{" "}
+          <button onClick={() => setAdding(true)} style={linkBtn}>Put the punches in</button>
+        </div>
+      )}
+
+      {shifts.map((sh) => (
+        <div key={sh.id} className="flex flex-wrap items-end"
+          style={{ gap: 10, marginBottom: 8 }}>
+          <Field label="Clocked in">
+            <input type="time" defaultValue={clock.hm(sh.startedAt)}
+              key={`in-${sh.id}-${sh.startedAt}`}
+              onBlur={commit(sh, "start", clock.hm(sh.startedAt))}
+              style={{ ...inp, width: 120 }} />
+          </Field>
+          <Field label="Clocked out">
+            <input type="time" defaultValue={clock.hm(sh.endedAt)}
+              key={`out-${sh.id}-${sh.endedAt}`}
+              onBlur={commit(sh, "stop", clock.hm(sh.endedAt))}
+              style={{ ...inp, width: 120,
+                borderColor: sh.open ? C.watch : C.line }} />
+          </Field>
+          <Field label="Lunch">
+            <select value={sh.lunch} onChange={(e) => edit(sh, { lunch: e.target.value })}
+              style={{ ...inp, width: 105 }}>
+              {LUNCHES.map((m) => (
+                <option key={m} value={m}>{m ? `${m} min` : "None"}</option>
+              ))}
+            </select>
+          </Field>
+          <div style={{ paddingBottom: 9, fontSize: 13 }}>
+            {sh.open ? (
+              <span style={{ color: C.watch, fontWeight: 600 }}>
+                still on the clock — type a clock-out time
+              </span>
+            ) : (
+              <span style={{ fontFamily: FM, fontWeight: 600 }}>{nf(sh.clockHours, 2)} hr</span>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {adding && (
+        <div className="flex flex-wrap items-end" style={{ gap: 10 }}>
+          <Field label="Clocked in">
+            <input type="time" value={add.start}
+              onChange={(e) => setAdd((p) => ({ ...p, start: e.target.value }))}
+              style={{ ...inp, width: 120 }} />
+          </Field>
+          <Field label="Clocked out">
+            <input type="time" value={add.stop}
+              onChange={(e) => setAdd((p) => ({ ...p, stop: e.target.value }))}
+              style={{ ...inp, width: 120 }} />
+          </Field>
+          <Field label="Lunch">
+            <select value={add.lunch}
+              onChange={(e) => setAdd((p) => ({ ...p, lunch: Number(e.target.value) }))}
+              style={{ ...inp, width: 105 }}>
+              {LUNCHES.map((m) => (
+                <option key={m} value={m}>{m ? `${m} min` : "None"}</option>
+              ))}
+            </select>
+          </Field>
+          <div className="flex" style={{ gap: 8, paddingBottom: 2 }}>
+            <Btn tone="ghost" onClick={() => setAdding(false)}>Cancel</Btn>
+            <Btn disabled={busy || !add.start || !add.stop}
+              onClick={() => run(async () => {
+                await clock.addShift(day.mechanicId, day.date, add, who);
+                setAdding(false);
+                setAdd({ start: "", stop: "", lunch: 30 });
+              })}>
+              Add the punch
+            </Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdited }) {
   const [entries, setEntries] = useState(null);
   const [shifts, setShifts] = useState(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
 
+  /* The punches, not just the total. "Clocked 9, booked 6" invites the
+     question "when did they clock in and out", and a dialog that cannot
+     answer it sends somebody to another screen — which is exactly where
+     a missed punch-out used to have to be fixed. */
+  const reloadShifts = useCallback(async () => {
+    setShifts(await clock.shiftsForDay(day.mechanicId, day.date));
+  }, [day.mechanicId, day.date]);
+
   useEffect(() => {
     let live = true;
     Promise.all([
       time.listDay(day.mechanicId, day.date),
-      /* The punches, not just the total. "Clocked 9, booked 6" invites
-         the question "when did they clock in and out", and a dialog
-         that cannot answer it sends somebody to another screen. */
       clock.shiftsForDay(day.mechanicId, day.date),
     ])
       .then(([e, sh]) => { if (live) { setEntries(e); setShifts(sh); } })
       .catch((e) => onErr?.(e.message || String(e)));
     return () => { live = false; };
   }, [day, onErr]);
-
-  const hm = (iso) => (iso
-    ? new Date(iso).toLocaleTimeString("en-US",
-        { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
-    : "—");
 
   const remove = async () => {
     setBusy(true);
@@ -915,35 +1061,9 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted }) {
       sub={`${nf(day.clockHours, 2)} on the clock · ${nf(day.bookedHours, 2)} booked`}
       onClose={onClose} width={720}>
       {shifts && (
-        <div style={{ marginBottom: 14, paddingBottom: 12,
-          borderBottom: `1px solid ${C.lineSoft}` }}>
-          <div style={{ fontFamily: FD, fontSize: 11.5, fontWeight: 600,
-            letterSpacing: "0.09em", textTransform: "uppercase", color: C.muted,
-            marginBottom: 6 }}>
-            Punches
-          </div>
-          {shifts.length === 0 ? (
-            <div style={{ fontSize: 13, color: C.muted }}>
-              Never clocked in on this day — the hours below were entered by hand.
-            </div>
-          ) : (
-            <div className="flex flex-wrap" style={{ gap: 16 }}>
-              {shifts.map((sh) => (
-                <div key={sh.id} style={{ fontSize: 13 }}>
-                  <span style={{ fontFamily: FM, fontWeight: 600 }}>
-                    {hm(sh.startedAt)} – {sh.open
-                      ? <span style={{ color: C.green700 }}>still on</span>
-                      : hm(sh.endedAt)}
-                  </span>
-                  <span style={{ color: C.muted }}>
-                    {sh.lunch ? ` · ${sh.lunch} min lunch` : " · no lunch"}
-                    {!sh.open && ` · ${nf(sh.clockHours, 2)} hr`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <Punches day={day} who={who} shifts={shifts} busy={busy} setBusy={setBusy}
+          onErr={onErr}
+          onChanged={async () => { await reloadShifts(); await onEdited?.(); }} />
       )}
 
       {!entries ? (

@@ -22,6 +22,11 @@ const KINDS = new Set([
      approval back is unwinding a sign-off on somebody's pay. Both
      belong in the one table nobody can edit. */
   "timecard_approved", "timecard_unapproved",
+  /* Clocked hours are a pay figure, so a corrected punch is written
+     down with who changed it and what it was before — whether that was
+     the mechanic fixing their own missed punch-out or a supervisor
+     fixing it for them. */
+  "shift_corrected",
 ]);
 
 export const EVENT_LABEL = {
@@ -36,6 +41,7 @@ export const EVENT_LABEL = {
   tire_pulled: "Tire pulled",
   timecard_approved: "Timecard approved",
   timecard_unapproved: "Approval taken back",
+  shift_corrected: "Punch corrected",
   work_order_assigned: "Work assigned",
   work_order_completed: "Work order completed",
   part_issued: "Parts issued",

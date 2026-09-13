@@ -52,6 +52,10 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
   const [editing, setEditing] = useState(null);
   const [seedJob, setSeedJob] = useState(null);
   const [changingPin, setChangingPin] = useState(false);
+  /* Bumped when a punch is corrected somewhere other than the shift
+     card itself, so the card remounts and re-reads rather than sitting
+     on a shift that has just been closed underneath it. */
+  const [punchNonce, setPunchNonce] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -205,7 +209,20 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
         </div>
       </div>
 
-      <Shift mechanicId={unlocked.id} date={date} entries={entries}
+      <MissedPunch mechanic={unlocked} viewing={date}
+        onGoToDay={setDate} onBusy={onBusy} onErr={setErr}
+        onFixed={async (d) => {
+          /* If they are looking at the day that was just closed, its
+             shift card is now stale — re-read it rather than leave the
+             clock reading "still on". */
+          if (d === date) {
+            setPunchNonce((n) => n + 1);
+            await loadDay().catch((e) => setErr(e.message));
+          }
+        }} />
+
+      <Shift key={`${date}|${punchNonce}`}
+        mechanicId={unlocked.id} date={date} entries={entries}
         mechanic={unlocked} codes={codes}
         onBusy={onBusy} onErr={setErr}
         onSaved={() => loadDay().catch((e) => setErr(e.message))} />
@@ -715,6 +732,75 @@ function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
   );
 }
 
+/* ── The punch somebody forgot to close ───────────────────────────
+   A mechanic who forgets to clock out finds nothing wrong the next
+   morning: today's card is empty and correct, and yesterday's shift is
+   still quietly running under it. Nobody goes looking for yesterday, so
+   the card comes and finds them.
+
+   It is shown whatever day is on screen, because the day on screen is
+   exactly the one it is not on. */
+function MissedPunch({ mechanic, viewing, onGoToDay, onBusy, onErr, onFixed }) {
+  const [sh, setSh] = React.useState(null);
+  const [stop, setStop] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const open = await clock.openShiftFor(mechanic.id);
+      /* A shift running today is just somebody at work. Only one left
+         open from an earlier day is a missed punch. */
+      setSh(open && open.date < todayISO() ? open : null);
+    } catch (e) { onErr?.(e.message || String(e)); }
+  }, [mechanic.id, onErr]);
+
+  React.useEffect(() => { load(); }, [load, viewing]);
+
+  if (!sh) return null;
+
+  const fix = async () => {
+    setSaving(true); onBusy?.(true);
+    try {
+      await clock.correctShift(sh, { stop }, mechanic.name);
+      setStop("");
+      await load();
+      onErr?.(null);
+      await onFixed?.(sh.date);
+    } catch (e) { onErr?.(e.message || String(e)); }
+    finally { setSaving(false); onBusy?.(false); }
+  };
+
+  return (
+    <div style={{ background: "#FDF6E3", border: `1px solid ${C.watch}55`,
+                  borderLeft: `4px solid ${C.watch}`, borderRadius: 8,
+                  padding: "12px 16px", marginBottom: 16 }}>
+      <div style={{ fontFamily: FD, fontSize: 18, fontWeight: 700, color: C.ink,
+                    lineHeight: 1.2 }}>
+        You are still clocked in from {fmtDate(sh.date)}
+      </div>
+      <p style={{ fontSize: 13.5, color: C.ink, margin: "4px 0 0", lineHeight: 1.5 }}>
+        You punched in at <b>{clock.hm(sh.startedAt)}</b> and never punched out,
+        so the clock has been running ever since. What time did you leave?
+      </p>
+      <div className="flex flex-wrap items-end" style={{ gap: 10, marginTop: 10 }}>
+        <Field label={`Clocked out on ${fmtDate(sh.date)}`}>
+          <input type="time" value={stop} onChange={(e) => setStop(e.target.value)}
+            style={{ ...inp, width: 140 }} />
+        </Field>
+        <Btn disabled={!stop || saving} onClick={fix}>Fix it</Btn>
+        <button onClick={() => onGoToDay(sh.date)}
+          style={{ ...linkBtn, fontSize: 12.5, paddingBottom: 9 }}>
+          or open that day
+        </button>
+      </div>
+      <p style={{ fontSize: 11.5, color: C.muted, margin: "8px 0 0", lineHeight: 1.5 }}>
+        This only fixes the clock. Hours still have to be on the card for that day,
+        and a supervisor can change this for you from Hours if you would rather.
+      </p>
+    </div>
+  );
+}
+
 /* ── The shift card ───────────────────────────────────────────────
    The clock is not the timecard. This says a mechanic is in the shop;
    the entries below say what the work was and what it charges to.
@@ -756,10 +842,20 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
     finally { onBusy?.(false); }
   };
 
+  /* Committed on blur, not on every keystroke. A time input fires while
+     the hour is typed and before the minutes are, so writing on change
+     saved a half-typed time and wrote a log line for it. */
   const edit = (patch) => go(async () => {
     if (!sh) return;
-    await clock.editShift(sh.id, sh.date, patch);
+    await clock.correctShift({ ...sh, mechanicId, mechanic: mechanic?.name },
+      patch, mechanic?.name || "");
   });
+
+  const commitTime = (field, current) => (e) => {
+    const v = e.target.value;
+    if (v === current) return;
+    edit({ [field]: v });
+  };
 
   const running = sh?.open;
   const acc = clock.accountedFor(sh?.clockHours || 0, entries);
@@ -793,13 +889,15 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
         <>
           <div className="flex flex-wrap" style={{ gap: 10, marginTop: 12 }}>
             <Field label="Clocked in">
-              <input type="time" value={clock.hm(sh.startedAt)}
-                onChange={(e) => edit({ start: e.target.value })}
+              <input type="time" defaultValue={clock.hm(sh.startedAt)}
+                key={`in-${sh.id}-${sh.startedAt}`}
+                onBlur={commitTime("start", clock.hm(sh.startedAt))}
                 style={{ ...inp, width: 130 }} />
             </Field>
             <Field label="Clocked out">
-              <input type="time" value={clock.hm(sh.endedAt)}
-                onChange={(e) => edit({ stop: e.target.value })}
+              <input type="time" defaultValue={clock.hm(sh.endedAt)}
+                key={`out-${sh.id}-${sh.endedAt}`}
+                onBlur={commitTime("stop", clock.hm(sh.endedAt))}
                 style={{ ...inp, width: 130 }} />
             </Field>
             <Field label="Lunch / breaks">
@@ -812,7 +910,8 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
             </Field>
           </div>
           <p style={{ fontSize: 11.5, color: C.muted, margin: "2px 0 0" }}>
-            The clock fills these in. Type over them if you forgot to punch.
+            The clock fills these in. Type over them if you forgot to punch —
+            the change saves when you click away, and is noted with your name on it.
           </p>
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
