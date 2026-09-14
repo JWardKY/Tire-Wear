@@ -229,27 +229,102 @@ export default function NowSection({ who, tab, onBusy, supervisor, go }) {
       )}
 
       {closing && (
-        <Modal title={`Close ${closing.mechanic}'s shift?`} onClose={() => setClosing(null)}>
-          <p style={{ fontSize: 14 }}>
-            It has been open since <b>{closing.startedOn}</b>, so it was almost
-            certainly a missed punch-out rather than a very long day. Closing it
-            stops the clock now. It does not book any hours — those are entered
-            on the timecard.
-          </p>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <Btn tone="ghost" onClick={() => setClosing(null)}>CANCEL</Btn>
-            <Btn onClick={async () => {
-              const s = closing; setClosing(null); onBusy?.(true);
-              try { await now.closeShift(s.id); await load(); }
-              catch (e) { setErr(e.message || String(e)); }
-              finally { onBusy?.(false); }
-            }}>CLOSE THE SHIFT</Btn>
-          </div>
-        </Modal>
+        <CloseShift s={closing} who={who} onClose={() => setClosing(null)}
+          onBusy={onBusy} onErr={setErr} onDone={load} />
       )}
     </div>
   );
 }
+
+/* ── Closing a punch somebody forgot ──────────────────────────────
+   This button only ever appears on a shift left open from an earlier
+   day, so "stop the clock now" is never the right answer: closing
+   Thursday's punch on Friday morning books twenty-six hours onto
+   somebody's pay. It asks what time they actually left, and shows what
+   that works out to before it is written.
+
+   The old dialog did stop it at now, and said so plainly, which made it
+   an honest button that produced a wrong number. */
+function CloseShift({ s, who, onClose, onBusy, onErr, onDone }) {
+  const [stop, setStop] = React.useState("");
+  const [lunch, setLunch] = React.useState(30);
+  const [saving, setSaving] = React.useState(false);
+
+  const hours = now.shiftHours(s.startedAt, s.startedOn, stop, lunch);
+
+  const save = async () => {
+    setSaving(true); onBusy?.(true);
+    try {
+      await now.correctShift(
+        { id: s.id, date: s.startedOn, mechanicId: s.mechanicId, mechanic: s.mechanic,
+          startedAt: s.startedAt, endedAt: null, lunch: null, clockHours: null },
+        { stop, lunch }, who);
+      onClose();
+      await onDone();
+      onErr("");
+    } catch (e) { onErr(e.message || String(e)); }
+    finally { setSaving(false); onBusy?.(false); }
+  };
+
+  return (
+    <Modal title={`Close ${s.mechanic}'s shift?`} onClose={onClose} width={520}>
+      <p style={{ fontSize: 14, lineHeight: 1.55 }}>
+        The clock has been running since <b>{s.startedOn}</b> at{" "}
+        <b>{now.hm(s.startedAt)}</b> — almost certainly a missed punch-out rather
+        than a very long day. What time did {s.mechanic.split(" ")[0]} actually
+        leave?
+      </p>
+
+      <div className="flex flex-wrap items-end" style={{ gap: 12, margin: "12px 0" }}>
+        <label style={{ display: "block" }}>
+          <div style={lbl}>Clocked out on {s.startedOn}</div>
+          <input type="time" value={stop} onChange={(e) => setStop(e.target.value)}
+            style={box} />
+        </label>
+        <label style={{ display: "block" }}>
+          <div style={lbl}>Lunch / breaks</div>
+          <select value={lunch} onChange={(e) => setLunch(Number(e.target.value))}
+            style={box}>
+            {[0, 15, 30, 45, 60].map((m) => (
+              <option key={m} value={m}>{m ? `${m} min` : "None"}</option>
+            ))}
+          </select>
+        </label>
+        <div style={{ paddingBottom: 8 }}>
+          <div style={lbl}>That is</div>
+          <div style={{ fontFamily: FD, fontSize: 20, fontWeight: 700,
+            color: hours == null ? C.muted : hours > 14 ? C.watch : C.ink }}>
+            {hours == null ? "—" : `${nf(hours, 2)} hr`}
+          </div>
+        </div>
+      </div>
+
+      {hours != null && hours > 14 && (
+        <p style={{ fontSize: 12.5, color: C.watch, margin: "0 0 10px", lineHeight: 1.5 }}>
+          That is a long day. Check the time before you save it — it goes on their pay.
+        </p>
+      )}
+
+      <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>
+        This only stops the clock. It does not book any hours — those are entered
+        on the timecard. The change is noted with your name on it.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+        <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+        <Btn disabled={!stop || saving} onClick={save}>
+          {stop ? `CLOSE IT AT ${stop}` : "CLOSE THE SHIFT"}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+const lbl = { fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.08em",
+  textTransform: "uppercase", color: C.muted, marginBottom: 3 };
+const box = { padding: "8px 10px", border: `1px solid ${C.line}`, borderRadius: 5,
+  fontSize: 14, fontFamily: "inherit", background: "#fff", color: C.ink, width: 150 };
+
 
 /* ── What somebody on the clock is on ─────────────────────────────
    One line on the card, because the board is read from across a shop.
