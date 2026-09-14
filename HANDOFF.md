@@ -1224,6 +1224,7 @@ none, because somebody follows it.
 | `scripts/test-truckfile.mjs` | The lookup and the totals. No key needed |
 | `scripts/test-truckboard.mjs` | The truck file in a real browser. Needs the app served |
 | `src/dualMatch.js` | Duals that do not match. Pure |
+| `scripts/test-tireedit.mjs` | Correcting a mounted tire in a browser. Needs the app served |
 | `scripts/test-duals.mjs` | The pairing and the threshold. No key needed |
 | `scripts/test-dualboard.mjs` | Mismatched duals on the Tires screen. Needs the app served |
 
@@ -1891,6 +1892,61 @@ else.** Running to the legal minimum is not the plan. Defaults in `settings` are
 
 Steer detection is `position ~ '^1[LR]$'` — axle 1, single. It is deliberately narrow.
 If a truck ever runs a config where axle 1 is not the steer, this needs revisiting.
+
+### Correcting a tire that is already on
+
+Everything about a tire was decided at the moment somebody mounted it, and there is
+no delete — so a typo was permanent. "Michelin vdn2" stayed that way, and a tire keyed
+onto the wrong wheel stayed there for the life of the casing.
+
+`db.updateTire` and the **Edit these details** form on the tire dialog fix that: brand,
+model, size, type, wheel material, casing, cost, the wheel position, and the three
+mount figures.
+
+Three deliberate limits:
+
+- **`vehicle_id` is not editable.** Moving a tire to another truck is a pull and a
+  mount, with the miles landing on the right truck either side — not one row quietly
+  changing hands.
+- **Position only offers free wheels** on that truck plus its own. It is for a position
+  keyed wrong, not for recording a rotation. Changing it takes the tire's tread
+  readings with it, which is right for a correction and wrong for a rotation.
+- **The mount figures say what they cost.** `mounted_odometer` and `mounted_depth` are
+  the first point `tw_tire_wear` measures from, so changing them moves the wear rate,
+  the estimated miles left and the cost per mile. The form says so the moment one is
+  touched rather than letting somebody find out from a number that shifted.
+
+`actions.updateTire` goes through **`runRaw`**, not `run`. `run` catches and puts
+"That did not save" in the banner at the top of the page; this form can say something
+better — naming the wheel that is already taken — so it needs the error rather than a
+sentence about one. A regression to `run` closes the dialog on the error, losing
+everything typed and leaving the reason somewhere nobody is looking; the browser test
+asserts the form stays open.
+
+The unique index `tw_one_active_tire_per_position` is the backstop for the race the
+dropdown cannot cover: two tablets, one wheel. 23505 comes back as "There is already a
+tire on 4RI." The fake database does not model unique indexes, so the test registers
+its own route for that one case — otherwise the message could never be reached.
+
+**What gets recorded, and where.** The Tires section wrote nothing to any history at
+all — 376 mounts and 36 pulls were invisible. That is fixed in two different ways on
+purpose:
+
+- **On and off are derived.** `tw_work_history` gained two branches over `tw_tires`,
+  so every tire ever mounted or pulled shows in the shop history and on the truck's
+  file, retroactively, with no write path to get wrong. They are dated by
+  `mounted_date` / `removed_date` rather than `created_at` — those are dates the shop
+  recorded on purpose, and on a backfilled fleet `created_at` is months later. Cast
+  through Eastern so a date does not land on the evening before; all 412 rows were
+  checked against the date they came from.
+- **A correction is written.** `tire_edited` in `tw_work_log`, because what a field
+  USED to say is not derivable from anything once the row is overwritten — and the
+  mount odometer is what the wear rate and the cost per mile are measured from. Only
+  the fields worth naming, only when one actually moved: a line per button press is a
+  log nobody reads.
+
+A pull has no `who`: `tw_tires` has `created_by` but no `removed_by`. Add the column if
+that matters.
 
 ### What "retread" means here
 

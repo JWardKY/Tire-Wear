@@ -10,6 +10,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as db from "./data.js";
+import { saySo, tooBig } from "./dbError.js";
 import { dualMismatches, mismatchedWheels, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
 
 /* ────────────────────────────────────────────────────────────────
@@ -154,11 +155,27 @@ export default function TireWear({ who, tab, onBusy }) {
     }
   }, [reload]);
 
+  /* Like run, but the error comes back to the caller instead of the
+     banner. A screen that can say something better than "that did not
+     save" — naming the wheel that is already taken — needs the error,
+     not a sentence about one. Busy and the reload still behave. */
+  const runRaw = useCallback(async (fn) => {
+    setBusy(true);
+    try {
+      await fn();
+      await reload();
+      setErr(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [reload]);
+
   const actions = useMemo(() => ({
     setVehicleConfig: (vehId, cfg) => run(() => db.setVehicleConfig(vehId, cfg)),
     mountTire: (vehId, t) => run(() => db.mountTire(vehId, t, who)),
     mountTires: (vehId, list) => run(() => db.mountTires(vehId, list, who)),
     pullTire: (tireId, off) => run(() => db.pullTire(tireId, off)),
+    updateTire: (tireId, t, before) => runRaw(() => db.updateTire(tireId, t, before, who)),
     setTireNotes: (tireId, notes) => run(() => db.setTireNotes(tireId, notes)),
     saveInspection: (vehId, date, odo, entries) =>
       run(() => db.saveInspection(vehId, date, odo, entries, who)),
@@ -166,7 +183,7 @@ export default function TireWear({ who, tab, onBusy }) {
     logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
     updateSettings: (patch) => run(() => db.updateSettings(patch)),
     eraseAll: () => run(() => db.eraseAll()),
-  }), [run, who]);
+  }), [run, runRaw, who]);
 
   const byNum = useMemo(() => Object.fromEntries(fleet.map((v) => [v.num, v])), [fleet]);
 
@@ -623,7 +640,22 @@ function VehicleDetail(props) {
         <TireDialog
           tire={activeTireAt[`${v.num}|${openTire.pos}`] || openTire}
           stats={tireStats[openTire.id]} settings={settings}
-          busy={busy}
+          brands={brands} busy={busy}
+          /* Wheels it could move to: the free ones on this truck, plus
+             the one it is on. A tire mounted at the wrong position is
+             the correction with nowhere else to go — there is no delete,
+             so without this it stays on the wrong wheel for the life of
+             the casing. */
+          freePositions={positions.filter(
+            (p) => p.id === openTire.pos || !activeTireAt[`${v.num}|${p.id}`])}
+          onSaveDetails={async (t) => {
+            /* The tire as it stands goes with the patch, so the log line
+               can say what it used to be. Once the row is overwritten
+               there is nothing left that knows. */
+            await actions.updateTire(openTire.id, t,
+              activeTireAt[`${v.num}|${openTire.pos}`] || openTire);
+            setOpenTire(null);
+          }}
           onClose={() => setOpenTire(null)}
           onPull={async (off) => {
             await actions.pullTire(openTire.id, off);
@@ -1053,8 +1085,191 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
   );
 }
 
-function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes, onDeleteReading }) {
+/* ── Correcting a tire already on a truck ─────────────────────────
+   Everything about a tire was decided at the moment somebody mounted
+   it, and a typo was permanent: there is no delete, so "Michelin vdn2"
+   stayed that way and a tire keyed to the wrong wheel stayed on the
+   wrong wheel for the life of the casing.
+
+   Two of these boxes are not cosmetic. The mount odometer and the mount
+   tread are the first point tw_tire_wear measures from, so changing
+   them changes the wear rate, the estimated miles left and the cost per
+   mile. The form says so, rather than letting somebody find out from a
+   number that moved. */
+function EditTire({ tire, brands, freePositions, busy, movedSinceMount, onCancel, onSave }) {
+  /* A brand that is not on the list — typed through Other when the tire
+     was mounted, or since turned off in Setup — must not be silently
+     swapped for the first one in the dropdown. */
+  const known = brands.includes(tire.brand);
+  const [f, setF] = useState({
+    pos: tire.pos,
+    brand: tire.brand ? (known ? tire.brand : "Other") : "",
+    brandOther: known ? "" : (tire.brand || ""),
+    model: tire.model || "",
+    size: tire.size || "",
+    type: tire.type || "virgin",
+    wheel: tire.wheel || "",
+    casing: tire.casing || "",
+    onDate: tire.onDate || todayISO(),
+    onOdo: tire.onOdo == null ? "" : String(tire.onOdo),
+    newDepth: tire.newDepth == null ? "" : String(tire.newDepth),
+    cost: tire.cost == null ? "" : String(tire.cost),
+  });
+  const [err, setErr] = useState("");
+  const set = (k) => (e) => { setF((p) => ({ ...p, [k]: e.target.value })); setErr(""); };
+
+  const isOther = f.brand === "Other";
+  const brandName = isOther ? f.brandOther.trim() : f.brand;
+
+  const depthBad = tooBig(f.newDepth, { label: "Tread when mounted", max: 99, decimals: 1 });
+  const odoBad = tooBig(f.onOdo, { label: "The mount odometer", max: 3000000, decimals: 0 });
+  const costBad = tooBig(f.cost, { label: "Cost", max: 99999, decimals: 2 });
+  const bad = depthBad || odoBad || costBad;
+
+  const movedWheel = f.pos !== tire.pos;
+  const movedMount = String(f.onOdo) !== String(tire.onOdo ?? "")
+    || String(f.newDepth) !== String(tire.newDepth ?? "")
+    || f.onDate !== (tire.onDate || "");
+
+  const ok = !!brandName && !!f.pos && !!f.onDate
+    && Number(f.newDepth) > 0 && f.onOdo !== "" && Number(f.onOdo) >= 0 && !bad;
+
+  const save = async () => {
+    setErr("");
+    try {
+      await onSave({
+        pos: f.pos, brand: brandName, model: f.model.trim(), size: f.size.trim(),
+        type: f.type, wheel: f.wheel, casing: f.casing.trim(),
+        onDate: f.onDate, onOdo: Number(f.onOdo), newDepth: Number(f.newDepth),
+        cost: f.cost === "" ? null : Number(f.cost),
+      });
+    } catch (e) {
+      /* The one it will actually hit: two tires cannot sit on the same
+         wheel, and the index says so in Postgres rather than English. */
+      setErr(e?.code === "23505"
+        ? `There is already a tire on ${f.pos}. Pull that one off first.`
+        : saySo(e, { mounted_odometer: { label: "The mount odometer", limit: "it is too big" },
+                     mounted_depth: { label: "Tread when mounted", limit: "it is too big" },
+                     cost: { label: "Cost", limit: "it is too big" } }));
+    }
+  };
+
+  return (
+    <Modal width={620} onClose={onCancel}
+      title={`Edit ${tire.pos} · ${tire.brand || "Unbranded"}`}
+      sub={`${tire.veh} · correcting what was entered when it went on`}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <Field label="Wheel position">
+          <select value={f.pos} onChange={set("pos")} style={{ ...inp, fontFamily: FM }}>
+            {freePositions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.id}{p.id === tire.pos ? " (where it is)" : " — empty"}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Brand">
+          <select value={f.brand} onChange={set("brand")} style={inp}>
+            <option value="">Choose a brand…</option>
+            {brands.map((b) => <option key={b} value={b}>{b}</option>)}
+            <option value="Other">Other…</option>
+          </select>
+        </Field>
+        {isOther ? (
+          <Field label="Brand name">
+            <input value={f.brandOther} onChange={set("brandOther")}
+              placeholder="Type the brand" style={inp} /></Field>
+        ) : (
+          <Field label="Model / pattern">
+            <input value={f.model} onChange={set("model")} placeholder="M726, XDN2…"
+              style={inp} /></Field>
+        )}
+        {isOther && (
+          <Field label="Model / pattern">
+            <input value={f.model} onChange={set("model")} placeholder="M726, XDN2…"
+              style={inp} /></Field>
+        )}
+        <Field label="Size">
+          <input value={f.size} onChange={set("size")} style={inp} /></Field>
+        <Field label="Type">
+          <select value={f.type} onChange={set("type")} style={inp}>
+            <option value="virgin">Virgin</option>
+            <option value="retread">Retread</option>
+          </select>
+        </Field>
+        <Field label="Wheel">
+          <select value={f.wheel} onChange={set("wheel")} style={inp}>
+            <option value="">Not recorded</option>
+            <option value="aluminum">Aluminum</option>
+            <option value="steel">Steel</option>
+          </select>
+        </Field>
+        <Field label="Cost ($)">
+          <input type="number" step="0.01" value={f.cost} onChange={set("cost")}
+            placeholder="optional" style={{ ...inp, fontFamily: FM }} /></Field>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Casing / serial (optional)">
+            <input value={f.casing} onChange={set("casing")} style={inp} /></Field>
+        </div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.line}`, margin: "16px 0 12px" }} />
+      <SectionLabel noMargin>When it went on</SectionLabel>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 1fr", marginTop: 8 }}>
+        <Field label="Date mounted">
+          <input type="date" value={f.onDate} onChange={set("onDate")} style={inp} /></Field>
+        <Field label="Odometer (mi)">
+          <input type="number" value={f.onOdo} onChange={set("onOdo")}
+            style={{ ...inp, fontFamily: FM }} /></Field>
+        <Field label="Tread (/32)">
+          <input type="number" step="0.5" value={f.newDepth} onChange={set("newDepth")}
+            style={{ ...inp, fontFamily: FM }} /></Field>
+      </div>
+
+      {movedMount && (
+        <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
+          margin: "8px 0 0", lineHeight: 1.5 }}>
+          These three are the first point the wear is measured from
+          {movedSinceMount ? "" : " — and the only one, until a walk-around"}.
+          Changing them changes the wear rate, the miles left and the cost per mile.
+        </p>
+      )}
+      {movedWheel && (
+        <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
+          margin: "8px 0 0", lineHeight: 1.5 }}>
+          Moving it to {f.pos} takes its readings with it. Do this to fix a position
+          keyed wrong, not to record a rotation — a rotation is a pull and a mount.
+        </p>
+      )}
+      {bad && (
+        <p style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, margin: "8px 0 0" }}>
+          {bad}
+        </p>
+      )}
+      {err && (
+        <p style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, margin: "8px 0 0" }}>
+          {err}
+        </p>
+      )}
+
+      <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 0", lineHeight: 1.5 }}>
+        This corrects the record. To take the tire off the truck, close this and use
+        <b> Pull this tire off</b>. To put it on a different truck, pull it and mount it
+        there, so the miles land on the right one.
+      </p>
+
+      <div className="flex justify-end mt-4" style={{ gap: 8 }}>
+        <Btn tone="ghost" onClick={onCancel}>Cancel</Btn>
+        <Btn disabled={busy || !ok} onClick={save}>Save changes</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
+                     onClose, onPull, onSaveDetails, onSaveNotes, onDeleteReading }) {
   const [pulling, setPulling] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(tire.notes || "");
   const noteDirty = note.trim() !== (tire.notes || "").trim();
 
@@ -1074,11 +1289,28 @@ function TireDialog({ tire, stats, settings, busy, onClose, onPull, onSaveNotes,
   }));
   const cpm = tire.cost && stats?.miles ? tire.cost / stats.miles : null;
 
+  if (editing) {
+    return (
+      <EditTire tire={tire} brands={brands} freePositions={freePositions} busy={busy}
+        movedSinceMount={!!stats?.pts?.some((p) => !p.mount)}
+        onCancel={() => setEditing(false)} onSave={onSaveDetails} />
+    );
+  }
+
   return (
     <Modal width={620} onClose={onClose}
       title={`${tire.pos} · ${tire.brand || "Unbranded"}${tire.model ? " " + tire.model : ""}`}
       sub={`${tire.veh} · ${tire.type === "retread" ? "Retread" : "Virgin"} · ${tire.size || "size not set"}${
         WHEEL_LABEL[tire.wheel] ? ` · ${WHEEL_LABEL[tire.wheel]} wheel` : ""}`}>
+      {/* A tire's details were fixed at the moment it was mounted, and a
+          typo in the brand or the mount odometer was permanent — there
+          is no delete. */}
+      <div className="flex justify-end" style={{ marginBottom: 4 }}>
+        <button onClick={() => setEditing(true)} style={{ ...linkBtn, fontSize: 12.5 }}>
+          Edit these details
+        </button>
+      </div>
+
       <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))" }}>
         <Stat label="Current tread" value={stats?.depth ?? "—"} unit="/32"
           color={stats ? STATUS_COLOR[stats.status] : undefined} />

@@ -157,6 +157,76 @@ const tireRow = (vehicleId, t, who) => ({
   created_by: who,
 });
 
+/* Correcting a tire that is already on a truck.
+   ─────────────────────────────────────────────────────────────────
+   Everything about a tire was fixed at the moment it was mounted, and a
+   typo in the brand, the size or the mount odometer was permanent —
+   there is no delete, so "Michelin vdn2" stayed "Michelin vdn2" and a
+   mis-keyed position stayed on the wrong wheel for the life of the
+   casing.
+
+   The mount figures are not cosmetic. mounted_odometer and
+   mounted_depth are the first point tw_tire_wear measures from, so
+   changing them changes the wear rate, the estimated miles left and the
+   cost per mile. The screen says so; this just writes it.
+
+   vehicle_id is deliberately NOT editable. Moving a tire to a different
+   truck is a pull and a mount, with the miles landing on the right
+   truck either side — not one row quietly changing hands. */
+/* The fields worth naming in the log when they move, and what to call
+   them. Not every column: nobody needs a line saying a casing number
+   was filled in, and a log people skim past is the same as none. */
+const WORTH_SAYING = [
+  ["pos", "position"], ["brand", "brand"], ["model", "model"],
+  ["size", "size"], ["type", "type"], ["onOdo", "mount odometer"],
+  ["newDepth", "mount tread"], ["onDate", "mount date"], ["cost", "cost"],
+];
+
+const changedBits = (before, after) => WORTH_SAYING
+  .filter(([k]) => String(before?.[k] ?? "") !== String(after?.[k] ?? ""))
+  .map(([k, label]) =>
+    `${label} ${before?.[k] ?? "—"} → ${after?.[k] ?? "—"}`);
+
+export async function updateTire(tireId, t, before, who) {
+  check(
+    await supabase.from("tw_tires").update({
+      position: t.pos,
+      brand: t.brand || null,
+      model: t.model || null,
+      size: t.size || null,
+      tire_type: t.type,
+      wheel_material: t.wheel || null,
+      casing_id: t.casing || null,
+      mounted_date: t.onDate,
+      mounted_odometer: t.onOdo,
+      mounted_depth: t.newDepth,
+      cost: t.cost,
+    }).eq("id", tireId)
+  );
+
+  /* Written after the update, never before: a log line for a change
+     that did not happen is worse than a change nobody logged.
+
+     Only the correction is recorded. A tire going on or coming off is
+     derivable from tw_tires and shows in tw_work_history on its own;
+     what it USED to say is not derivable from anything, and the mount
+     odometer is what the wear rate and cost per mile are measured
+     from. */
+  const bits = changedBits(before, t);
+  if (!bits.length || !who) return;
+
+  const { log } = await import("./logData.js");
+  await log({
+    type: "tire_edited",
+    actor: who,
+    vehId: before?.vehId || null,
+    unit: before?.veh || null,
+    summary: `${before?.veh || "A truck"} ${before?.pos || ""} — ${bits.join(", ")}`.trim(),
+    detail: { tire: tireId, truck: before?.veh || null, was: before?.pos || null,
+              changed: bits },
+  });
+}
+
 export async function mountTire(vehicleId, t, who) {
   check(await supabase.from("tw_tires").insert(tireRow(vehicleId, t, who)));
 }
