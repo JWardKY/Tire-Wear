@@ -17,7 +17,7 @@ import * as setup from "./setupData.js";
 
 const DEFECT_FILTERS = [
   ["all", "All"],
-  ["unsafe", "Out of service"],
+  ["unsafe", "Major defect"],
   ["major", "Major"],
   ["mine", "Mine"],
 ];
@@ -205,7 +205,7 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
               {d.safety === "unsafe" && (
                 <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase",
                                letterSpacing: "0.05em", color: C.pull }}>
-                  Out of service
+                  Major defect
                 </span>
               )}
             </div>
@@ -276,7 +276,7 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
                   {d.safety === "unsafe" && (
                     <span style={{ color: C.pull, fontWeight: 700, fontSize: 11,
                                    marginLeft: 6, textTransform: "uppercase" }}>
-                      out of service
+                      major defect
                     </span>
                   )}
                   {d.note && <div style={{ color: C.muted, fontSize: 12 }}>{d.note}</div>}

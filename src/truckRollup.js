@@ -92,7 +92,11 @@ export function rollUp(f, { from, to } = {}) {
 
     servicesDone: services.length,
     openDefects: f.defects.filter((d) => d.state !== "repaired").length,
-    outOfService: f.defects.some((d) => d.state !== "repaired" && d.safety === "unsafe"),
+    /* Deliberately not called "out of service". All this knows is that
+       a driver typed the defect major on a DVIR; the phrase means a
+       roadside inspector's order, and a report that claims one the shop
+       never received is worse than a report that says nothing. */
+    majorDefect: f.defects.some((d) => d.state !== "repaired" && d.safety === "unsafe"),
     repairedDefects: f.defects.filter((d) => d.repairedAt && inRangeAt(d.repairedAt)).length,
     openOrders: f.orders.filter((w) => w.state !== "done").length,
     doneOrders: f.orders.filter((w) => w.state === "done" && inRangeAt(w.completedAt)).length,

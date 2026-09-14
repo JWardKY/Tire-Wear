@@ -119,7 +119,7 @@ export async function onClockDetail(people, dateISO) {
     const g = id && out.get(id);
     if (g) g.defects.push({
       id: d.id, unit: d.unit_number, category: d.category || "Defect",
-      note: d.note || "", unsafe: d.safety === "unsafe",
+      note: d.note || "", major: d.safety === "unsafe",
       claimedAt: d.claimed_at, workOrder: d.work_order || "",
     });
   }
@@ -212,7 +212,10 @@ export async function boardNumbers(fromISO, toISO) {
   return {
     onClock: onClock.length,
     openDefects: open.length,
-    outOfService: open.filter((d) => d.safety === "unsafe").length,
+    /* Not "out of service". That phrase is a roadside inspector's
+       order; all this knows is that a driver typed the defect major on
+       a DVIR. The board says what it actually has. */
+    majorDefects: open.filter((d) => d.safety === "unsafe").length,
     openOverAWeek: open.filter((d) => d.first_reported < weekAgo).length,
     hours: total,
     entries: hours.length,

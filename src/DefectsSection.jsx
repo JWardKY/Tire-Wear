@@ -12,10 +12,16 @@ import { actorFor, readUnlock } from "./identity.js";
    later mirrored from Motive DVIR by the sync in step 5. The shop's
    job is the three-step loop — see it, claim it, mark it repaired.
 
-   Ordering is the point of the Open list. Out of service comes before
-   everything, then major, then oldest first: a truck that cannot legally
-   roll outranks a truck with a broken mirror, however long the mirror
-   has been broken. */
+   Ordering is the point of the Open list. A major write-up comes
+   before everything else, then oldest first: a fault a driver called
+   major outranks a broken mirror, however long the mirror has been
+   broken.
+
+   What the app does NOT do is call a truck out of service. That phrase
+   means a roadside inspector's order, and all we have is Motive's word
+   for how the driver typed the defect. Saying "major defect" is the
+   same information without the app claiming a status it is in no
+   position to declare. */
 
 const SEVERITY = [
   ["minor", "Minor"],
@@ -163,8 +169,8 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
                 : tab === "repaired"
                 ? "Longest wait first. Nothing here closes a DVIR."
                 : unsafeCount
-                  ? `${unsafeCount} of them put a truck out of service.`
-                  : "Out of service first, then major, then oldest."}
+                  ? `${unsafeCount} ${unsafeCount === 1 ? "is" : "are"} a major write-up.`
+                  : "Major write-ups first, then oldest."}
             </div>
           </div>
           <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
@@ -215,7 +221,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
 }
 
 /* Arrived here by tapping a number on the Now board. The tile said
-   "17 units out of service", so this list has to be those seventeen and
+   "17 units with a major defect", so this list has to be those seventeen and
    nothing else, or the number was a lie. */
 /* `focus` stays a plain string, the way the Now board's tiles send it.
    "mine" resolves against whoever is PIN'd in here rather than being
@@ -230,7 +236,7 @@ const FOCUS = {
     },
   },
   unsafe: {
-    label: "Out of service",
+    label: "Major defect",
     keep: (d) => d.safety === "unsafe",
   },
   stale: {
@@ -295,8 +301,15 @@ function DefectRow({ d, who, busy, dvir, onClaim, onRelease, onRepair, onReopen,
             <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>
               {d.category || "Uncategorised"}
             </span>
-            {d.safety === "unsafe" && !repaired && <Badge tone="bad">Out of service</Badge>}
-            {d.severity === "major" && !repaired && <Badge tone="warn">Major</Badge>}
+            {/* One fact, one badge. The Motive sync sets safety and
+                severity from the same bit — a DVIR defect typed major —
+                so a synced fault used to carry a red "Out of service"
+                and an orange "Major" side by side saying the same
+                thing. The second only appears on a hand-logged fault
+                somebody marked major but still safe to run. */}
+            {d.safety === "unsafe" && !repaired && <Badge tone="bad">Major defect</Badge>}
+            {d.severity === "major" && d.safety !== "unsafe" && !repaired
+              && <Badge tone="warn">Major</Badge>}
             {d.priority === "high" && !repaired && <Badge tone="warn">Priority</Badge>}
             {d.source === "motive" && <Badge>DVIR</Badge>}
             {d.count > 1 && <Badge>Reported {d.count}×</Badge>}
@@ -414,7 +427,7 @@ function AddDefectDialog({ vehicles, busy, onClose, onSave }) {
         <Field label="Can it run?">
           <select value={f.safety} onChange={set("safety")} style={inp}>
             <option value="safe">Yes — safe to run</option>
-            <option value="unsafe">No — out of service</option>
+            <option value="unsafe">No — major defect</option>
           </select>
         </Field>
         <Field label="Reported by">
@@ -428,7 +441,7 @@ function AddDefectDialog({ vehicles, busy, onClose, onSave }) {
 
       {f.safety === "unsafe" && (
         <p style={{ fontSize: 12.5, color: C.pull, marginTop: 12, lineHeight: 1.5, fontWeight: 600 }}>
-          Marked out of service, this goes to the top of the list ahead of everything else.
+          Marked a major defect, this goes to the top of the list ahead of everything else.
         </p>
       )}
 

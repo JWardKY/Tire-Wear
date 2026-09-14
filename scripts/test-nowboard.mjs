@@ -63,6 +63,12 @@ const rows = {
     { id: "d2", state: "open", unit_number: "DT-868", category: "Heater",
       note: "Nobody has this one", safety: "safe", claimed_by: null,
       claimed_at: null, work_order: "" },
+    /* Typed major on the DVIR. Motive's word for how the driver filled
+       the form in — not a roadside inspector's order, which is what the
+       app used to turn it into. */
+    { id: "d3", state: "open", unit_number: "DT-870", category: "Brakes",
+      note: "Air leak", safety: "unsafe", claimed_by: null,
+      claimed_at: null, work_order: "" },
   ],
   /* A road call. job_location is the column that was missing. */
   tw_hours: [
@@ -122,6 +128,25 @@ ok("a shared job says so on the line", /DT-881 · Tires \(\+1\)/.test(t));
 ok("booked hours show", /2\.50 hr booked/.test(t));
 ok("nothing reads as idle", !/idle/i.test(t));
 ok("an unclaimed defect is not on anybody", !/DT-868/.test(t));
+
+/* The app does not call a truck out of service. It says what it has:
+   a defect the driver typed major. */
+ok("the board counts major defects", /UNITS WITH A MAJOR DEFECT/i.test(t));
+ok("nothing on the board says out of service", !/out of service/i.test(t));
+
+console.log("\n── the defect board ──");
+await page.getByRole("button", { name: "Defects", exact: true }).first().click();
+await page.waitForTimeout(1500);
+const dt = await page.locator("body").innerText();
+ok("the major write-up is badged as one", /Major defect/i.test(dt));
+ok("the defect board never says out of service", !/out of service/i.test(dt),
+  (dt.match(/.{0,50}out of service.{0,50}/i) || [""])[0]);
+/* One fact, one badge — the sync sets safety and severity from the
+   same bit, so a synced fault used to carry two saying the same thing. */
+ok("and not twice", (dt.match(/\bMajor\b/g) || []).length <= 2,
+  `${(dt.match(/\bMajor\b/g) || []).length} the word Major`);
+await page.getByRole("button", { name: "Now", exact: true }).first().click();
+await page.waitForTimeout(1500);
 
 console.log("\n── opening Dylan Barnes ──");
 await page.getByText("Dylan Barnes").first().click();

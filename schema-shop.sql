@@ -2260,7 +2260,7 @@ SELECT d.created_at AS at,
     d.vehicle_id,
     (COALESCE(NULLIF(d.category, ''::text), 'Defect'::text) ||
         CASE
-            WHEN (d.safety = 'unsafe'::text) THEN ' (out of service)'::text
+            WHEN (d.safety = 'unsafe'::text) THEN ' (major)'::text
             ELSE ''::text
         END) AS summary,
     COALESCE(d.created_by, d.source) AS who,

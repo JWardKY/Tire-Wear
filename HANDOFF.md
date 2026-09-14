@@ -1457,6 +1457,44 @@ and the plain dry run reports `partStatuses`, `partsError`, `wouldClose` and
 value appears there that nobody has thought about, it is visible before it decides
 anything.
 
+### The app does not call a truck out of service
+
+It used to. `tw_defects.safety` is `unsafe` when the Motive sync sees a DVIR defect
+typed **major**, and every screen turned that into the words "Out of service" — a red
+chip on the truck file, a board tile reading "Units out of service", a badge on the
+defect card, a filter.
+
+That is the app claiming a status it was never handed. "Out of service" means a
+roadside inspector's order and an OOS sticker. What we actually have is Motive's word
+for how a driver filled in a form. A printable truck file asserting the first from
+the second is wrong in a way that could matter.
+
+So nothing in the app says it any more. The same fact is shown as **major defect**,
+which is Motive's own term and the same information:
+
+| Where | Now says |
+|---|---|
+| Truck file chip | `MAJOR DEFECT` |
+| Truck file defect table | Major / Minor, under "How it was written up" |
+| Now board tile | `UNITS WITH A MAJOR DEFECT` |
+| Defect card badge | `Major defect` |
+| Defects filter, My jobs filter | `Major defect` |
+| `tw_work_history` summary | `Brakes (major)` |
+
+**Nothing about the behaviour changed.** A major write-up still sorts above
+everything else on the Open list, still colours red, and still drives the same
+counts — `nowData.boardNumbers` returns `majorDefects` and `truckRollup` returns
+`majorDefect`, both off the same `safety === "unsafe"` test. It is the wording that
+was wrong, not the priority.
+
+One duplication came out with it. The sync sets `severity` and `safety` from the same
+bit, so a synced fault carried a red "Out of service" badge and an orange "Major"
+badge side by side saying the same thing. The second now only appears on a
+hand-logged fault somebody marked major but still safe to run.
+
+If the shop ever does want to record a real out-of-service order, that is a new
+field with a date and who issued it — not this one.
+
 ### Telling Motive a defect was repaired
 
 The other direction, and the only place this app writes to somebody else's system

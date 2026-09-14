@@ -278,7 +278,8 @@ export default function HelpSection() {
         <p style={p}>
           Every fault a driver puts on their inspection in Motive lands here overnight.
           You do not have to enter it. The list is the whole fleet, so the filters at
-          the top matter: <B>Out of service</B> is the trucks that should not be moving.
+          the top matter: <B>Major defect</B> is the ones a driver typed as major on
+          their DVIR — the faults that come before everything else.
         </p>
         <Step n="1" head="Take it">
           <B>I'LL TAKE IT</B> puts your name on it so two people do not start the same
@@ -296,6 +297,13 @@ export default function HelpSection() {
         <Note>
           It works the other way too. If somebody clears the fault inside the Motive app
           instead, it drops off this board on the next sync. You never handle it twice.
+        </Note>
+        <Note tone="watch">
+          It does <B>not</B> say a truck is out of service. That phrase means a roadside
+          inspector's order, and nothing here is one — all the app knows is how the
+          driver typed the defect in Motive. A fault typed <B>major</B> still comes top
+          of the list and still colours red, because it is the one to do first. Whether
+          the truck rolls is a person's call, not the app's.
         </Note>
         <Note tone="watch">
           What this app does <B>not</B> do is sign the DVIR. A signature is a person's.
@@ -345,7 +353,7 @@ export default function HelpSection() {
           If two trucks match, the shorter number is offered first.
         </Step>
         <Step n="2" head="Read it top to bottom">
-          Across the top: the odometer, whether it is out of service, and the totals —
+          Across the top: the odometer, whether anything major is open on it, and the totals —
           hours booked to it, who has worked on it, services, defects repaired, parts,
           tires. Then <B>Right now</B> (open defects, open jobs, service due),{" "}
           <B>Mechanic time</B>, <B>Tires</B> on it and come off it, <B>Services</B>,{" "}

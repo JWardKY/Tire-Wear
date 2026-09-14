@@ -176,8 +176,8 @@ export default function NowSection({ who, tab, onBusy, supervisor, go }) {
             clock.length ? "See who" : null],
           ["Open defects", nums.openDefects, nums.openDefects > 0,
             nums.openDefects ? () => go?.("defects", "open") : null, "Open the list"],
-          ["Units out of service", nums.outOfService, nums.outOfService > 0,
-            nums.outOfService ? () => go?.("defects", "open", "unsafe") : null,
+          ["Units with a major defect", nums.majorDefects, nums.majorDefects > 0,
+            nums.majorDefects ? () => go?.("defects", "open", "unsafe") : null,
             "Just these"],
           ["Open over a week", nums.openOverAWeek, nums.openOverAWeek > 0,
             nums.openOverAWeek ? () => go?.("defects", "open", "stale") : null,
@@ -409,8 +409,8 @@ function OnClockDialog({ s, d, go, onClose }) {
               head={`${x.unit} · ${x.category}`}
               body={x.note}
               note={x.workOrder}
-              tone={x.unsafe ? C.pull : C.line}
-              tag={x.unsafe ? "out of service" : ""} />
+              tone={x.major ? C.pull : C.line}
+              tag={x.major ? "major defect" : ""} />
           ))}
       </Group>
 
