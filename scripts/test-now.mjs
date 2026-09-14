@@ -165,8 +165,8 @@ try {
   truthy(typeof n.onClock === "number", "the board numbers compute");
   truthy(n.openDefects >= 0, "open defects counted");
   truthy(n.roadPct >= 0 && n.roadPct <= 100, "the road-call share is a percentage");
-  truthy(n.outOfService <= n.openDefects,
-         "units out of service cannot exceed open defects");
+  truthy(n.majorDefects <= n.openDefects,
+         "units with a major defect cannot exceed open defects");
 } catch (e) {
   state.failed.push(`threw: ${e.message}`);
   console.log("  !!  threw: " + e.message);

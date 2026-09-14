@@ -195,7 +195,7 @@ export default function TruckFileSection({ onBusy }) {
 function Head({ f, roll }) {
   const u = f.unit;
   const chips = [];
-  if (roll.outOfService) chips.push(["Out of service", C.pull]);
+  if (roll.majorDefect) chips.push(["Major defect", C.pull]);
   if (roll.openDefects) chips.push([`${roll.openDefects} open defect${roll.openDefects === 1 ? "" : "s"}`, C.watch]);
   if (roll.openOrders) chips.push([`${roll.openOrders} job${roll.openOrders === 1 ? "" : "s"} open`, C.watch]);
   if (roll.pmOver) chips.push([`${roll.pmOver} service over`, C.pull]);
@@ -315,7 +315,7 @@ function RightNow({ f, roll }) {
           {open.length > 0 && (
             <>
               <SectionLabel>Open defects</SectionLabel>
-              <Table head={["Reported", "What", "Safety", "Written up by", "Times", "Job"]}
+              <Table head={["Reported", "What", "How it was written up", "By", "Times", "Job"]}
                 right={[4]} min={680}>
                 {open.map((d) => (
                   <Row key={d.id}>
@@ -326,8 +326,8 @@ function RightNow({ f, roll }) {
                     </td>
                     <td style={td}>
                       {d.safety === "unsafe"
-                        ? <b style={{ color: C.pull }}>Out of service</b>
-                        : <span style={{ color: C.muted }}>Safe to run</span>}
+                        ? <b style={{ color: C.pull }}>Major</b>
+                        : <span style={{ color: C.muted }}>Minor</span>}
                     </td>
                     <td style={{ ...td, color: C.muted }}>{d.driver || d.source || "—"}</td>
                     <td style={{ ...td, ...tdNum }}>{d.count || 1}</td>

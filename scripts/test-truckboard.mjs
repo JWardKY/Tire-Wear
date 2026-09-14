@@ -240,7 +240,11 @@ ok("no rejected reads", rest400.length === 0, rest400.join("\n    "));
 ok("nothing was written", writes.length === 0, JSON.stringify(writes.slice(0, 2)));
 ok("the truck is named", /Mack Granite 2019/.test(t));
 ok("the odometer is there", /412,350 mi/.test(t));
-ok("it says the truck is out of service", /OUT OF SERVICE/i.test(t));
+/* Motive typing a DVIR defect "major" is not a roadside inspector's
+   order, and the app used to turn one into the other. It says what it
+   has instead. */
+ok("it says a major defect is open", /MAJOR DEFECT/i.test(t));
+ok("it does not call the truck out of service", !/out of service/i.test(t));
 /* h1 3.5 + h2 2 + h3 4.25 + h4 1.25 = 11.00, and NOT the 8 hours
    booked to DT-864. */
 ok("the labour total is this truck's only", /11\.00/.test(t), "wanted 11.00 hours");
@@ -309,10 +313,11 @@ ok("the hours narrow", /4\.25/.test(t));
 ok("…and August's drop out", !/Replaced marker light/.test(t));
 /* The whole reason this is asserted: a range must never make a tire or
    an open defect disappear. That reading sends somebody out on an
-   unsafe truck. */
+   truck with a major fault on it. */
 ok("the tire is still on it", /Continental/.test(t));
 ok("the open defect is still open", /Chamber leaking air/.test(t));
-ok("it still says out of service", /OUT OF SERVICE/i.test(t));
+ok("it still says a major defect is open", /MAJOR DEFECT/i.test(t));
+ok("…and still does not say out of service", !/out of service/i.test(t));
 ok("the service still reads as over", /Over/.test(t));
 ok("still no rejected reads", rest400.length === 0, rest400.join("\n    "));
 ok("still nothing written", writes.length === 0);

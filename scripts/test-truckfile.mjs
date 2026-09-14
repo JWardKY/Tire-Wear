@@ -136,7 +136,7 @@ eq("…and the money follows the quantity", all.partsCost, 393);
 
 eq("services done", all.servicesDone, 2);
 eq("defects still open", all.openDefects, 2);
-ok("out of service, because one of them is", all.outOfService);
+ok("a major defect is open, because one of them is", all.majorDefect);
 eq("defects repaired", all.repairedDefects, 2);
 eq("jobs still open", all.openOrders, 1);
 eq("jobs finished", all.doneOrders, 2);
@@ -160,10 +160,10 @@ eq("one job finished in August", aug.doneOrders, 1);
 
 /* What is ON the truck is not a date question. A range must never make
    a tire disappear or an open defect look closed — that is the reading
-   that sends somebody out on an unsafe unit. */
+   that sends somebody out on a truck with a major fault on it. */
 eq("tires on it ignore the range", aug.tiresOn, all.tiresOn);
 eq("open defects ignore the range", aug.openDefects, all.openDefects);
-ok("out of service ignores the range", aug.outOfService);
+ok("the major defect ignores the range", aug.majorDefect);
 eq("open jobs ignore the range", aug.openOrders, all.openOrders);
 eq("service due ignores the range", aug.pmOver, all.pmOver);
 
@@ -179,7 +179,7 @@ const none = rollUp({ unit: U("DT-999"), meter: {}, hours: [], parts: [], servic
 eq("no hours", none.labourHours, 0);
 eq("no mechanics", none.mechanics.length, 0);
 eq("no money", none.partsCost, 0);
-ok("and it is not out of service", !none.outOfService);
+ok("and nothing major is open on it", !none.majorDefect);
 
 console.log(failed ? `\n${failed} failed\n` : "\nAll good\n");
 process.exit(failed ? 1 : 0);
