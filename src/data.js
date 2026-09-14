@@ -157,6 +157,40 @@ const tireRow = (vehicleId, t, who) => ({
   created_by: who,
 });
 
+/* Correcting a tire that is already on a truck.
+   ─────────────────────────────────────────────────────────────────
+   Everything about a tire was fixed at the moment it was mounted, and a
+   typo in the brand, the size or the mount odometer was permanent —
+   there is no delete, so "Michelin vdn2" stayed "Michelin vdn2" and a
+   mis-keyed position stayed on the wrong wheel for the life of the
+   casing.
+
+   The mount figures are not cosmetic. mounted_odometer and
+   mounted_depth are the first point tw_tire_wear measures from, so
+   changing them changes the wear rate, the estimated miles left and the
+   cost per mile. The screen says so; this just writes it.
+
+   vehicle_id is deliberately NOT editable. Moving a tire to a different
+   truck is a pull and a mount, with the miles landing on the right
+   truck either side — not one row quietly changing hands. */
+export async function updateTire(tireId, t) {
+  check(
+    await supabase.from("tw_tires").update({
+      position: t.pos,
+      brand: t.brand || null,
+      model: t.model || null,
+      size: t.size || null,
+      tire_type: t.type,
+      wheel_material: t.wheel || null,
+      casing_id: t.casing || null,
+      mounted_date: t.onDate,
+      mounted_odometer: t.onOdo,
+      mounted_depth: t.newDepth,
+      cost: t.cost,
+    }).eq("id", tireId)
+  );
+}
+
 export async function mountTire(vehicleId, t, who) {
   check(await supabase.from("tw_tires").insert(tireRow(vehicleId, t, who)));
 }

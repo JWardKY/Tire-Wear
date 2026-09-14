@@ -22,6 +22,7 @@ const SECTIONS = [
   ["missed", "Forgot to punch"],
   ["defects", "Defects"],
   ["orders", "Work orders"],
+  ["tireedit", "Fixing a tire you keyed wrong"],
   ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
   ["tires", "Tires"],
@@ -339,6 +340,35 @@ export default function HelpSection() {
         <Note>
           Closing a work order is paperwork. It does not mark the truck repaired — that
           is the mechanic's statement, and it lives on the Defects tab.
+        </Note>
+      </Block>
+
+      <Block id="tireedit" title="Fixing a tire you keyed wrong">
+        <p style={p}>
+          Everything about a tire is set when it goes on — brand, model, size, the
+          wheel it is on, the odometer and tread it started at. Get one wrong and it
+          used to stay wrong: there is no delete, so a typo lived as long as the tire.
+        </p>
+        <Step n="1" head="Open the tire and press EDIT THESE DETAILS">
+          Tap the tire on the diagram or its position in the table. The link is at the
+          top right of the window that opens.
+        </Step>
+        <Step n="2" head="Change what is wrong, save">
+          Brand, model, size, virgin or retread, wheel material, casing number, cost —
+          and the wheel position, for a tire keyed onto the wrong one. Only free wheels
+          on that truck are offered.
+        </Step>
+        <Note tone="watch">
+          The three boxes under <B>When it went on</B> are not cosmetic. The mount
+          odometer and mount tread are the first point the wear is measured from, so
+          changing them changes the miles per 32nd, the miles left and the cost per
+          mile. The screen tells you when you touch them.
+        </Note>
+        <Note>
+          This corrects the <i>record</i>. Two things it is not for. Taking the tire off
+          the truck is <B>PULL THIS TIRE OFF</B>. Putting it on a different truck is a
+          pull and then a mount, so the miles land on the right one — the same goes for
+          a rotation.
         </Note>
       </Block>
 
