@@ -22,6 +22,7 @@ const SECTIONS = [
   ["missed", "Forgot to punch"],
   ["defects", "Defects"],
   ["orders", "Work orders"],
+  ["truck", "One truck's file"],
   ["tires", "Tires"],
   ["parts", "Parts"],
   ["stuck", "If you get stuck"],
@@ -329,6 +330,43 @@ export default function HelpSection() {
         <Note>
           Closing a work order is paperwork. It does not mark the truck repaired — that
           is the mechanic's statement, and it lives on the Defects tab.
+        </Note>
+      </Block>
+
+      <Block id="truck" title="One truck's file — everything about a unit">
+        <p style={p}>
+          <B>TRUCK FILE</B> answers the question that used to mean opening five tabs:
+          what has been done to this thing. Type a truck number and the whole file comes
+          up on one page.
+        </p>
+        <Step n="1" head="Type the number">
+          Any part of it. <Mono>881</Mono> finds DT-881, and so do <Mono>dt881</Mono> and{" "}
+          <Mono>DT 881</Mono> — you do not have to remember whether it is a DT or an HT.
+          If two trucks match, the shorter number is offered first.
+        </Step>
+        <Step n="2" head="Read it top to bottom">
+          Across the top: the odometer, whether it is out of service, and the totals —
+          hours booked to it, who has worked on it, services, defects repaired, parts,
+          tires. Then <B>Right now</B> (open defects, open jobs, service due),{" "}
+          <B>Mechanic time</B>, <B>Tires</B> on it and come off it, <B>Services</B>,{" "}
+          <B>Parts</B>, and <B>Everything</B> in the order it happened.
+        </Step>
+        <Step n="3" head="Narrow it to a period, or print it">
+          <B>From</B> and <B>To</B> narrow the hours, parts, services and the timeline —
+          useful for "what did this truck cost us last quarter". <B>PRINT</B> gives the
+          file as a sheet; <B>CSV</B> gives the lot as one spreadsheet, every section
+          under its own heading.
+        </Step>
+        <Note>
+          The dates never touch what is on the truck <i>now</i>. Tires, open defects and
+          service due are always current, whatever range is set — a filter that could
+          hide an out-of-service defect is a filter that sends somebody out on a bad
+          truck.
+        </Note>
+        <Note tone="watch">
+          Nothing on this page changes anything. It is a report. Fixing what it shows you
+          is done where the thing lives — the defect on Defects, the hours on a timecard,
+          the tire under Tires.
         </Note>
       </Block>
 

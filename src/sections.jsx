@@ -4,6 +4,7 @@ import DefectsSection from "./DefectsSection.jsx";
 import PmSection from "./PmSection.jsx";
 import TimecardSection from "./TimecardSection.jsx";
 import InventorySection from "./InventorySection.jsx";
+import TruckFileSection from "./TruckFileSection.jsx";
 import WorkSection from "./WorkSection.jsx";
 import SupervisorSection from "./SupervisorSection.jsx";
 import HelpSection from "./HelpSection.jsx";
@@ -85,6 +86,12 @@ export const SECTIONS = [
       ["settings", "Settings"],
     ],
     Component: TiresSection,
+  },
+  {
+    key: "truck",
+    label: "Truck file",
+    blurb: "Everything the shop knows about one unit — type a truck number",
+    Component: TruckFileSection,
   },
   {
     key: "inventory",

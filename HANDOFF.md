@@ -1051,6 +1051,53 @@ ever changes: it ran at the edge and withheld the bundle itself, which is the on
 a password in front of a static site means anything. It was the wrong shape here
 because it locked out the people who most need to get in.
 
+### One truck's file
+
+Every other screen is organised around a job — the clock, the defect board, the
+parts shelf. **Truck file** is the one organised around a truck, and it exists
+because "what has been done to DT-881" meant opening five tabs and holding the
+answer in your head.
+
+Type any part of a number. `881`, `dt881` and `DT 881` all find DT-881, and a bare
+number matches on the digits so nobody has to remember whether it is a DT or an HT.
+Where two match, the shorter number is offered first — in this fleet's numbering the
+truck whose digits ARE what was typed is always the shortest match, which is why
+there is no separate "exact first" rule. There was one; it agreed with length in
+every case and decided none of them, so it came back out.
+
+`src/truckRollup.js` is the pure half — the lookup and the totals — with no database
+import, so the figures somebody quotes in a meeting are checkable without a browser
+or a key. `rollUp` backs the screen **and** the CSV: a file that shows one total and
+exports another is worse than one that shows nothing.
+
+**Two reads for the same thing.** A row can name a truck two ways: `vehicle_id` is
+the roster match, `unit_number` (or `unit_label`, or the view's `unit`) is what
+somebody typed. Most rows carry both, but a defect synced for a unit Motive knows
+and the roster does not has only the text, and an hour booked against a rental has
+only the label. Reading on one of them drops the other, and the point of a file is
+that it is complete — so defects, work orders and hours are read twice and merged on
+the row id. Two plain reads and a join in memory, rather than an `or` filter a
+test's fake database would quietly ignore.
+
+**The date range never touches current state.** From/To narrow the hours, parts,
+services and the timeline. Tires on it, open defects and service due are always
+current, whatever is set. A filter that could hide an out-of-service defect is a
+filter that sends somebody out on a bad truck, and the browser test asserts it in
+both directions.
+
+**Nothing on the page writes**, and the browser test asserts that too — every
+request the fake database sees is a read. Fixing what the file shows you is done
+where the thing lives: the defect on Defects, the hours on a timecard, the tire
+under Tires.
+
+Two things worth knowing if this grows. The header counts and the Parts table filter
+separately — one in `rollUp`, one in the component — so both are asserted, or a
+header could count the shelf's 40 gallons of oil as parts put on the truck. And some
+of what lands here is a date column and some a timestamp; everything goes through
+one `day()` helper, because handing `fmtDate` a timestamp printed
+`09/11T08:00:00Z/26`, which reads as a rendering glitch rather than a bug and
+survived being looked at.
+
 ### This is a shop system now, and tires are one section of it
 
 The Haul Division shop foreman asked for the site to carry the rest of the
@@ -1171,6 +1218,11 @@ none, because somebody follows it.
 | `src/shiftMath.js` | A typed "HH:MM" into a punch, and the answers it refuses. Pure |
 | `scripts/test-punch.mjs` | The punch arithmetic, in the shop's timezone. No key needed |
 | `scripts/test-punchboard.mjs` | Fixing a missed punch in a real browser. Needs the app served |
+| `src/truckRollup.js` | Finding a unit, and adding its file up. Pure |
+| `src/truckFile.js` | The twelve reads behind one truck's file |
+| `src/TruckFileSection.jsx` | The page itself — a report, it never writes |
+| `scripts/test-truckfile.mjs` | The lookup and the totals. No key needed |
+| `scripts/test-truckboard.mjs` | The truck file in a real browser. Needs the app served |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
