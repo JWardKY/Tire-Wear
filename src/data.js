@@ -74,6 +74,7 @@ const toSettings = (r) => ({
   pullSteer: Number(r.pull_steer_32nds),
   pullOther: Number(r.pull_other_32nds),
   newDepth: Number(r.default_new_depth),
+  dualMatch: Number(r.dual_match_32nds),
   alertEmails: r.alert_emails || [],
 });
 
@@ -120,7 +121,7 @@ export async function loadAll() {
     brands: brandRows.filter((b) => b.active).map((b) => b.name),
     settings: setRows.length
       ? toSettings(setRows[0])
-      : { pullSteer: 6, pullOther: 4, newDepth: 28, alertEmails: [] },
+      : { pullSteer: 6, pullOther: 4, newDepth: 28, dualMatch: 4, alertEmails: [] },
   };
 }
 
@@ -267,6 +268,7 @@ export async function updateSettings(patch) {
   if (patch.pullSteer != null) cols.pull_steer_32nds = patch.pullSteer;
   if (patch.pullOther != null) cols.pull_other_32nds = patch.pullOther;
   if (patch.newDepth != null) cols.default_new_depth = patch.newDepth;
+  if (patch.dualMatch != null) cols.dual_match_32nds = patch.dualMatch;
   if (patch.alertEmails != null) cols.alert_emails = patch.alertEmails;
   cols.updated_at = new Date().toISOString();
   check(await supabase.from("tw_settings").update(cols).eq("id", true));

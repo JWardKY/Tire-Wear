@@ -1223,6 +1223,9 @@ none, because somebody follows it.
 | `src/TruckFileSection.jsx` | The page itself — a report, it never writes |
 | `scripts/test-truckfile.mjs` | The lookup and the totals. No key needed |
 | `scripts/test-truckboard.mjs` | The truck file in a real browser. Needs the app served |
+| `src/dualMatch.js` | Duals that do not match. Pure |
+| `scripts/test-duals.mjs` | The pairing and the threshold. No key needed |
+| `scripts/test-dualboard.mjs` | Mismatched duals on the Tires screen. Needs the app served |
 
 To allow another email domain, add it to `ALLOWED_DOMAINS` at the top of
 `src/identity.js`. That is the only place it is written down.
@@ -1837,6 +1840,48 @@ Projected life to pull:
 ```
 est. miles remaining  =  (current depth − pull depth) × miles per 32nd
 ```
+
+### Duals that do not match
+
+Two tires on the same end of an axle carry the load together, and they only share it
+if they are close to the same size. Put a 27/32 beside a 15/32 and the deep one takes
+the weight, runs hot and scrubs — so the shop buys two tires instead of none. DT-881's
+4R end was exactly that and nothing on the screen said so.
+
+`src/dualMatch.js` is the whole rule, with no database import. `wheelsFrom` reads the
+positions, `dualPairs` finds the ends that have both an inner and an outer, and
+`dualMismatches` compares the two depths against `tw_settings.dual_match_32nds`.
+
+It is shown in four places, all off the same function: the **Needs attention** list and
+the left rail on Tires → Fleet, an orange banner above the truck diagram with both
+wheels ringed, a per-row note in the wheel positions table, and **Right now** on the
+truck file.
+
+Four things it deliberately does NOT do, each of which turns a useful flag into one
+people scroll past:
+
+- **Pair anything that is not beside something.** Steers and super singles have no
+  partner. 4LO and 4RO are ten feet apart and have no reason to match. A super single
+  and an inner recorded on the same end is contradictory data, not a pair.
+- **Flag a half-measured truck.** A pair with one reading is skipped. There is nothing
+  to compare it to, and a flag that fires on every truck somebody started measuring is
+  one nobody looks at. Zero *is* a reading — a tire worn to nothing beside a new one is
+  the worst case there is.
+- **Fire at exactly the limit.** The rule is *more than* 4/32, and the gap is rounded
+  to a tenth before it is compared so 12.000000000000002 does not read as wider than 12.
+- **Read the axle config.** The config says what the truck is supposed to have; the
+  positions say what is actually mounted. A pair on a wheel the config does not know
+  about is still a pair on the truck.
+
+The threshold is a setting beside the pull depths, not a constant, because it is the
+kind of figure a shop argues about. Zero means "flag any difference at all". The truck
+file reads it from the database rather than defaulting, or the two screens would
+quietly disagree the moment somebody changed it.
+
+**Not in the tire alert email.** The alert path dedupes per tire through
+`tw_tire_alerts.tire_id`, and a pair is not a tire — putting mismatches through it
+would either need a second dedupe key or send the same pair every Monday. Worth doing,
+worth doing on purpose.
 
 ### Pull thresholds
 

@@ -42,7 +42,29 @@ const rows = {
     { vehicle_id: V, truck: "DT-881", current_odometer: 412350,
       odometer_date: "2026-09-01", odometer_source: "motive" },
   ],
+  /* 4RI at 27/32 beside 4RO at 15/32 — the pair that started this. */
+  tw_active_tires: [
+    { tire_id: "t3", vehicle_id: V, position: "4RI", current_depth: 27, pull_depth: 4,
+      miles_run: 30000, miles_per_32nd: 12000, est_miles_remaining: 200000 },
+    { tire_id: "t4", vehicle_id: V, position: "4RO", current_depth: 15, pull_depth: 4,
+      miles_run: 30000, miles_per_32nd: 6000, est_miles_remaining: 60000 },
+    { tire_id: "t1", vehicle_id: V, position: "1L", current_depth: 22, pull_depth: 6,
+      miles_run: 32000, miles_per_32nd: 5000, est_miles_remaining: 80000 },
+  ],
+  tw_settings: [{ id: true, pull_steer_32nds: 6, pull_other_32nds: 4,
+    default_new_depth: 28, dual_match_32nds: 4, alert_emails: [],
+    updated_at: "2026-01-01" }],
   tw_tires: [
+    { id: "t3", vehicle_id: V, position: "4RI", brand: "Continental", model: null,
+      size: "11R24.5", tire_type: "virgin", wheel_material: null, casing_id: null,
+      mounted_date: "2026-01-02", mounted_odometer: 382000, mounted_depth: 28,
+      cost: 410, removed_date: null, removed_odometer: null, removed_reason: null,
+      notes: null, created_by: null, created_at: "2026-01-02" },
+    { id: "t4", vehicle_id: V, position: "4RO", brand: "Continental", model: null,
+      size: "11R24.5", tire_type: "retread", wheel_material: null, casing_id: null,
+      mounted_date: "2026-01-02", mounted_odometer: 382000, mounted_depth: 22,
+      cost: 260, removed_date: null, removed_odometer: null, removed_reason: null,
+      notes: null, created_by: null, created_at: "2026-01-02" },
     { id: "t1", vehicle_id: V, position: "1L", brand: "Continental", model: "HSR",
       size: "425/65R22.5", tire_type: "virgin", wheel_material: "aluminum",
       casing_id: null, mounted_date: "2026-02-01", mounted_odometer: 380000,
@@ -188,7 +210,7 @@ const rows = {
       work_order: null, hours: 2.5, source_id: "c1" },
   ],
   tw_mechanics: [], tw_tread_readings: [], tw_tire_wear: [], tw_tire_brands: [],
-  tw_settings: [], tw_cost_codes: [], tw_part_requests: [],
+  tw_cost_codes: [], tw_part_requests: [],
 };
 
 try {
@@ -249,7 +271,10 @@ ok("it does not call the truck out of service", !/out of service/i.test(t));
    booked to DT-864. */
 ok("the labour total is this truck's only", /11\.00/.test(t), "wanted 11.00 hours");
 ok("both mechanics are counted", /MECHANICS ON IT\s*2/i.test(t));
-ok("the tires are counted", /TIRES ON IT\s*1/i.test(t));
+ok("the tires are counted", /TIRES ON IT\s*3/i.test(t));
+/* Two tires on one end of an axle only share the load if they are
+   close to the same size. 4RI at 27 beside 4RO at 15 is not. */
+ok("the mismatched pair is chipped up top", /1 MISMATCHED DUAL/i.test(t));
 /* The header and the Parts table filter separately — one in rollUp,
    one in the component — so they are asserted separately. A header
    that counts the 40 gallons of oil the shelf took in as parts put on
@@ -274,6 +299,13 @@ ok("…with why it is stuck", /Waiting: Waiting on parts/.test(t));
 ok("the service that is over shows", /A service/.test(t) && /Over/.test(t));
 ok("a service that is fine does not", !/Greasing[\s\S]{0,80}Due soon/.test(t));
 
+ok("the pair is named in Right now", /Duals that do not match/i.test(t));
+ok("…with the end and the gap", /4R[\s\S]{0,40}12\/32 apart/.test(t),
+  (t.match(/DUALS THAT DO NOT MATCH[\s\S]{0,120}/i) || ["no block"])[0]);
+ok("…and which wheel is which",
+  /4RO at 15\/32 beside 4RI at 27\/32/.test(t));
+ok("…and why it matters", /deeper tire carries the load/i.test(t));
+
 console.log("\n── mechanic time ──");
 ok("both mechanics are listed", /Dylan Barnes/.test(t) && /Will Strong/.test(t));
 ok("the road call says where", /Danville yard/.test(t));
@@ -283,6 +315,8 @@ ok("the unmatched-label entry is here", /Swapped a recap/.test(t));
 
 console.log("\n── tires, services, parts ──");
 ok("the mounted tire is on", /Continental/.test(t));
+ok("the tires card shows current tread", /27\/32/.test(t) && /15\/32/.test(t));
+ok("…and marks the wheel that is off its pair", /12\/32 off its pair/.test(t));
 ok("the note on it carries", /Sidewall plug/.test(t));
 ok("the pulled tire is listed", /Bridgestone/.test(t) && /Worn out/.test(t));
 ok("…with the miles it ran", /86,000/.test(t), "386000 - 300000");
@@ -319,6 +353,8 @@ ok("the open defect is still open", /Chamber leaking air/.test(t));
 ok("it still says a major defect is open", /MAJOR DEFECT/i.test(t));
 ok("…and still does not say out of service", !/out of service/i.test(t));
 ok("the service still reads as over", /Over/.test(t));
+/* What is mounted is not a date question. */
+ok("the mismatched pair is still flagged", /1 MISMATCHED DUAL/i.test(t));
 ok("still no rejected reads", rest400.length === 0, rest400.join("\n    "));
 ok("still nothing written", writes.length === 0);
 
@@ -334,6 +370,7 @@ ok("the other truck's file opens", /DT-864/.test(t));
 ok("…with its own hours", /Not this truck/.test(t));
 ok("…and none of DT-881's", !/Chamber leaking air/.test(t));
 ok("a truck with no tires says so", /No tires entered for this unit/.test(t));
+ok("…and no pair is invented for it", !/mismatched dual/i.test(t));
 
 console.log("\npage errors:", errors.length ? errors : "none");
 bad += errors.length;

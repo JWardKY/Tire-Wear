@@ -58,14 +58,22 @@ export async function listUnits() {
 export async function truckFile(unit) {
   const id = unit.id, num_ = unit.num;
 
-  const [meter, tires, defects, orders, pmDue, completions, programs,
-         hours, partTxns, odos, history] = await Promise.all([
+  const [meter, tires, live, defects, orders, pmDue, completions, programs,
+         hours, partTxns, odos, history, settings] = await Promise.all([
     supabase.from("tw_vehicle_meter")
       .select("vehicle_id,truck,current_odometer,odometer_date,odometer_source")
       .eq("vehicle_id", id).maybeSingle(),
 
     supabase.from("tw_tires").select("*").eq("vehicle_id", id)
       .order("mounted_date", { ascending: false }),
+
+    /* Current tread, which tw_tires does not carry — it is the last
+       reading, and the view already works it out. Without it the tires
+       card could say what is mounted but not how worn it is, which is
+       most of what somebody opens a truck's file to find out. */
+    supabase.from("tw_active_tires")
+      .select("tire_id,position,current_depth,pull_depth,miles_run,miles_per_32nd,est_miles_remaining")
+      .eq("vehicle_id", id),
 
     by("tw_defects", "*", { col: "first_reported", asc: false },
        id, "unit_number", num_),
@@ -95,10 +103,19 @@ export async function truckFile(unit) {
 
     supabase.from("tw_work_history").select("*")
       .eq("unit", num_).order("at", { ascending: false }).limit(1000),
+
+    /* The shop's own thresholds. Read here rather than defaulted in the
+       roll-up, or this page and the Tires page would quietly disagree
+       the moment somebody changed one. */
+    supabase.from("tw_settings")
+      .select("pull_steer_32nds,pull_other_32nds,dual_match_32nds").maybeSingle(),
   ]);
 
-  for (const r of [meter, tires, pmDue, completions, programs, partTxns, odos, history])
+  for (const r of [meter, tires, live, pmDue, completions, programs, partTxns, odos,
+                   history, settings])
     if (r.error) throw r.error;
+
+  const nowOn = new Map(check(live).map((t) => [t.tire_id, t]));
 
   /* Parts are named on tw_parts, and a transaction is useless without
      the number — read them in one go rather than per line. */
@@ -112,6 +129,10 @@ export async function truckFile(unit) {
 
   return {
     unit,
+    settings: {
+      dualMatch: settings.data?.dual_match_32nds == null
+        ? undefined : Number(settings.data.dual_match_32nds),
+    },
     meter: meter.data
       ? { odo: num(meter.data.current_odometer), date: meter.data.odometer_date,
           source: meter.data.odometer_source }
@@ -125,6 +146,9 @@ export async function truckFile(unit) {
       offDate: t.removed_date, offOdo: num(t.removed_odometer),
       offReason: t.removed_reason || "",
       on: !t.removed_date,
+      depth: num(nowOn.get(t.id)?.current_depth),
+      pullAt: num(nowOn.get(t.id)?.pull_depth),
+      milesPer32: num(nowOn.get(t.id)?.miles_per_32nd),
       miles: t.removed_odometer != null && t.mounted_odometer != null
         ? num(t.removed_odometer) - num(t.mounted_odometer) : null,
     })),

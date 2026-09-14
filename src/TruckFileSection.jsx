@@ -79,7 +79,9 @@ export default function TruckFileSection({ onBusy }) {
 
   const clear = () => { setPicked(null); setF(null); setTyped(""); box.current?.focus(); };
 
-  const roll = useMemo(() => (f ? rollUp(f, { from, to }) : null), [f, from, to]);
+  const roll = useMemo(
+    () => (f ? rollUp(f, { from, to, dualMatch: f.settings?.dualMatch }) : null),
+    [f, from, to]);
 
   const jump = (id) => document
     .getElementById(`truck-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -200,6 +202,8 @@ function Head({ f, roll }) {
   if (roll.openOrders) chips.push([`${roll.openOrders} job${roll.openOrders === 1 ? "" : "s"} open`, C.watch]);
   if (roll.pmOver) chips.push([`${roll.pmOver} service over`, C.pull]);
   if (roll.pmSoon) chips.push([`${roll.pmSoon} service due soon`, C.watch]);
+  if (roll.mismatchedPairs.length)
+    chips.push([`${roll.mismatchedPairs.length} mismatched dual${roll.mismatchedPairs.length === 1 ? "" : "s"}`, C.watch]);
   if (!u.active) chips.push(["Off the roster", C.muted]);
   if (!chips.length) chips.push(["Nothing outstanding", C.good]);
 
@@ -304,11 +308,12 @@ function RightNow({ f, roll }) {
   const open = f.defects.filter((d) => d.state !== "repaired");
   const jobs = f.orders.filter((w) => w.state !== "done");
   const due = f.pmDue.filter((p) => p.level === "over" || p.level === "soon");
+  const odd = roll.mismatchedPairs;
 
   return (
     <Card id="now" title="Right now"
       note="Current state, whatever dates are set above">
-      {!open.length && !jobs.length && !due.length ? (
+      {!open.length && !jobs.length && !due.length && !odd.length ? (
         <Empty>Nothing outstanding. No open defects, no open jobs, nothing due.</Empty>
       ) : (
         <>
@@ -362,6 +367,28 @@ function RightNow({ f, roll }) {
                   </Row>
                 ))}
               </Table>
+            </>
+          )}
+
+          {odd.length > 0 && (
+            <>
+              <SectionLabel>Duals that do not match</SectionLabel>
+              <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.7, marginBottom: 4 }}>
+                {odd.map((m) => (
+                  <div key={m.end}>
+                    <span style={{ fontFamily: FM, fontWeight: 700 }}>{m.end}</span>
+                    {" — "}
+                    <span style={{ fontWeight: 700, color: C.pull }}>{m.diff}/32 apart</span>
+                    <span style={{ color: C.muted }}>
+                      {" · "}{m.shallower} at {m.shallowest}/32 beside{" "}
+                      {m.deeper} at {m.deepest}/32
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize: 12, color: C.muted, margin: "0 0 4px", lineHeight: 1.5 }}>
+                The deeper tire carries the load, runs hot and scrubs, and both come off early.
+              </p>
             </>
           )}
 
@@ -485,6 +512,11 @@ function Tires({ f, roll }) {
   const on = f.tires.filter((t) => t.on)
     .sort((a, b) => String(a.pos).localeCompare(String(b.pos)));
   const off = f.tires.filter((t) => !t.on);
+  const oddAt = new Map();
+  for (const m of roll.mismatchedPairs) {
+    oddAt.set(m.inner, m);
+    oddAt.set(m.outer, m);
+  }
 
   return (
     <Card id="tires" title="Tires"
@@ -497,17 +529,27 @@ function Tires({ f, roll }) {
           {on.length === 0 ? (
             <Empty>Nothing mounted.</Empty>
           ) : (
-            <Table head={["Pos", "Brand / model", "Size", "Type", "Mounted", "At", "New tread", "Note"]}
-              right={[5, 6]} min={760}>
+            <Table head={["Pos", "Brand / model", "Size", "Type", "Tread", "Mounted", "At", "Note"]}
+              right={[4, 6]} min={780}>
               {on.map((t) => (
                 <Row key={t.id}>
                   <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{t.pos}</td>
                   <td style={td}>{[t.brand || "Unbranded", t.model].filter(Boolean).join(" ")}</td>
                   <td style={{ ...td, color: C.muted }}>{t.size || "—"}</td>
                   <td style={{ ...td, color: C.muted }}>{t.type === "retread" ? "Retread" : "Virgin"}</td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 600,
+                    color: t.depth != null && t.pullAt != null && t.depth <= t.pullAt
+                      ? C.pull : C.ink }}>
+                    {t.depth == null ? "—" : `${t.depth}/32`}
+                    {oddAt.has(String(t.pos).toUpperCase()) && (
+                      <div style={{ fontSize: 11.5, fontWeight: 600, color: C.watch,
+                        whiteSpace: "nowrap" }}>
+                        {oddAt.get(String(t.pos).toUpperCase()).diff}/32 off its pair
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>{day(t.onDate)}</td>
                   <td style={{ ...td, ...tdNum, color: C.muted }}>{t.onOdo == null ? "—" : nf(t.onOdo)}</td>
-                  <td style={{ ...td, ...tdNum }}>{t.newDepth == null ? "—" : `${t.newDepth}/32`}</td>
                   <td style={{ ...td, fontSize: 12.5, color: C.watch }}>{t.notes || ""}</td>
                 </Row>
               ))}

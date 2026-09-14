@@ -102,9 +102,15 @@ const FILE = {
     { id: "w2", state: "done", completedAt: "2026-08-05T10:00:00Z" },
     { id: "w3", state: "done", completedAt: "2026-02-05T10:00:00Z" },
   ],
+  /* 4R is twelve 32nds apart — the pair that started this. 4L is two
+     apart, which is fine. The pulled tire has no depth and must not
+     drag anything into the check. */
   tires: [
-    { id: "t1", on: true, cost: 520 }, { id: "t2", on: true, cost: 520 },
-    { id: "t3", on: false, cost: 480 },
+    { id: "t1", on: true, cost: 520, pos: "4RI", depth: 27 },
+    { id: "t2", on: true, cost: 520, pos: "4RO", depth: 15 },
+    { id: "t4", on: true, cost: 520, pos: "4LI", depth: 24 },
+    { id: "t5", on: true, cost: 520, pos: "4LO", depth: 22 },
+    { id: "t3", on: false, cost: 480, pos: "3RI", depth: null },
   ],
   pmDue: [
     { programId: "g1", level: "over" }, { programId: "g2", level: "soon" },
@@ -140,10 +146,19 @@ ok("a major defect is open, because one of them is", all.majorDefect);
 eq("defects repaired", all.repairedDefects, 2);
 eq("jobs still open", all.openOrders, 1);
 eq("jobs finished", all.doneOrders, 2);
-eq("tires on it", all.tiresOn, 2);
+eq("tires on it", all.tiresOn, 4);
 eq("tires it has eaten", all.tiresOff, 1);
-eq("rubber recorded", all.tireSpend, 1520);
+eq("rubber recorded", all.tireSpend, 2560);
 eq("services over", all.pmOver, 1);
+
+/* The pair that started this: 4RI at 27/32 beside 4RO at 15/32. */
+eq("the mismatched pair is found", all.mismatchedPairs.length, 1);
+eq("…and it is the right end", all.mismatchedPairs[0].end, "4R");
+eq("…by the right amount", all.mismatchedPairs[0].diff, 12);
+eq("the pair within spec is not flagged",
+  all.mismatchedPairs.filter((m) => m.end === "4L").length, 0);
+eq("a tighter limit catches the other pair too",
+  rollUp(FILE, { dualMatch: 1 }).mismatchedPairs.length, 2);
 eq("services due soon", all.pmSoon, 1);
 
 console.log("\nThe same file, narrowed to a range");
@@ -166,6 +181,9 @@ eq("open defects ignore the range", aug.openDefects, all.openDefects);
 ok("the major defect ignores the range", aug.majorDefect);
 eq("open jobs ignore the range", aug.openOrders, all.openOrders);
 eq("service due ignores the range", aug.pmOver, all.pmOver);
+/* What is mounted is not a date question either. */
+eq("mismatched duals ignore the range",
+  aug.mismatchedPairs.length, all.mismatchedPairs.length);
 
 const half = rollUp(FILE, { from: "2026-09-01" });
 eq("an open-ended range takes everything after it", half.labourHours, 5.75);
@@ -180,6 +198,7 @@ eq("no hours", none.labourHours, 0);
 eq("no mechanics", none.mechanics.length, 0);
 eq("no money", none.partsCost, 0);
 ok("and nothing major is open on it", !none.majorDefect);
+eq("no tires, no pairs", none.mismatchedPairs.length, 0);
 
 console.log(failed ? `\n${failed} failed\n` : "\nAll good\n");
 process.exit(failed ? 1 : 0);
