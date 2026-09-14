@@ -345,6 +345,7 @@
     "tw_settings": [
       "alert_emails",
       "default_new_depth",
+      "dual_match_32nds",
       "id",
       "pull_other_32nds",
       "pull_steer_32nds",

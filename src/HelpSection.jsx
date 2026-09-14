@@ -22,6 +22,7 @@ const SECTIONS = [
   ["missed", "Forgot to punch"],
   ["defects", "Defects"],
   ["orders", "Work orders"],
+  ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
   ["tires", "Tires"],
   ["parts", "Parts"],
@@ -338,6 +339,44 @@ export default function HelpSection() {
         <Note>
           Closing a work order is paperwork. It does not mark the truck repaired — that
           is the mechanic's statement, and it lives on the Defects tab.
+        </Note>
+      </Block>
+
+      <Block id="duals" title="Duals that do not match">
+        <p style={p}>
+          Two tires on the same end of an axle carry the load together, and they only
+          share it if they are close to the same size. Put a 27/32 beside a 15/32 and
+          the deep one takes the weight, runs hot and scrubs — and both come off early.
+          So the shop buys two tires instead of none.
+        </p>
+        <p style={p}>
+          The app watches for it on its own. Anything more than <Mono>4/32</Mono> apart
+          on one end of an axle is flagged:
+        </p>
+        <Step n="1" head="On the list, before you open anything">
+          A truck with a bad pair shows in <B>Needs attention</B> on the Tires screen and
+          carries an <i>odd pair</i> note in the list down the left. You do not have to
+          open trucks looking for it.
+        </Step>
+        <Step n="2" head="On the truck">
+          An orange box above the diagram names the end, how far apart it is, and which
+          wheel is which — <Mono>4R — 12/32 apart · 4RO at 15/32 beside 4RI at 27/32</Mono>.
+          Both wheels are ringed on the diagram so there is no hunting, and each row in
+          the wheel positions table says how far off its partner it is.
+        </Step>
+        <Step n="3" head="On the truck's file">
+          It is also under <B>Right now</B> on the <B>TRUCK FILE</B> page, with the rest
+          of what is outstanding on that unit.
+        </Step>
+        <Note>
+          A pair is only checked when <B>both</B> tires have a reading. Half a
+          walk-around never flags anything — a flag that fires on every truck somebody
+          has started measuring is one people learn to scroll past.
+        </Note>
+        <Note tone="watch">
+          4/32 is the usual figure and it is a setting, not a rule baked in.
+          Tires → Settings changes it for everybody. Set it to 0 and any difference at
+          all is flagged.
         </Note>
       </Block>
 

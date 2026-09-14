@@ -174,6 +174,11 @@ create table if not exists tw_settings (
   pull_steer_32nds   numeric(4,1) not null default 6,
   pull_other_32nds   numeric(4,1) not null default 4,
   default_new_depth  numeric(4,1) not null default 28,
+  -- How far apart two tires on the same end of an axle may be before
+  -- the pair is flagged. Duals only share a load if they are close to
+  -- the same size; four 32nds is what the industry uses. Zero means
+  -- "flag any difference at all".
+  dual_match_32nds   numeric(4,1) not null default 4 check (dual_match_32nds >= 0),
   updated_at         timestamptz not null default now()
 );
 

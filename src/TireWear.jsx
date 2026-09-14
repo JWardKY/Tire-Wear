@@ -10,6 +10,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as db from "./data.js";
+import { dualMismatches, mismatchedWheels, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -70,7 +71,8 @@ function positionsFor(cfgKey) {
 /* ── Helpers ──────────────────────────────────────────────────── */
 const MILS_PER_32ND = 31.25;
 
-const DEFAULTS = { pullSteer: 6, pullOther: 4, newDepth: 28, unit: "32nd" };
+const DEFAULTS = { pullSteer: 6, pullOther: 4, newDepth: 28,
+  dualMatch: DUAL_LIMIT, unit: "32nd" };
 
 function statusOf(depth, pull) {
   if (depth === null || depth === undefined) return "none";
@@ -237,13 +239,31 @@ export default function TireWear({ who, tab, onBusy }) {
       });
       const pulls = ts.filter((t) => tireStats[t.id]?.status === "pull").length;
       const watches = ts.filter((t) => tireStats[t.id]?.status === "watch").length;
+
+      /* Two tires on one end of an axle only share the load if they are
+         close to the same size. Worked out per truck here so the fleet
+         list can point at the ones to go and look at, rather than
+         somebody opening 134 trucks to find them.
+
+         Read off the tires that are actually mounted rather than the
+         positions the config says the truck has — a pair on a wheel the
+         config does not know about is still a pair on the truck. */
+      const depthAt = (posId) => {
+        const t = activeTireAt[`${v.num}|${posId}`];
+        const d = t ? tireStats[t.id]?.depth : null;
+        return d == null ? null : d;
+      };
+      const mismatches = dualMismatches(
+        wheelsFrom(ts.map((t) => t.pos)), depthAt, settings.dualMatch);
+
       m[v.num] = {
         tracked: ts.length, total: pos.length, worst, worstT, lastDate, pulls, watches,
+        mismatches, mismatched: mismatches.length,
         odo: lastOdoFor[v.num]?.odo ?? null, odoDate: lastOdoFor[v.num]?.date ?? null,
       };
     });
     return m;
-  }, [fleet, activeTireAt, tireStats, lastOdoFor]);
+  }, [fleet, activeTireAt, tireStats, lastOdoFor, settings.dualMatch]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -257,9 +277,10 @@ export default function TireWear({ who, tab, onBusy }) {
   const attention = useMemo(() => {
     const rows = [];
     Object.entries(vehSummary).forEach(([num, s]) => {
-      if (s.pulls > 0 || s.watches > 0) rows.push({ num, ...s });
+      if (s.pulls > 0 || s.watches > 0 || s.mismatched > 0) rows.push({ num, ...s });
     });
-    rows.sort((a, b) => b.pulls - a.pulls || (a.worst ?? 99) - (b.worst ?? 99));
+    rows.sort((a, b) =>
+      b.pulls - a.pulls || b.mismatched - a.mismatched || (a.worst ?? 99) - (b.worst ?? 99));
     return rows;
   }, [vehSummary]);
 
@@ -369,7 +390,9 @@ function FleetView(props) {
 }
 
 function VehRow({ v, s, active, onClick }) {
-  const dot = s?.pulls ? C.pull : s?.watches ? C.watch : s?.tracked ? C.good : "#CBD5E1";
+  const dot = s?.pulls ? C.pull
+    : (s?.watches || s?.mismatched) ? C.watch
+    : s?.tracked ? C.good : "#CBD5E1";
   return (
     <button onClick={onClick}
       style={{ width: "100%", textAlign: "left", padding: "9px 11px", cursor: "pointer",
@@ -389,6 +412,7 @@ function VehRow({ v, s, active, onClick }) {
         {s?.odo != null ? `${nf(s.odo)} mi` : "no mileage"}
         {s?.tracked ? ` · ${s.tracked}/${s.total} tires` : ""}
         {s?.worst != null ? ` · low ${s.worst}/32` : ""}
+        {s?.mismatched ? ` · ${s.mismatched} odd pair${s.mismatched === 1 ? "" : "s"}` : ""}
       </div>
     </button>
   );
@@ -419,10 +443,17 @@ function StartHere({ attention, setSel, byNum }) {
                   {r.num}
                 </div>
                 <div style={{ fontSize: 12, color: r.pulls ? C.pull : C.watch, fontWeight: 600, marginTop: 2 }}>
-                  {r.pulls ? `${r.pulls} at pull depth` : `${r.watches} to monitor`}
+                  {r.pulls ? `${r.pulls} at pull depth`
+                    : r.watches ? `${r.watches} to monitor`
+                    : `${r.mismatched} mismatched pair${r.mismatched === 1 ? "" : "s"}`}
                 </div>
+                {r.mismatched > 0 && (r.pulls > 0 || r.watches > 0) && (
+                  <div style={{ fontSize: 12, color: C.watch, fontWeight: 600 }}>
+                    and {r.mismatched} mismatched pair{r.mismatched === 1 ? "" : "s"}
+                  </div>
+                )}
                 <div style={{ fontFamily: FM, fontSize: 11, color: C.muted, marginTop: 1 }}>
-                  low {r.worst}/32 · {byNum[r.num]?.make}
+                  {r.worst != null ? `low ${r.worst}/32 · ` : ""}{byNum[r.num]?.make}
                 </div>
               </button>
             ))}
@@ -445,6 +476,20 @@ function VehicleDetail(props) {
 
   const positions = positionsFor(v.cfg);
   const lastOdo = lastOdoFor[v.num]?.odo ?? null;
+
+  /* Worked out here and handed down, so the banner, the diagram and the
+     table are all looking at one answer rather than three. */
+  const mismatches = useMemo(() => dualMismatches(
+    wheelsFrom(Object.keys(activeTireAt)
+      .filter((k) => k.startsWith(`${v.num}|`))
+      .map((k) => k.split("|")[1])),
+    (posId) => {
+      const t = activeTireAt[`${v.num}|${posId}`];
+      return t ? tireStats[t.id]?.depth ?? null : null;
+    },
+    settings.dualMatch,
+  ), [activeTireAt, tireStats, v.num, settings.dualMatch]);
+  const oddWheels = useMemo(() => mismatchedWheels(mismatches), [mismatches]);
 
   // Inspection draft
   const [insDate, setInsDate] = useState(todayISO());
@@ -544,11 +589,14 @@ function VehicleDetail(props) {
           </div>
         )}
 
+        {mismatches.length > 0 && <DualMismatch list={mismatches} limit={settings.dualMatch} />}
+
         {/* The diagram */}
         <div style={{ padding: "18px 12px 22px", overflowX: "auto" }}>
           <TruckDiagram
             v={v} positions={positions} activeTireAt={activeTireAt} tireStats={tireStats}
             settings={settings} mode={mode} draft={draft} setDraft={setDraft}
+            oddWheels={oddWheels}
             onTire={(t) => setOpenTire(t)} onEmpty={(pos) => setMountPos(pos)}
           />
         </div>
@@ -557,7 +605,7 @@ function VehicleDetail(props) {
       {/* Position table */}
       <PositionTable
         v={v} positions={positions} activeTireAt={activeTireAt} tireStats={tireStats}
-        settings={settings} onTire={setOpenTire} onEmpty={setMountPos}
+        settings={settings} mismatches={mismatches} onTire={setOpenTire} onEmpty={setMountPos}
       />
 
       {mountPos && (
@@ -596,8 +644,49 @@ function VehicleDetail(props) {
   );
 }
 
+/* ── Duals that do not match ──────────────────────────────────────
+   Two tires on one end of an axle carry the load together, and only
+   share it if they are close to the same size. A 27/32 beside a 15/32
+   means the deep one takes the weight, runs hot and scrubs — so the
+   shop buys two tires instead of none.
+
+   Said as a sentence above the diagram, with both wheels ringed on it.
+   The number on its own would make somebody hunt for which pair. */
+function DualMismatch({ list, limit }) {
+  return (
+    <div style={{ margin: "0 12px 4px", background: "#FDF6E3",
+      border: `1px solid ${C.watch}55`, borderLeft: `4px solid ${C.watch}`,
+      borderRadius: 6, padding: "10px 14px" }}>
+      <div style={{ fontFamily: FD, fontSize: 15, fontWeight: 700, color: C.ink }}>
+        {list.length === 1 ? "A pair of duals does not match"
+          : `${list.length} pairs of duals do not match`}
+      </div>
+      <div style={{ marginTop: 5 }}>
+        {list.map((m) => (
+          <div key={m.end} style={{ fontSize: 13, color: C.ink, lineHeight: 1.6 }}>
+            <span style={{ fontFamily: FM, fontWeight: 700 }}>{m.end}</span>
+            {" — "}
+            <span style={{ fontFamily: FM, fontWeight: 700, color: C.pull }}>
+              {m.diff}/32 apart
+            </span>
+            <span style={{ color: C.muted }}>
+              {" · "}{m.shallower} at {m.shallowest}/32 beside{" "}
+              {m.deeper} at {m.deepest}/32
+            </span>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 12, color: C.muted, margin: "7px 0 0", lineHeight: 1.5 }}>
+        The deeper tire carries the load, runs hot and scrubs, and both come off
+        early. Anything over {limit}/32 is flagged — change it in Settings.
+      </p>
+    </div>
+  );
+}
+
+
 /* ── Truck diagram — overhead, nose left, R side up ───────────── */
-function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, draft, setDraft, onTire, onEmpty }) {
+function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, oddWheels, mode, draft, setDraft, onTire, onEmpty }) {
   const axles = (CONFIGS[v.cfg] || CONFIGS.dump12).axles;
   const CARD_W = 150;
   const GAP = 10;
@@ -610,6 +699,7 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
     const t = activeTireAt[`${v.num}|${p.id}`];
     return (
       <TireCard key={p.id} pos={p} tire={t} stats={t ? tireStats[t.id] : null}
+        odd={!!oddWheels?.has(p.id)}
         settings={settings} mode={mode} draft={draft} setDraft={setDraft}
         onTire={onTire} onEmpty={onEmpty} width={CARD_W} />
     );
@@ -657,7 +747,7 @@ function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, mode, d
   );
 }
 
-function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, onEmpty, width }) {
+function TireCard({ pos, tire, stats, odd, settings, mode, draft, setDraft, onTire, onEmpty, width }) {
   const st = stats?.status || "none";
   const col = STATUS_COLOR[st];      // the solid badge, white text on it
   const colOnDark = STATUS_ON_DARK[st]; // the tread numeral, on the card itself
@@ -677,7 +767,11 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
 
   return (
     <div style={{ width, height: 62, borderRadius: 6, background: C.green900,
-      border: `1px solid ${C.green800}`, display: "flex", overflow: "hidden" }}>
+      border: `1px solid ${odd ? C.watch : C.green800}`, display: "flex", overflow: "hidden",
+      /* A ring rather than a thicker border: both wheels of a pair get
+         it, and it must not shift the card a pixel or the whole column
+         steps sideways against the one beside it. */
+      boxShadow: odd ? `0 0 0 2px ${C.watch}` : "none" }}>
       <div style={{ width: 34, background: col, color: "#fff", display: "flex",
         alignItems: "center", justifyContent: "center", fontFamily: FM, fontWeight: 600,
         fontSize: 11.5, flexShrink: 0, letterSpacing: "-0.02em" }}>
@@ -728,10 +822,17 @@ function TireCard({ pos, tire, stats, settings, mode, draft, setDraft, onTire, o
 }
 
 /* ── Position table ───────────────────────────────────────────── */
-function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire, onEmpty }) {
+function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismatches, onTire, onEmpty }) {
+  /* Which wheel each mismatch belongs to, so the row can say what it is
+     out of step WITH rather than just that it is out of step. */
+  const oddAt = new Map();
+  for (const m of mismatches || []) {
+    oddAt.set(m.inner, { other: m.outer, diff: m.diff, deep: m.deeper === m.inner });
+    oddAt.set(m.outer, { other: m.inner, diff: m.diff, deep: m.deeper === m.outer });
+  }
   const rows = positions.map((p) => {
     const t = activeTireAt[`${v.num}|${p.id}`];
-    return { p, t, s: t ? tireStats[t.id] : null };
+    return { p, t, s: t ? tireStats[t.id] : null, odd: oddAt.get(p.id) || null };
   });
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
@@ -749,7 +850,7 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ p, t, s }) => (
+            {rows.map(({ p, t, s, odd }) => (
               <tr key={p.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                 <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>
                   {t ? (
@@ -773,6 +874,12 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, onTire
                 <td style={{ ...td, color: C.muted }}>{t ? (t.type === "retread" ? "Retread" : "Virgin") : "—"}</td>
                 <td style={{ ...td, ...tdNum, color: s ? STATUS_COLOR[s.status] : C.muted, fontWeight: 600 }}>
                   {s?.depth != null ? `${s.depth}/32` : "—"}
+                  {odd && (
+                    <div style={{ fontFamily: FB, fontSize: 11.5, fontWeight: 600,
+                      color: C.watch, whiteSpace: "nowrap", marginTop: 1 }}>
+                      {odd.diff}/32 {odd.deep ? "above" : "below"} {odd.other}
+                    </div>
+                  )}
                 </td>
                 <td style={{ ...td, ...tdNum }}>{s?.miPer32 ? nf(s.miPer32) : "—"}</td>
                 <td style={{ ...td, ...tdNum, color: C.muted }}>{s?.miles ? nf(s.miles) : "—"}</td>
@@ -1352,7 +1459,17 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
             <input type="number" step="0.5" value={draft.newDepth}
               onChange={edit("newDepth")} onBlur={commit("newDepth")}
               style={{ ...inp, fontFamily: FM }} /></Field>
+          <Field label="Flag duals more than (/32) apart">
+            <input type="number" step="0.5" min="0" value={draft.dualMatch}
+              onChange={edit("dualMatch")} onBlur={commit("dualMatch")}
+              style={{ ...inp, fontFamily: FM }} /></Field>
         </div>
+        <p style={{ fontSize: 12, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
+          Two tires on the same end of an axle carry the load together and only share
+          it if they are close to the same size. Four 32nds is the usual figure. A pair
+          further apart than this is flagged on the truck and in the list on the left —
+          set it to 0 to flag any difference at all.
+        </p>
       </Card>
 
       <Card title="Tire alerts"

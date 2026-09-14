@@ -9,6 +9,8 @@
    rollUp backs the screen AND the CSV. A file that shows one total and
    exports another is worse than one that shows nothing. */
 
+import { dualMismatches, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
+
 const r2 = (n) => Math.round(n * 100) / 100;
 
 export const squash = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -47,7 +49,7 @@ export function findUnits(units, typed) {
    backs the screen and the CSV, and so it can be tested without a
    browser. A file that shows one total and exports another is worse
    than one that shows nothing. */
-export function rollUp(f, { from, to } = {}) {
+export function rollUp(f, { from, to, dualMatch = DUAL_LIMIT } = {}) {
   const inRange = (d) => (!from || d >= from) && (!to || d <= to);
   const inRangeAt = (iso) => inRange(String(iso || "").slice(0, 10));
 
@@ -77,6 +79,16 @@ export function rollUp(f, { from, to } = {}) {
   const tiresOn = f.tires.filter((t) => t.on);
   const tiresOff = f.tires.filter((t) => !t.on);
 
+  /* Two tires on one end of an axle only share the load if they are
+     close to the same size. Never narrowed by the date range — what is
+     mounted on the truck is not a date question. */
+  const depthAt = (pos) => {
+    const t = tiresOn.find((x) => String(x.pos).toUpperCase() === pos);
+    return t && t.depth != null ? t.depth : null;
+  };
+  const mismatchedPairs = dualMismatches(
+    wheelsFrom(tiresOn.map((t) => t.pos)), depthAt, dualMatch);
+
   return {
     labourHours: r2(hours.reduce((a, h) => a + h.hours, 0)),
     lines: hours.length,
@@ -101,6 +113,7 @@ export function rollUp(f, { from, to } = {}) {
     openOrders: f.orders.filter((w) => w.state !== "done").length,
     doneOrders: f.orders.filter((w) => w.state === "done" && inRangeAt(w.completedAt)).length,
 
+    mismatchedPairs,
     tiresOn: tiresOn.length,
     tiresOff: tiresOff.length,
     tireSpend: r2(f.tires.reduce((a, t) => a + (t.cost || 0), 0)),
