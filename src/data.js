@@ -173,7 +173,21 @@ const tireRow = (vehicleId, t, who) => ({
    vehicle_id is deliberately NOT editable. Moving a tire to a different
    truck is a pull and a mount, with the miles landing on the right
    truck either side — not one row quietly changing hands. */
-export async function updateTire(tireId, t) {
+/* The fields worth naming in the log when they move, and what to call
+   them. Not every column: nobody needs a line saying a casing number
+   was filled in, and a log people skim past is the same as none. */
+const WORTH_SAYING = [
+  ["pos", "position"], ["brand", "brand"], ["model", "model"],
+  ["size", "size"], ["type", "type"], ["onOdo", "mount odometer"],
+  ["newDepth", "mount tread"], ["onDate", "mount date"], ["cost", "cost"],
+];
+
+const changedBits = (before, after) => WORTH_SAYING
+  .filter(([k]) => String(before?.[k] ?? "") !== String(after?.[k] ?? ""))
+  .map(([k, label]) =>
+    `${label} ${before?.[k] ?? "—"} → ${after?.[k] ?? "—"}`);
+
+export async function updateTire(tireId, t, before, who) {
   check(
     await supabase.from("tw_tires").update({
       position: t.pos,
@@ -189,6 +203,28 @@ export async function updateTire(tireId, t) {
       cost: t.cost,
     }).eq("id", tireId)
   );
+
+  /* Written after the update, never before: a log line for a change
+     that did not happen is worse than a change nobody logged.
+
+     Only the correction is recorded. A tire going on or coming off is
+     derivable from tw_tires and shows in tw_work_history on its own;
+     what it USED to say is not derivable from anything, and the mount
+     odometer is what the wear rate and cost per mile are measured
+     from. */
+  const bits = changedBits(before, t);
+  if (!bits.length || !who) return;
+
+  const { log } = await import("./logData.js");
+  await log({
+    type: "tire_edited",
+    actor: who,
+    vehId: before?.vehId || null,
+    unit: before?.veh || null,
+    summary: `${before?.veh || "A truck"} ${before?.pos || ""} — ${bits.join(", ")}`.trim(),
+    detail: { tire: tireId, truck: before?.veh || null, was: before?.pos || null,
+              changed: bits },
+  });
 }
 
 export async function mountTire(vehicleId, t, who) {

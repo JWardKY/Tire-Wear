@@ -1928,9 +1928,25 @@ dropdown cannot cover: two tablets, one wheel. 23505 comes back as "There is alr
 tire on 4RI." The fake database does not model unique indexes, so the test registers
 its own route for that one case — otherwise the message could never be reached.
 
-**Not logged.** Nothing else in the Tires section writes to `tw_work_log` either — the
-`tire_mounted` and `tire_pulled` kinds are declared and unused. Worth doing across the
-section as one piece rather than for this one screen.
+**What gets recorded, and where.** The Tires section wrote nothing to any history at
+all — 376 mounts and 36 pulls were invisible. That is fixed in two different ways on
+purpose:
+
+- **On and off are derived.** `tw_work_history` gained two branches over `tw_tires`,
+  so every tire ever mounted or pulled shows in the shop history and on the truck's
+  file, retroactively, with no write path to get wrong. They are dated by
+  `mounted_date` / `removed_date` rather than `created_at` — those are dates the shop
+  recorded on purpose, and on a backfilled fleet `created_at` is months later. Cast
+  through Eastern so a date does not land on the evening before; all 412 rows were
+  checked against the date they came from.
+- **A correction is written.** `tire_edited` in `tw_work_log`, because what a field
+  USED to say is not derivable from anything once the row is overwritten — and the
+  mount odometer is what the wear rate and the cost per mile are measured from. Only
+  the fields worth naming, only when one actually moved: a line per button press is a
+  log nobody reads.
+
+A pull has no `who`: `tw_tires` has `created_by` but no `removed_by`. Add the column if
+that matters.
 
 ### What "retread" means here
 

@@ -175,7 +175,7 @@ export default function TireWear({ who, tab, onBusy }) {
     mountTire: (vehId, t) => run(() => db.mountTire(vehId, t, who)),
     mountTires: (vehId, list) => run(() => db.mountTires(vehId, list, who)),
     pullTire: (tireId, off) => run(() => db.pullTire(tireId, off)),
-    updateTire: (tireId, t) => runRaw(() => db.updateTire(tireId, t)),
+    updateTire: (tireId, t, before) => runRaw(() => db.updateTire(tireId, t, before, who)),
     setTireNotes: (tireId, notes) => run(() => db.setTireNotes(tireId, notes)),
     saveInspection: (vehId, date, odo, entries) =>
       run(() => db.saveInspection(vehId, date, odo, entries, who)),
@@ -649,7 +649,11 @@ function VehicleDetail(props) {
           freePositions={positions.filter(
             (p) => p.id === openTire.pos || !activeTireAt[`${v.num}|${p.id}`])}
           onSaveDetails={async (t) => {
-            await actions.updateTire(openTire.id, t);
+            /* The tire as it stands goes with the patch, so the log line
+               can say what it used to be. Once the row is overwritten
+               there is nothing left that knows. */
+            await actions.updateTire(openTire.id, t,
+              activeTireAt[`${v.num}|${openTire.pos}`] || openTire);
             setOpenTire(null);
           }}
           onClose={() => setOpenTire(null)}

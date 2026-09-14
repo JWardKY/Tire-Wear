@@ -2357,7 +2357,52 @@ UNION ALL
     NULL::text AS work_order,
     NULL::numeric AS hours,
     o.id AS source_id
-   FROM tw_purchase_orders o;
+   FROM tw_purchase_orders o
+UNION ALL
+/* A tire going on and coming off. Derived from tw_tires rather than
+   written anywhere, so it covers every tire already on the fleet —
+   hundreds of mounts that had never appeared in any history.
+
+   Dated by mounted_date and removed_date, not created_at. Those are
+   dates the shop recorded on purpose; created_at is when somebody
+   happened to type it, and on a backfilled fleet the two are months
+   apart. A timeline that files a tire mounted in June under today is
+   wrong in a way people notice. Cast through Eastern so a date does
+   not land on the evening before. */
+ SELECT ((t.mounted_date)::timestamp AT TIME ZONE 'America/New_York'::text) AS at,
+    'tires'::text AS kind,
+    'Tire mounted'::text AS what,
+    v.number AS unit,
+    t.vehicle_id,
+    ((((COALESCE(NULLIF(t.brand, ''::text), 'Unbranded'::text) ||
+        COALESCE((' '::text || NULLIF(t.model, ''::text)), ''::text)) ||
+        ' on '::text) || t."position") ||
+        CASE WHEN (t.tire_type = 'retread'::text) THEN ' · retread'::text ELSE ''::text END ||
+        COALESCE(((' at '::text || t.mounted_odometer) || ' miles'::text), ''::text)) AS summary,
+    t.created_by AS who,
+    NULL::text AS work_order,
+    NULL::numeric AS hours,
+    t.id AS source_id
+   FROM (tw_tires t
+     LEFT JOIN tw_vehicles v ON ((v.id = t.vehicle_id)))
+UNION ALL
+ SELECT ((t.removed_date)::timestamp AT TIME ZONE 'America/New_York'::text) AS at,
+    'tires'::text AS kind,
+    'Tire pulled'::text AS what,
+    v.number AS unit,
+    t.vehicle_id,
+    (((COALESCE(NULLIF(t.brand, ''::text), 'Unbranded'::text) || ' off '::text) || t."position") ||
+        COALESCE((' — '::text || NULLIF(t.removed_reason, ''::text)), ''::text) ||
+        CASE WHEN (t.removed_odometer IS NOT NULL AND t.mounted_odometer IS NOT NULL)
+             THEN ((' · '::text || (t.removed_odometer - t.mounted_odometer)) || ' miles run'::text)
+             ELSE ''::text END) AS summary,
+    NULL::text AS who,
+    NULL::text AS work_order,
+    NULL::numeric AS hours,
+    t.id AS source_id
+   FROM (tw_tires t
+     LEFT JOIN tw_vehicles v ON ((v.id = t.vehicle_id)))
+  WHERE (t.removed_date IS NOT NULL);
 
 alter view tw_vehicle_meter set (security_invoker = true);
 alter view tw_shift_days set (security_invoker = true);

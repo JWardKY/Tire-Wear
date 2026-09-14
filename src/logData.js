@@ -27,6 +27,12 @@ const KINDS = new Set([
      the mechanic fixing their own missed punch-out or a supervisor
      fixing it for them. */
   "shift_corrected",
+  /* A tire going on or coming off is derivable from tw_tires and shows
+     in tw_work_history on its own. A CORRECTION is not: once the brand
+     or the mount odometer has been overwritten there is nothing left
+     saying what it used to be, and the mount odometer is what the wear
+     rate and the cost per mile are measured from. */
+  "tire_edited",
 ]);
 
 export const EVENT_LABEL = {
@@ -39,6 +45,7 @@ export const EVENT_LABEL = {
   tire_reading: "Tread reading",
   tire_mounted: "Tire mounted",
   tire_pulled: "Tire pulled",
+  tire_edited: "Tire details corrected",
   timecard_approved: "Timecard approved",
   timecard_unapproved: "Approval taken back",
   shift_corrected: "Punch corrected",

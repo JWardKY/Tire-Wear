@@ -370,6 +370,12 @@ export default function HelpSection() {
           pull and then a mount, so the miles land on the right one — the same goes for
           a rotation.
         </Note>
+        <Note tone="watch">
+          A correction is written down with your name on it and what the value used to
+          be, under <B>Supervisor → Work log</B> as <i>Tire details corrected</i>. Tires
+          going on and coming off show on their own in the history and on the truck's
+          file, so you do not have to note those anywhere.
+        </Note>
       </Block>
 
       <Block id="duals" title="Duals that do not match">

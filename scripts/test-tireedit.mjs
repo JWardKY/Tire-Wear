@@ -50,7 +50,7 @@ const rows = {
   tw_settings: [{ id: true, pull_steer_32nds: 6, pull_other_32nds: 4,
     default_new_depth: 28, dual_match_32nds: 4, alert_emails: [],
     updated_at: "2026-01-01" }],
-  tw_mechanics: [],
+  tw_mechanics: [], tw_work_log: [],
 };
 
 try {
@@ -159,6 +159,21 @@ ok("the dialog closed", !/Edit 4RO/.test(t));
 ok("the diagram shows the new model", /XDN2/.test(t));
 ok("…and not the old one", !/vdn2/.test(t));
 
+/* A tire going on or coming off is derivable from tw_tires and shows
+   in the history on its own. What it USED to say is not derivable from
+   anything once the row is overwritten. */
+console.log("\n── and the correction is written down ──");
+const logged = writes.filter((w) => w.table === "tw_work_log").flatMap((w) => w.body);
+ok("one line in the work log", logged.length === 1, `${logged.length}`);
+ok("…as a tire correction", logged[0]?.event_type === "tire_edited");
+ok("…with a name on it", logged[0]?.actor_name === "jason_ward@theallen.com",
+  logged[0]?.actor_name);
+ok("…saying what it was and what it is",
+  /model vdn2 → XDN2/.test(logged[0]?.summary || ""), logged[0]?.summary);
+ok("…and which wheel on which truck",
+  /DT-865 4RO/.test(logged[0]?.summary || ""), logged[0]?.summary);
+ok("…with the truck on the row itself", logged[0]?.unit_number === "DT-865");
+
 console.log("\n── the warning on the mount figures ──");
 await page.getByRole("button", { name: "4RO", exact: true }).first().click();
 await page.waitForTimeout(800);
@@ -186,8 +201,21 @@ ok("…and Save is off", await page.getByRole("button", { name: /Save changes/i 
 await odo.fill("359086");
 await page.waitForTimeout(400);
 
+/* Put back what it was and save: nothing moved, so nothing is logged.
+   A log line per press is a log nobody reads. */
+const before = writes.filter((w) => w.table === "tw_work_log").length;
+await page.getByRole("button", { name: /Save changes/i }).click();
+await page.waitForTimeout(1500);
+ok("a save that changed nothing writes no log line",
+  writes.filter((w) => w.table === "tw_work_log").length === before);
+await page.getByRole("button", { name: "4RO", exact: true }).first().click();
+await page.waitForTimeout(800);
+await page.getByRole("button", { name: /Edit these details/i }).click();
+await page.waitForTimeout(600);
+
 console.log("\n── moving it to another wheel ──");
-const pos2 = form2.locator("select").first();
+const form3 = page.locator('div[style*="position: fixed"]').last();
+const pos2 = form3.locator("select").first();
 const options = await pos2.locator("option").allInnerTexts();
 ok("only free wheels and its own are offered",
   options.every((o) => /where it is|empty/.test(o)), options.join(" | "));
@@ -196,7 +224,7 @@ ok("…and the one that is taken is not",
 
 await pos2.selectOption("4RI");
 await page.waitForTimeout(500);
-t = await form2.innerText();
+t = await form3.innerText();
 ok("moving a wheel says what it means", /takes its readings with it/i.test(t));
 ok("…and that a rotation is not this", /a rotation is a pull and a mount/i.test(t));
 
@@ -215,7 +243,7 @@ await page.waitForTimeout(1600);
    page nobody is looking at. */
 const stillOpen = await page.locator('div[style*="position: fixed"]').count();
 ok("the form stays open so the change is not lost", stillOpen > 0);
-t = stillOpen ? await form2.innerText() : await page.locator("body").innerText();
+t = stillOpen ? await form3.innerText() : await page.locator("body").innerText();
 ok("it says so in English", /There is already a tire on 4RI/.test(t), t.slice(-220));
 ok("…and not in Postgres", !/duplicate key|unique constraint/i.test(t));
 ok("the tire did not move", 
