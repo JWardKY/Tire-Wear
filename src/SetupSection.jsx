@@ -3,6 +3,7 @@ import { C, FM } from "./theme.js";
 import { Btn, Field, Modal, SectionLabel, inp, th, td } from "./ui.jsx";
 import * as setup from "./setupData.js";
 import { parseCodes, planCodes } from "./codePaste.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── Setup ────────────────────────────────────────────────────────
    The roster and the cost codes. Both tables existed from the start
@@ -26,14 +27,14 @@ export default function SetupSection({ who, tab, onBusy, supervisor }) {
       const [r, c, f] = await Promise.all([
         setup.listRoster(), setup.listAllCostCodes(), setup.listVehicles()]);
       setRoster(r); setCodes(c); setFleet(f); setErr("");
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(sayOffline(e, "load") || e.message || String(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const run = async (fn, msg) => {
     onBusy?.(true); setErr(""); setNote("");
     try { await fn(); if (msg) setNote(msg); await load(); }
-    catch (e) { setErr(e.message || String(e)); }
+    catch (e) { setErr(sayOffline(e) || e.message || String(e)); }
     finally { onBusy?.(false); }
   };
 

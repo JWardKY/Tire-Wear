@@ -52,3 +52,69 @@ export function tooBig(value, { label, max, decimals = 2 }) {
   }
   return "";
 }
+
+/* ── When nothing reached the server ──────────────────────────────
+   Alex mounted two tires on DT-874 at twenty to one on a Tuesday
+   morning, pressed save on the third, and got
+
+       That did not save — TypeError: Load failed
+
+   "Load failed" is Safari's wording for a fetch that never completed;
+   Chrome says "Failed to fetch", Firefox says something longer. The
+   server log for that minute holds no request at all — the iPad lost
+   its signal mid-save. He pressed save again three minutes later and
+   it went through.
+
+   So both halves of that banner were wrong. It named a Javascript
+   type at a mechanic, and it blamed the save for a message that never
+   left the building.
+
+   What it matches is the phrases browsers actually produce, not the
+   error being a TypeError — same rule as saySo above: a wrong
+   translation sends somebody looking in the wrong place. Anything
+   carrying a Postgres code came back from the server by definition,
+   so it is never one of these however it reads. */
+
+const NO_ANSWER = [
+  "load failed",                            // Safari, WebKit
+  "failed to fetch",                        // Chrome, Edge
+  "networkerror when attempting",           // Firefox
+  "network request failed",
+  "fetch failed",                           // Node, undici
+  "the network connection was lost",        // iOS
+  "the internet connection appears to be offline",
+  "the request timed out",
+  "aborterror",                             // a tab suspended mid-request
+  "fetch is aborted",
+  "err_network",
+  "err_internet_disconnected",
+  "err_connection",
+];
+
+/* True when the request got no answer — as opposed to an answer that
+   said no, which is every other error in this file. */
+export function neverReached(err) {
+  if (!err) return false;
+  /* A Postgres SQLSTATE is five characters and only the server has
+     one. Its presence settles it. */
+  if (String(err.code || "").length === 5) return false;
+  const said = `${err.name || ""} ${err.message || err}`.toLowerCase();
+  return NO_ANSWER.some((p) => said.includes(p));
+}
+
+/* The sentence to show instead, or "" when the server did answer and
+   the screen should keep its own words:
+
+     setErr(sayOffline(e) || `That did not save — ${e.message || e}`);
+
+   The save wording does not promise the write was lost. Usually it
+   was — Alex's never arrived — but a reply can also go missing after
+   the row is in, and telling somebody "nothing was recorded" when
+   something was is how you get two tires on one wheel. */
+export function sayOffline(err, doing = "save") {
+  if (!neverReached(err)) return "";
+  return doing === "load"
+    ? "Could not reach the server — check your signal and try again."
+    : "That did not reach the server — check your signal and try again. "
+      + "Reload the page first to see whether it went through.";
+}

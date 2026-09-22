@@ -8,6 +8,7 @@ import * as parts from "./partsData.js";
 import { OrderScreen, VendorScreen, RequestScreen, IssuedScreen } from "./PurchasingScreens.jsx";
 import { parseCSV, guessMapping, planImport } from "./csvImport.js";
 import * as shop from "./shopData.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── The Inventory section ────────────────────────────────────────
    This app is the system of record for stock now, seeded from a CSV
@@ -70,7 +71,10 @@ export default function InventorySection({ who, tab, onBusy }) {
   useEffect(() => {
     (async () => {
       try { await reload(); }
-      catch (e) { setErr(`Could not load the parts list — ${e.message || e}`); }
+      catch (e) {
+        setErr(sayOffline(e, "load")
+          || `Could not load the parts list — ${e.message || e}`);
+      }
       setReady(true);
     })();
   }, [reload]);
@@ -80,7 +84,7 @@ export default function InventorySection({ who, tab, onBusy }) {
   const run = useCallback(async (fn) => {
     setBusy(true);
     try { await fn(); await reload(); setErr(null); }
-    catch (e) { setErr(`That did not save — ${e.message || e}`); }
+    catch (e) { setErr(sayOffline(e) || `That did not save — ${e.message || e}`); }
     finally { setBusy(false); }
   }, [reload]);
 
@@ -616,7 +620,7 @@ function ImportScreen({ existing, who, busy, onDone, setErr, setBusy }) {
                   await onDone();
                   setErr(null);
                 } catch (e) {
-                  setErr(`The import stopped — ${e.message || e}`);
+                  setErr(sayOffline(e) || `The import stopped — ${e.message || e}`);
                 } finally {
                   setBusy(false);
                 }

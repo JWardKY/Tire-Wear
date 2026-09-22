@@ -30,6 +30,7 @@ const SUITES = [
   ["test-truckboard", "the truck file in a real browser — needs the app served"],
   ["test-dualboard", "mismatched duals on the Tires screen — needs the app served"],
   ["test-tireedit", "correcting a tire already on a truck — needs the app served"],
+  ["test-offline", "a save that never reached the server — needs the app served"],
   ["test-tires", "tread, mounting, pulling, wear rates"],
   ["test-shop", "defects and PM"],
   ["test-pins", "PIN plumbing — the security properties"],
