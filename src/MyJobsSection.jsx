@@ -4,6 +4,7 @@ import { fmtDate, nf, Btn, Modal, SectionLabel, linkBtn, th, td } from "./ui.jsx
 import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
 import * as setup from "./setupData.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── My jobs ──────────────────────────────────────────────────────
    A mechanic's own worklist, from the timecard mockup: what is
@@ -64,7 +65,7 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
         .map((x) => x.workOrder);
       setDefectWos(await buy.workOrdersByNumber(mineWithWo).catch(() => new Map()));
       setErr("");
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(sayOffline(e, "load") || e.message || String(e)); }
     setReady(true);
   }, [me]);
 
@@ -73,7 +74,7 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
   const run = async (fn) => {
     onBusy?.(true);
     try { await fn(); await load(); }
-    catch (e) { setErr(e.message || String(e)); }
+    catch (e) { setErr(sayOffline(e) || e.message || String(e)); }
     finally { onBusy?.(false); }
   };
 
@@ -385,7 +386,7 @@ function JobDialog({ j, me, go, onClose, onStart, onBookHours }) {
     let live = true;
     buy.workOrderLines(j.wo)
       .then((r) => { if (live) setLines(r); })
-      .catch((e) => { if (live) setErr(e.message || String(e)); });
+      .catch((e) => { if (live) setErr(sayOffline(e, "load") || e.message || String(e)); });
     return () => { live = false; };
   }, [j.wo]);
 

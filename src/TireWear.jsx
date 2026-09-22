@@ -10,7 +10,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as db from "./data.js";
-import { saySo, tooBig } from "./dbError.js";
+import { saySo, sayOffline, tooBig } from "./dbError.js";
 import { dualMismatches, mismatchedWheels, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
 
 /* ────────────────────────────────────────────────────────────────
@@ -126,7 +126,8 @@ export default function TireWear({ who, tab, onBusy }) {
       try {
         await reload();
       } catch (e) {
-        setErr(`Could not load the tire records — ${e.message || e}`);
+        setErr(sayOffline(e, "load")
+          || `Could not load the tire records — ${e.message || e}`);
       }
       setReady(true);
     })();
@@ -149,7 +150,7 @@ export default function TireWear({ who, tab, onBusy }) {
       await reload();
       setErr(null);
     } catch (e) {
-      setErr(`That did not save — ${e.message || e}`);
+      setErr(sayOffline(e) || `That did not save — ${e.message || e}`);
     } finally {
       setBusy(false);
     }
@@ -1146,11 +1147,11 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, onCancel
     } catch (e) {
       /* The one it will actually hit: two tires cannot sit on the same
          wheel, and the index says so in Postgres rather than English. */
-      setErr(e?.code === "23505"
+      setErr(sayOffline(e) || (e?.code === "23505"
         ? `There is already a tire on ${f.pos}. Pull that one off first.`
         : saySo(e, { mounted_odometer: { label: "The mount odometer", limit: "it is too big" },
                      mounted_depth: { label: "Tread when mounted", limit: "it is too big" },
-                     cost: { label: "Cost", limit: "it is too big" } }));
+                     cost: { label: "Cost", limit: "it is too big" } })));
     }
   };
 

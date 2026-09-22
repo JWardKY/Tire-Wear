@@ -3,6 +3,7 @@ import { C, FD } from "./theme.js";
 import { Btn, SectionLabel, Modal, nf } from "./ui.jsx";
 import * as now from "./nowData.js";
 import { todayISO } from "./day.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── Now ──────────────────────────────────────────────────────────
    What the shop looks like at this moment: who is on the clock, and
@@ -54,7 +55,7 @@ export default function NowSection({ who, tab, onBusy, supervisor, go }) {
       /* After the board, not with it: who is here is the headline and
          should not wait on what they are doing. */
       setDetail(await now.onClockDetail(c, todayISO()));
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(sayOffline(e, "load") || e.message || String(e)); }
   }, [range]);
 
   useEffect(() => { load(); }, [load]);
