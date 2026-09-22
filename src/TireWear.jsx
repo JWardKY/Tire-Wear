@@ -12,6 +12,8 @@ import {
 import * as db from "./data.js";
 import { saySo, sayOffline, tooBig } from "./dbError.js";
 import { dualMismatches, mismatchedWheels, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
+import { checkDepth, checkMount, sayTyped, sayMount, sayRise, worstRise, whyNoRate }
+  from "./treadCheck.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -509,6 +511,14 @@ function VehicleDetail(props) {
   ), [activeTireAt, tireStats, v.num, settings.dualMatch]);
   const oddWheels = useMemo(() => mismatchedWheels(mismatches), [mismatches]);
 
+  /* Wheels whose own history goes the wrong way. Per tire, not per
+     pair, so it reads as a list of wheels to go and re-gauge. */
+  const impossible = useMemo(() => positions.flatMap((p) => {
+    const t = activeTireAt[`${v.num}|${p.id}`];
+    const rise = t ? worstRise(tireStats[t.id]?.pts) : null;
+    return rise ? [{ pos: p.id, rise }] : [];
+  }), [positions, activeTireAt, tireStats, v.num]);
+
   // Inspection draft
   const [insDate, setInsDate] = useState(todayISO());
   const [insOdo, setInsOdo] = useState("");
@@ -521,9 +531,28 @@ function VehicleDetail(props) {
     setMode("inspect");
   }
 
+  /* What is wrong with what has been typed so far, per wheel. The
+     check is against the tire's own history, so it can name the figure
+     being contradicted rather than just refusing a number. */
+  const typedBad = useMemo(() => Object.entries(draft).flatMap(([pos, val]) => {
+    const t = activeTireAt[`${v.num}|${pos}`];
+    const bad = t ? checkDepth(val, tireStats[t.id]?.pts) : null;
+    return bad ? [{ pos, bad }] : [];
+  }), [draft, activeTireAt, tireStats, v.num]);
+
+  /* Cleared by pressing the button a second time. A hard refusal would
+     trap the case this exists to surface: when the MOUNT depth is the
+     wrong figure, the true reading is the one that looks impossible,
+     and somebody has to be able to get it in. So it takes two presses
+     and says what it is about to record, rather than one press and a
+     shrug. */
+  const [okAnyway, setOkAnyway] = useState(false);
+  useEffect(() => { setOkAnyway(false); }, [typedBad.length]);
+
   async function saveInspection() {
     const odo = Number(insOdo);
     if (!odo || odo <= 0) return;
+    if (typedBad.length && !okAnyway) { setOkAnyway(true); return; }
     const entries = [];
     Object.entries(draft).forEach(([pos, val]) => {
       if (val === "" || val == null) return;
@@ -579,6 +608,30 @@ function VehicleDetail(props) {
           </div>
         </div>
 
+        {mode === "inspect" && typedBad.length > 0 && (
+          <div style={{ padding: "10px 16px", background: "#FDF6E3",
+            borderBottom: `1px solid ${C.watch}55`, borderLeft: `4px solid ${C.watch}` }}>
+            <div style={{ fontFamily: FD, fontSize: 14, fontWeight: 700, color: C.ink }}>
+              {typedBad.length === 1
+                ? "That reading cannot be right"
+                : `${typedBad.length} of those readings cannot be right`}
+            </div>
+            {typedBad.map(({ pos, bad }) => (
+              <div key={pos} style={{ fontSize: 13, color: C.ink, lineHeight: 1.6 }}>
+                <span style={{ fontFamily: FM, fontWeight: 700 }}>{pos}</span>
+                <span style={{ fontFamily: FM, fontWeight: 700, color: C.pull }}>
+                  {" "}{bad.typed}/32
+                </span>
+                <span style={{ color: C.muted }}> — {sayTyped(bad)}</span>
+              </div>
+            ))}
+            <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 0", lineHeight: 1.5 }}>
+              Check the wheel and the gauge. If the reading is right, then the older
+              figure is the wrong one — save anyway and fix that instead.
+            </p>
+          </div>
+        )}
+
         {mode === "inspect" && (
           <div className="flex flex-wrap items-end gap-3"
             style={{ padding: "12px 16px", background: "#F4FAF6", borderBottom: `1px solid ${C.lineSoft}` }}>
@@ -601,12 +654,16 @@ function VehicleDetail(props) {
             <div style={{ fontFamily: FM, fontSize: 12, color: C.muted, paddingBottom: 8 }}>
               {filled}/{mountable} entered
             </div>
-            <Btn onClick={saveInspection} disabled={busy || !Number(insOdo) || filled === 0}>
-              Save {filled > 0 ? `${filled} reading${filled > 1 ? "s" : ""}` : "readings"}
+            <Btn onClick={saveInspection} disabled={busy || !Number(insOdo) || filled === 0}
+              tone={typedBad.length && okAnyway ? "danger" : undefined}>
+              {typedBad.length && okAnyway
+                ? `Save ${filled} anyway`
+                : `Save ${filled > 0 ? `${filled} reading${filled > 1 ? "s" : ""}` : "readings"}`}
             </Btn>
           </div>
         )}
 
+        {impossible.length > 0 && <ImpossibleTread list={impossible} />}
         {mismatches.length > 0 && <DualMismatch list={mismatches} limit={settings.dualMatch} />}
 
         {/* The diagram */}
@@ -718,6 +775,37 @@ function DualMismatch({ list, limit }) {
 }
 
 
+/* Readings that cannot be right, said out loud. A tire that reads
+   deeper than it did before used to show up as nothing but a blank in
+   the miles-per-32nd column, which reads as "nobody measured this"
+   rather than "somebody measured it wrong". */
+function ImpossibleTread({ list }) {
+  return (
+    <div style={{ margin: "0 12px 4px", background: "#FDF6E3",
+      border: `1px solid ${C.watch}55`, borderLeft: `4px solid ${C.watch}`,
+      borderRadius: 6, padding: "10px 14px" }}>
+      <div style={{ fontFamily: FD, fontSize: 15, fontWeight: 700, color: C.ink }}>
+        {list.length === 1 ? "A reading that cannot be right"
+          : `${list.length} readings that cannot be right`}
+      </div>
+      <div style={{ marginTop: 5 }}>
+        {list.map(({ pos, rise }) => (
+          <div key={pos} style={{ fontSize: 13, color: C.ink, lineHeight: 1.6 }}>
+            <span style={{ fontFamily: FM, fontWeight: 700 }}>{pos}</span>
+            {" — "}
+            <span style={{ color: C.muted }}>{sayRise(pos, rise).slice(pos.length + 1)}</span>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 12, color: C.muted, margin: "7px 0 0", lineHeight: 1.5 }}>
+        Rubber does not grow back, so one of the two figures is wrong. Re-gauge the
+        wheel, then fix whichever it turns out to be — a reading from the tire dialog,
+        or the mount depth under Edit these details.
+      </p>
+    </div>
+  );
+}
+
 /* ── Truck diagram — overhead, nose left, R side up ───────────── */
 function TruckDiagram({ v, positions, activeTireAt, tireStats, settings, oddWheels, mode, draft, setDraft, onTire, onEmpty }) {
   const axles = (CONFIGS[v.cfg] || CONFIGS.dump12).axles;
@@ -785,6 +873,10 @@ function TireCard({ pos, tire, stats, odd, settings, mode, draft, setDraft, onTi
   const col = STATUS_COLOR[st];      // the solid badge, white text on it
   const colOnDark = STATUS_ON_DARK[st]; // the tread numeral, on the card itself
   const inspecting = mode === "inspect" && tire;
+  /* Said at the box being typed into, not only in the bar at the top:
+     on a twelve-wheel truck the bar is off the screen by the time
+     somebody reaches the back axle. */
+  const bad = inspecting ? checkDepth(draft?.[pos.id], stats?.pts) : null;
 
   if (!tire) {
     return (
@@ -817,12 +909,16 @@ function TireCard({ pos, tire, stats, odd, settings, mode, draft, setDraft, onTi
             value={draft[pos.id] ?? ""}
             onChange={(e) => setDraft((p) => ({ ...p, [pos.id]: e.target.value }))}
             placeholder={stats?.depth != null ? String(stats.depth) : "--"}
-            style={{ width: 58, padding: "5px 6px", borderRadius: 4, border: `1px solid ${C.green600}`,
-              background: C.wellDark, color: "#fff", fontFamily: FM, fontWeight: 600, fontSize: 16,
+            style={{ width: 58, padding: "5px 6px", borderRadius: 4,
+              border: `1px solid ${bad ? C.watch : C.green600}`,
+              background: C.wellDark, color: bad ? C.yellowHi : "#fff",
+              fontFamily: FM, fontWeight: 600, fontSize: 16,
               textAlign: "center", outline: "none" }} />
           <div style={{ fontFamily: FM, fontSize: 11, color: C.onDarkSoft, lineHeight: 1.25 }}>
             /32<br />
-            <span style={{ fontSize: 10 }}>was {stats?.depth ?? "—"}</span>
+            <span style={{ fontSize: 10, color: bad ? C.yellowHi : C.onDarkSoft }}>
+              {bad ? `over the ${bad.was}` : `was ${stats?.depth ?? "—"}`}
+            </span>
           </div>
         </div>
       ) : (
@@ -865,7 +961,8 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
   }
   const rows = positions.map((p) => {
     const t = activeTireAt[`${v.num}|${p.id}`];
-    return { p, t, s: t ? tireStats[t.id] : null, odd: oddAt.get(p.id) || null };
+    const s = t ? tireStats[t.id] : null;
+    return { p, t, s, odd: oddAt.get(p.id) || null, why: whyNoRate(s) };
   });
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
@@ -883,7 +980,7 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ p, t, s, odd }) => (
+            {rows.map(({ p, t, s, odd, why }) => (
               <tr key={p.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                 <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>
                   {t ? (
@@ -914,7 +1011,18 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
                     </div>
                   )}
                 </td>
-                <td style={{ ...td, ...tdNum }}>{s?.miPer32 ? nf(s.miPer32) : "—"}</td>
+                {/* A dash is the one thing this column must not say on its
+                    own: four wheels on DT-899 had been gauged twice and
+                    looked untouched. */}
+                <td style={{ ...td, ...tdNum }}>
+                  {s?.miPer32 ? nf(s.miPer32) : why ? (
+                    <span style={{ fontFamily: FB, fontSize: 11.5, lineHeight: 1.35,
+                      display: "inline-block", whiteSpace: "normal", maxWidth: 150,
+                      color: why.kind === "grew" ? C.watch : C.muted }}>
+                      {why.say}
+                    </span>
+                  ) : "—"}
+                </td>
                 <td style={{ ...td, ...tdNum, color: C.muted }}>{s?.miles ? nf(s.miles) : "—"}</td>
                 <td style={{ ...td, ...tdNum }}>{s?.remain ? nf(s.remain) : "—"}</td>
                 <td style={td}>{s ? <Pill status={s.status} /> : <span style={{ color: C.muted }}>—</span>}</td>
@@ -1097,7 +1205,7 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
    them changes the wear rate, the estimated miles left and the cost per
    mile. The form says so, rather than letting somebody find out from a
    number that moved. */
-function EditTire({ tire, brands, freePositions, busy, movedSinceMount, onCancel, onSave }) {
+function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings = [], onCancel, onSave }) {
   /* A brand that is not on the list — typed through Other when the tire
      was mounted, or since turned off in Setup — must not be silently
      swapped for the first one in the dropdown. */
@@ -1131,6 +1239,7 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, onCancel
   const movedMount = String(f.onOdo) !== String(tire.onOdo ?? "")
     || String(f.newDepth) !== String(tire.newDepth ?? "")
     || f.onDate !== (tire.onDate || "");
+  const badMount = checkMount(f.newDepth, readings);
 
   const ok = !!brandName && !!f.pos && !!f.onDate
     && Number(f.newDepth) > 0 && f.onOdo !== "" && Number(f.onOdo) >= 0 && !bad;
@@ -1235,6 +1344,17 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, onCancel
           Changing them changes the wear rate, the miles left and the cost per mile.
         </p>
       )}
+      {/* A mount depth keyed too shallow is the quiet version of the
+          same mistake: the tire never shows wear against it, so the
+          wheel goes blank and looks unmeasured. Said whether or not
+          the figure was touched, because on a tire that already reads
+          deeper than it started, the point IS to touch it. */}
+      {badMount && (
+        <p style={{ fontSize: 12.5, color: C.pull, fontWeight: 600,
+          margin: "8px 0 0", lineHeight: 1.5 }}>
+          {sayMount(badMount)}
+        </p>
+      )}
       {movedWheel && (
         <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
           margin: "8px 0 0", lineHeight: 1.5 }}>
@@ -1294,6 +1414,9 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
     return (
       <EditTire tire={tire} brands={brands} freePositions={freePositions} busy={busy}
         movedSinceMount={!!stats?.pts?.some((p) => !p.mount)}
+        /* The gauged readings only. The mount is what is being edited,
+           so it cannot be its own evidence. */
+        readings={(stats?.pts || []).filter((p) => !p.mount)}
         onCancel={() => setEditing(false)} onSave={onSaveDetails} />
     );
   }

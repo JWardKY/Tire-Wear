@@ -23,6 +23,7 @@ const SECTIONS = [
   ["defects", "Defects"],
   ["orders", "Work orders"],
   ["tireedit", "Fixing a tire you keyed wrong"],
+  ["tread", "A reading that cannot be right"],
   ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
   ["tires", "Tires"],
@@ -376,6 +377,36 @@ export default function HelpSection() {
           going on and coming off show on their own in the history and on the truck's
           file, so you do not have to note those anywhere.
         </Note>
+      </Block>
+
+      <Block id="tread" title="A reading that cannot be right">
+        <p style={p}>
+          Tread only ever goes down. If you enter a depth deeper than the same tire
+          measured before, the screen stops you at the box and says what it read last
+          time and when. Check the wheel and check the gauge — it is easy to type 14
+          on 4RO when you are looking at 4RI.
+        </p>
+        <p style={p}>
+          If you are sure of your reading, then the <i>older</i> figure is the wrong one.
+          Press Save again and it will take it. Then fix the old number: a past reading
+          from the tire's dialog, or the mount depth under <i>Edit these details</i>.
+        </p>
+        <p style={p}>
+          A mount depth keyed too shallow is the one that does damage quietly. Everything
+          is measured from it, so a tire mounted at 10/32 that really went on at 15/32
+          never shows any wear at all — and the miles-per-32nd column sits blank as
+          though nobody ever gauged it.
+        </p>
+        <p style={p}>
+          That column now says why it is blank instead of just showing a dash:
+          <i>not measured yet</i>, <i>no miles since it went on</i>, <i>no wear measured
+          in 4,138 mi</i>, or <i>reads 4/32 deeper than it did</i>. The last two mean
+          go and gauge the wheel again.
+        </p>
+        <p style={p}>
+          A difference of one 32nd is ignored. That is where you put the gauge, not a
+          wrong number, and a flag that fires on it is one everybody learns to ignore.
+        </p>
       </Block>
 
       <Block id="duals" title="Duals that do not match">
