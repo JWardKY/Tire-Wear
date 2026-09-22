@@ -6,6 +6,7 @@ import * as time from "./timeData.js";
 import * as wlog from "./logData.js";
 import * as clock from "./nowData.js";
 import { todayISO } from "./day.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── The Hours section ────────────────────────────────────────────
    Where the hours went, for the office. Read only: hours are entered
@@ -85,7 +86,7 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
       setRows(await time.listRange(from, to));
       setErr(null);
     } catch (e) {
-      setErr(`Could not load hours — ${e.message || e}`);
+      setErr(sayOffline(e, "load") || `Could not load hours — ${e.message || e}`);
     }
     setReady(true);
   }, [from, to]);
@@ -162,7 +163,8 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
       }])).values()] : null);
       setErr(null);
     } catch (e) {
-      setErr(`Could not build the payroll export — ${e.message || e}`);
+      setErr(sayOffline(e, "load")
+        || `Could not build the payroll export — ${e.message || e}`);
     } finally {
       setExporting(false);
     }
@@ -183,7 +185,8 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
       URL.revokeObjectURL(a.href);
       setErr(null);
     } catch (e) {
-      setErr(`Could not build the detail export — ${e.message || e}`);
+      setErr(sayOffline(e, "load")
+        || `Could not build the detail export — ${e.message || e}`);
     } finally {
       setExporting(false);
     }
@@ -617,7 +620,7 @@ function Cards({ from, to, q, who, onErr }) {
       setAll(rows);
       return rows;
     } catch (e) {
-      onErr?.(`Could not load timecards — ${e.message || e}`);
+      onErr?.(sayOffline(e, "load") || `Could not load timecards — ${e.message || e}`);
       return null;
     }
   }, [from, to, onErr]);
@@ -720,7 +723,7 @@ function Cards({ from, to, q, who, onErr }) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      onErr?.(`Could not build the summary — ${e.message || e}`);
+      onErr?.(sayOffline(e, "load") || `Could not build the summary — ${e.message || e}`);
     } finally {
       setExporting(false);
     }
@@ -1050,7 +1053,7 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
       await time.deleteCard(day.mechanicId, day.date, reason, who);
       await onDeleted();
     } catch (e) {
-      onErr?.(`The card was not deleted — ${e.message || e}`);
+      onErr?.(sayOffline(e) || `The card was not deleted — ${e.message || e}`);
     } finally {
       setBusy(false);
     }
@@ -1156,7 +1159,8 @@ function WorkLog({ from, to, q, onErr }) {
        does not cost a round trip on a log that is already loaded. */
     wlog.listLog({ from, to, type: type || undefined })
       .then((r) => { if (live) setAll(r); })
-      .catch((e) => onErr?.(`Could not load the work log — ${e.message || e}`));
+      .catch((e) => onErr?.(sayOffline(e, "load")
+        || `Could not load the work log — ${e.message || e}`));
     return () => { live = false; };
   }, [from, to, type, onErr]);
 

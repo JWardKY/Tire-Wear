@@ -13,6 +13,7 @@ import * as shop from "./shopData.js";
 import * as partsData from "./partsData.js";
 import EquipmentWorked from "./EquipmentWorked.jsx";
 import { readUnlock, writeUnlock, clearUnlock } from "./identity.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── The Timecard section ─────────────────────────────────────────
    Your own hours for one day. Behind a PIN, because this is the one
@@ -75,7 +76,8 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
         setParts(pp);
         setPrograms(pr);
       } catch (e) {
-        setErr(`Could not load your timecard — ${e.message || e}`);
+        setErr(sayOffline(e, "load")
+          || `Could not load your timecard — ${e.message || e}`);
       }
       setReady(true);
     })();
@@ -97,7 +99,7 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
       await loadDay();
       setErr(null);
     } catch (e) {
-      setErr(`That did not save — ${e.message || e}`);
+      setErr(sayOffline(e) || `That did not save — ${e.message || e}`);
     } finally {
       setBusy(false);
     }
@@ -1020,7 +1022,7 @@ function GapTime({ hours, codes, mechanic, date, onBusy, onErr, onSaved }) {
       onErr?.(null);
       await onSaved?.();
     } catch (e) {
-      onErr?.(`Those hours did not save — ${e.message || e}`);
+      onErr?.(sayOffline(e) || `Those hours did not save — ${e.message || e}`);
     } finally {
       setSaving(false);
       onBusy?.(false);

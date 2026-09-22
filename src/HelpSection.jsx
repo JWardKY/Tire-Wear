@@ -520,6 +520,21 @@ export default function HelpSection() {
         <Faq q="I cannot see the Supervisor tab / it asks for a password.">
           That one is not for the floor. Everything you need is on the other tabs.
         </Faq>
+        {/* A tablet on shop wifi at the back of the building, or on cell data
+            out at Clover Bottom, drops a request now and then. The app cannot
+            stop that happening — it can only stop it reading like a crash. */}
+        <Faq q='It says "That did not reach the server".'>
+          Your tablet lost its signal for a second and the save never got out. Nothing
+          is broken. Reload the page — pull down on it, or press the refresh arrow —
+          and look at the truck. If what you were saving is not there, do it again.
+          Usually it will not be — the message never left the tablet — but reloading
+          is how you know instead of guess.
+        </Faq>
+        <Faq q='It says "Could not reach the server".'>
+          Same thing on the way in: the screen could not load. Check you still have
+          wifi or bars, then try again. If the whole shop is out, it is the internet,
+          not the app.
+        </Faq>
         <Faq q="Something is wrong, or the app is telling me something I do not believe.">
           Do not work around it. Tell Jason. A number nobody trusts is worse than no
           number, and if it is wrong it is worth fixing properly.

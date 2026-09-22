@@ -5,7 +5,7 @@ import {
   inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
 import * as shop from "./shopData.js";
-import { saySo, tooBig } from "./dbError.js";
+import { saySo, sayOffline, tooBig } from "./dbError.js";
 
 /* ── The PM section ───────────────────────────────────────────────
    A program is a service and how often it is due, by miles or by
@@ -99,7 +99,8 @@ export default function PmSection({ who, tab, onBusy }) {
       try {
         await reload();
       } catch (e) {
-        setErr(`Could not load the PM board — ${e.message || e}`);
+        setErr(sayOffline(e, "load")
+          || `Could not load the PM board — ${e.message || e}`);
       }
       setReady(true);
     })();
@@ -119,7 +120,7 @@ export default function PmSection({ who, tab, onBusy }) {
     } catch (e) {
       /* "numeric field overflow" is what this used to say, which is
          true and no use. Name the field and the limit. */
-      setErr(`That did not save — ${saySo(e, {
+      setErr(sayOffline(e) || `That did not save — ${saySo(e, {
         engine_hours: { label: "Engine hours", limit: "the meter tops out at 999,999.9" },
         hours: { label: "Labour hours", limit: "a service cannot take more than 999.99 hours" },
         done_odometer: { label: "The odometer", limit: "it cannot be more than 9,999,999" },
@@ -322,7 +323,8 @@ function History({ programs, vehicles, busy, onErr, onDelete }) {
       setRows(await shop.pmHistory({ from, to, vehId, programId }));
       onErr?.(null);
     } catch (e) {
-      onErr?.(`Could not load the service history — ${e.message || e}`);
+      onErr?.(sayOffline(e, "load")
+        || `Could not load the service history — ${e.message || e}`);
       setRows([]);
     }
   }, [from, to, vehId, programId, onErr]);

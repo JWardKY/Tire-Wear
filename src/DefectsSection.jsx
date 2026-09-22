@@ -6,6 +6,7 @@ import {
 } from "./ui.jsx";
 import * as shop from "./shopData.js";
 import { actorFor, readUnlock } from "./identity.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── The Defects section ──────────────────────────────────────────
    A defect is something wrong with a truck: today entered by hand,
@@ -87,7 +88,8 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
       try {
         await reload();
       } catch (e) {
-        setErr(`Could not load the defect list — ${e.message || e}`);
+        setErr(sayOffline(e, "load")
+          || `Could not load the defect list — ${e.message || e}`);
       }
       setReady(true);
     })();
@@ -112,7 +114,7 @@ export default function DefectsSection({ who, tab, onBusy, focus, onClearFocus }
       await reload();
       setErr(null);
     } catch (e) {
-      setErr(`That did not save — ${e.message || e}`);
+      setErr(sayOffline(e) || `That did not save — ${e.message || e}`);
     } finally {
       setBusy(false);
     }

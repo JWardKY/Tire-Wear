@@ -5,6 +5,7 @@ import {
 } from "./ui.jsx";
 import * as file from "./truckFile.js";
 import { findUnits, rollUp } from "./truckRollup.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── The truck file ───────────────────────────────────────────────
    Every other screen is organised around a job — the clock, the defect
@@ -54,7 +55,8 @@ export default function TruckFileSection({ onBusy }) {
   useEffect(() => {
     file.listUnits()
       .then(setUnits)
-      .catch((e) => setErr(`Could not load the fleet — ${e.message || e}`));
+      .catch((e) => setErr(sayOffline(e, "load")
+        || `Could not load the fleet — ${e.message || e}`));
   }, []);
 
   const matches = useMemo(
@@ -70,7 +72,7 @@ export default function TruckFileSection({ onBusy }) {
       setErr("");
     } catch (e) {
       setF(null);
-      setErr(`Could not pull that file — ${e.message || e}`);
+      setErr(sayOffline(e, "load") || `Could not pull that file — ${e.message || e}`);
     } finally {
       setLoading(false);
       onBusy?.(false);

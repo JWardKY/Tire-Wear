@@ -4,6 +4,7 @@ import { fmtDate, nf, toCSV, Btn, Field, Modal, SectionLabel, inp, th, td, tdNum
 import * as buy from "./purchasingData.js";
 import * as setup from "./setupData.js";
 import * as parts from "./partsData.js";
+import { sayOffline } from "./dbError.js";
 
 /* ── Work ─────────────────────────────────────────────────────────
    Two views over the same shop.
@@ -35,7 +36,7 @@ export default function WorkSection({ who, tab, onBusy, focus, onClearFocus }) {
   const [err, setErr] = useState("");
   const run = useCallback(async (fn) => {
     onBusy?.(true); setErr("");
-    try { await fn(); } catch (e) { setErr(e.message || String(e)); }
+    try { await fn(); } catch (e) { setErr(sayOffline(e) || e.message || String(e)); }
     finally { onBusy?.(false); }
   }, [onBusy]);
 
@@ -435,7 +436,7 @@ function IssuePartsDialog({ w, who, onClose, onDone }) {
   useEffect(() => {
     parts.listParts()
       .then((rows) => setAll(rows.filter((p) => p.active !== false)))
-      .catch((e) => setErr(e.message || String(e)));
+      .catch((e) => setErr(sayOffline(e, "load") || e.message || String(e)));
   }, []);
 
   const hits = useMemo(() => {
@@ -531,7 +532,7 @@ function Lines({ wo }) {
     let live = true;
     buy.workOrderLines(wo)
       .then((r) => { if (live) setD(r); })
-      .catch((e) => { if (live) setErr(e.message || String(e)); });
+      .catch((e) => { if (live) setErr(sayOffline(e, "load") || e.message || String(e)); });
     return () => { live = false; };
   }, [wo]);
 
