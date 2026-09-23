@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.js";
+import { capFor } from "./retread.js";
 
 /* Every read pages explicitly. PostgREST caps a single response at 1000
    rows, and tread readings pass that inside a couple of seasons — a
@@ -41,6 +42,7 @@ const toTire = (r, vehNumById) => ({
   model: r.model || "",
   size: r.size || "",
   type: r.tire_type,
+  caps: r.retread_count == null ? null : Number(r.retread_count),
   wheel: r.wheel_material || "",
   casing: r.casing_id || "",
   newDepth: r.mounted_depth == null ? null : Number(r.mounted_depth),
@@ -147,6 +149,10 @@ const tireRow = (vehicleId, t, who) => ({
   model: t.model || null,
   size: t.size || null,
   tire_type: t.type,
+  /* Never on a virgin tire: the database refuses the pairing, and a
+     count left behind after somebody switched the type back would be
+     a lie the form told. */
+  retread_count: capFor(t.type, t.caps),
   wheel_material: t.wheel || null,
   casing_id: t.casing || null,
   mounted_date: t.onDate,
@@ -178,7 +184,8 @@ const tireRow = (vehicleId, t, who) => ({
    was filled in, and a log people skim past is the same as none. */
 const WORTH_SAYING = [
   ["pos", "position"], ["brand", "brand"], ["model", "model"],
-  ["size", "size"], ["type", "type"], ["onOdo", "mount odometer"],
+  ["size", "size"], ["type", "type"], ["caps", "times capped"],
+  ["onOdo", "mount odometer"],
   ["newDepth", "mount tread"], ["onDate", "mount date"], ["cost", "cost"],
 ];
 
@@ -195,6 +202,7 @@ export async function updateTire(tireId, t, before, who) {
       model: t.model || null,
       size: t.size || null,
       tire_type: t.type,
+      retread_count: capFor(t.type, t.caps),
       wheel_material: t.wheel || null,
       casing_id: t.casing || null,
       mounted_date: t.onDate,
