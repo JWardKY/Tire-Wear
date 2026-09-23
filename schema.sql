@@ -136,29 +136,52 @@ create unique index if not exists tw_one_active_tire_per_position
 
 /* Moving a tire to another wheel on the same truck.
    ─────────────────────────────────────────────────────────────────
-   A rotation is two tires trading places, and the index above is a
-   partial unique INDEX — checked row by row, not at commit, and not
-   deferrable because it carries a WHERE clause. So the two cannot
-   simply swap in two updates: whichever lands first collides with the
-   one still sitting there.
+   Three cases, and they are not interchangeable.
 
-   Hence one function and one transaction: park the tire being
-   displaced somewhere nothing else can be, move the first, bring the
-   second back. The park value carries the row's own id so two
-   rotations at once cannot collide on it, and a failure at any step
-   rolls the whole thing back rather than leaving a tire parked.
+   The wheel is bare       → the tire just moves.
+   The wheel is taken, and
+     the tire there is
+     being scrapped        → pull it, then move. This is the common
+                             one: a tire is moved onto a wheel whose
+                             tire is worn out, and swapping it back
+                             would put the worn-out tire on the truck.
+     the two trade places  → a rotation.
 
-   The tire keeps its id, its mount figures and every reading — it is
-   the same casing on a different wheel, so the wear rate carries on
-   from where it was. Nothing here touches tw_tread_readings.
+   The swap is the awkward one. The index above is a partial unique
+   INDEX — checked row by row, not at commit, and not deferrable
+   because it carries a WHERE clause — so two tires cannot simply
+   swap in two updates: whichever lands first collides with the one
+   still sitting there. Hence the park, at a value carrying the row's
+   own id so two rotations at once cannot collide on it, inside one
+   transaction that rolls back rather than leaving a tire parked.
+
+   A replace needs none of that. Setting removed_date drops the tire
+   out of the partial index, so the move behind it is unobstructed —
+   which is why the date is required rather than left to the caller's
+   good intentions.
+
+   Either way the wheel the tire came FROM is left empty, and the tire
+   being moved keeps its id, its mount figures and every reading. It
+   is the same casing on a different wheel, so the wear rate carries
+   on. Nothing here touches tw_tread_readings.
 
    security invoker on purpose: anon already has full rights on
    tw_tires, so this grants nothing the caller did not have. It exists
-   for the transaction, not for the privilege. */
-create or replace function tw_move_tire(p_tire uuid, p_to text)
+   for the transaction, not for the privilege. search_path is pinned
+   or the function resolves tw_tires against whatever the caller has
+   set. */
+create or replace function tw_move_tire(
+  p_tire         uuid,
+  p_to           text,
+  p_pull_other   boolean default false,
+  p_off_date     date    default null,
+  p_off_odometer integer default null,
+  p_off_reason   text    default null
+)
 returns jsonb
 language plpgsql
 security invoker
+set search_path = public, pg_temp
 as $$
 declare
   v_veh   uuid;
@@ -185,6 +208,18 @@ begin
 
   if v_other is null then
     update tw_tires set position = p_to where id = p_tire;
+
+  elsif p_pull_other then
+    if p_off_date is null then
+      raise exception 'Say what date the tire coming off came off.' using errcode = '22023';
+    end if;
+    update tw_tires
+       set removed_date     = p_off_date,
+           removed_odometer = p_off_odometer,
+           removed_reason   = coalesce(nullif(btrim(p_off_reason), ''), 'Replaced')
+     where id = v_other;
+    update tw_tires set position = p_to where id = p_tire;
+
   else
     v_park := '~moving:' || v_other::text;
     update tw_tires set position = v_park  where id = v_other;
@@ -196,14 +231,13 @@ begin
     'vehicle_id',   v_veh,
     'from',         v_from,
     'to',           p_to,
-    'swapped_with', v_other);
+    'swapped_with', case when v_other is not null and not p_pull_other then v_other end,
+    'pulled',       case when v_other is not null and p_pull_other then v_other end);
 end;
 $$;
 
-grant execute on function tw_move_tire(uuid, text) to anon, authenticated;
-/* Pinned, or the function resolves tw_tires against whatever the
-   caller's search_path happens to be. */
-alter function tw_move_tire(uuid, text) set search_path = public, pg_temp;
+grant execute on function
+  tw_move_tire(uuid, text, boolean, date, integer, text) to anon, authenticated;
 
 comment on column tw_tires.notes is
   'Free-text note on the mounted tire, shown on the wheel position. Overwritten in place, so it carries no history — a dated observation belongs on tw_tread_readings instead.';

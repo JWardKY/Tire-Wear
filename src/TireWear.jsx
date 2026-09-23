@@ -14,7 +14,8 @@ import { saySo, sayOffline, tooBig } from "./dbError.js";
 import { dualMismatches, mismatchedWheels, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
 import { checkDepth, checkMount, sayTyped, sayMount, sayRise, worstRise, whyNoRate }
   from "./treadCheck.js";
-import { destinations, checkMove, sayMove, sayThreshold } from "./moveTire.js";
+import { destinations, checkMove, sayMove, sayThreshold, REPLACE, SWAP }
+  from "./moveTire.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -713,9 +714,10 @@ function VehicleDetail(props) {
              ones, because a rotation is usually a swap. */
           positions={positions} activeTireAt={activeTireAt} tireStats={tireStats}
           lastOdo={lastOdo}
-          onMove={async ({ to, when, odo, other }) => {
+          onMove={async ({ to, when, odo, other, mode, reason }) => {
             await actions.moveTire(openTire.id, to, {
-              when, odo, veh: v.num, vehId: v.id, from: openTire.pos, other });
+              when, odo, veh: v.num, vehId: v.id, from: openTire.pos,
+              other, mode, reason });
             setOpenTire(null);
           }}
           onSaveDetails={async (t) => {
@@ -1401,6 +1403,11 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
   );
 }
 
+/* Why a tire came off. Shared, because a tire displaced by a move
+   comes off for the same reasons as one pulled on its own. */
+const PULL_REASONS = ["Worn out", "Road hazard", "Sidewall damage",
+  "Irregular wear", "Rotated off", "Casing sent to retread"];
+
 function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
                      positions = [], activeTireAt = {}, tireStats = {}, lastOdo,
                      onClose, onPull, onSaveDetails, onSaveNotes, onDeleteReading, onMove }) {
@@ -1427,9 +1434,17 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
   const [toPos, setToPos] = useState("");
   const [moveDate, setMoveDate] = useState(todayISO());
   const [moveOdo, setMoveOdo] = useState(lastOdo != null ? String(lastOdo) : "");
+  /* What becomes of the tire already on the wheel. Replace by default:
+     a tire is usually moved onto a wheel whose tire is being scrapped,
+     and defaulting to a swap would quietly put a worn-out tire back on
+     the truck. */
+  const [moveMode, setMoveMode] = useState(REPLACE);
+  const [offReason, setOffReason] = useState(PULL_REASONS[0]);
   const wheels = destinations(positions, activeTireAt, tire.veh, tire.pos);
   const landingOn = wheels.find((w) => w.id === toPos) || null;
-  const moveWhy = checkMove(tire.pos, toPos);
+  const displaced = landingOn?.taken || null;
+  const moveWhy = checkMove(tire.pos, toPos,
+    { other: displaced, mode: moveMode, offDate: moveDate });
 
   const chart = (stats?.pts || []).map((p) => ({
     odo: p.odo, depth: p.d, label: nf(p.odo / 1000, 0) + "k",
@@ -1578,13 +1593,48 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
               placeholder="optional" style={{ ...inp, fontFamily: FM }} /></Field>
           </div>
 
+          {/* The question the first version never asked. A wheel that
+              is taken can go two ways and they are not interchangeable:
+              one keeps both tires on the truck, the other takes one
+              off it. */}
+          {displaced && (
+            <div style={{ marginTop: 12 }}>
+              <SectionLabel noMargin>
+                And the {displaced.brand || "tire"} on {toPos}
+              </SectionLabel>
+              <div className="flex flex-wrap items-center" style={{ gap: 14, marginTop: 7 }}>
+                <label className="flex items-center" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="radio" name="movemode" checked={moveMode === REPLACE}
+                    onChange={() => setMoveMode(REPLACE)} />
+                  Comes off the truck
+                </label>
+                <label className="flex items-center" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="radio" name="movemode" checked={moveMode === SWAP}
+                    onChange={() => setMoveMode(SWAP)} />
+                  Goes on {tire.pos} — they trade places
+                </label>
+                {moveMode === REPLACE && (
+                  <select value={offReason} onChange={(e) => setOffReason(e.target.value)}
+                    style={{ ...inp, width: "auto", padding: "5px 8px", fontSize: 12.5 }}>
+                    {PULL_REASONS.map((r) => <option key={r}>{r}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* What is about to happen, before it happens. The two treads
               are in it because that is what somebody rotating is
               deciding on: which way round the deep one should go. */}
           {toPos && !moveWhy && (
             <p style={{ fontSize: 13, color: C.ink, fontWeight: 600, margin: "10px 0 0" }}>
               {sayMove({ from: tire.pos, to: toPos, moving: tire,
-                         other: landingOn?.taken || null, stats: tireStats })}
+                         other: displaced, stats: tireStats, mode: moveMode })}
+            </p>
+          )}
+          {toPos && moveWhy && (
+            <p style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, margin: "10px 0 0" }}>
+              {moveWhy}
             </p>
           )}
           {toPos && sayThreshold(tire.pos, toPos, settings) && (
@@ -1594,8 +1644,9 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
             </p>
           )}
           <p style={{ fontSize: 12, color: C.muted, margin: "8px 0 0", lineHeight: 1.5 }}>
-            The tire keeps its readings and its mount figures — it is the same casing on a
-            different wheel, so the wear rate carries on. Use <i>Edit these details</i>{" "}
+            The tire being moved keeps its readings and its mount figures — it is the same
+            casing on a different wheel, so the wear rate carries on. {tire.pos} is left
+            empty. Use <i>Edit these details</i>{" "}
             instead if the position was simply keyed wrong in the first place.
           </p>
 
@@ -1605,9 +1656,11 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
               onClick={() => onMove({
                 to: toPos, when: moveDate,
                 odo: moveOdo === "" ? null : Number(moveOdo),
-                other: landingOn?.taken || null,
+                other: displaced, mode: moveMode, reason: offReason,
               })}>
-              {landingOn?.taken ? "Swap them" : "Move it"}
+              {!displaced ? "Move it"
+                : moveMode === SWAP ? "Swap them"
+                : `Move it, ${toPos} comes off`}
             </Btn>
           </div>
         </div>
@@ -1623,8 +1676,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
               onChange={(e) => setOffOdo(e.target.value)} style={{ ...inp, fontFamily: FM }} /></Field>
             <Field label="Reason">
               <select value={reason} onChange={(e) => setReason(e.target.value)} style={inp}>
-                {["Worn out", "Road hazard", "Sidewall damage", "Irregular wear",
-                  "Rotated off", "Casing sent to retread"].map((r) => <option key={r}>{r}</option>)}
+                {PULL_REASONS.map((r) => <option key={r}>{r}</option>)}
               </select>
             </Field>
           </div>

@@ -49,6 +49,11 @@ POS12.forEach((pos, i) => {
     miles_per_32nd: 1035, miles_per_mil: null });
 });
 
+/* The rpc stand-in mutates these rows in place, the way the database
+   does. A section that needs the truck back as it started has to take
+   a copy made BEFORE anything ran, not re-use the same objects. */
+const PRISTINE = JSON.stringify(tires);
+
 const rows = {
   tw_vehicles: [{ id: V, number: "DT-899", make: "Peterbilt", model: "567",
     model_year: 2024, division: "DT", axle_config: "dump12",
@@ -79,22 +84,29 @@ await ctx.addInitScript(() =>
 
 /* The rpc the real database serves. The fake does not model the
    partial unique index, so without standing in for the function here
-   the swap this screen exists to perform would never be exercised. */
+   neither the swap nor the replace could be exercised. */
 const rpcCalls = [];
 const { writes } = await fakeRest(ctx, {
   rows,
   rpc: {
-    tw_move_tire: ({ p_tire, p_to }) => {
-      rpcCalls.push({ p_tire, p_to });
+    tw_move_tire: (body) => {
+      const { p_tire, p_to, p_pull_other, p_off_date, p_off_odometer, p_off_reason } = body;
+      rpcCalls.push(body);
       const mine = rows.tw_tires.find((t) => t.id === p_tire && !t.removed_date);
       if (!mine) throw new Error("no such tire");
       const from = mine.position;
       const other = rows.tw_tires.find(
         (t) => t.vehicle_id === mine.vehicle_id && t.position === p_to && !t.removed_date);
+      if (other && p_pull_other) {
+        other.removed_date = p_off_date;
+        other.removed_odometer = p_off_odometer;
+        other.removed_reason = p_off_reason;
+      }
       mine.position = p_to;
-      if (other) other.position = from;
+      if (other && !p_pull_other) other.position = from;
       return { vehicle_id: mine.vehicle_id, from, to: p_to,
-               swapped_with: other ? other.id : null };
+               swapped_with: other && !p_pull_other ? other.id : null,
+               pulled: other && p_pull_other ? other.id : null };
     },
   },
 });
@@ -145,10 +157,27 @@ console.log("\n── what it says before it happens ──");
 await dest.selectOption("4LO");
 await page.waitForTimeout(500);
 t = await form.innerText();
-ok("it says the two trade places", /4RO \(14\/32\) and 4LO \(11\/32\) trade places/.test(t),
+/* The default, because it is what the shop does: the tire on the wheel
+   being moved to is scrapped, not put back on the truck. */
+ok("it offers what becomes of the tire already there",
+   /Comes off the truck/i.test(t) && /they trade places/i.test(t), t.slice(0, 500));
+ok("…and taking it off is what it does unasked",
+   /4RO \(14\/32\) moves to 4LO\. The 11\/32 on 4LO comes off the truck\./.test(t),
+   (t.match(/4RO[^\n]*comes off[^\n]*/) || ["(nothing)"])[0]);
+ok("…with the button saying so", /Move it, 4LO comes off/i.test(t),
+   (t.match(/Move it[^\n]*|Swap them/i) || [""])[0]);
+ok("…and a reason for the tire coming off", /Worn out/.test(t), t.slice(0, 500));
+
+/* And the swap is still there, one click away. */
+await form.getByRole("radio").nth(1).check();
+await page.waitForTimeout(400);
+t = await form.innerText();
+ok("choosing the swap says they trade places",
+   /4RO \(14\/32\) and 4LO \(11\/32\) trade places/.test(t),
    (t.match(/.{0,20}trade places.{0,20}/) || ["(nothing)"])[0]);
 ok("…and the button says swap, not move", /Swap them/i.test(t),
    (t.match(/Swap them|Move it/i) || [""])[0]);
+ok("…and the reason box goes away, nothing is coming off", !/Worn out/.test(t));
 ok("…and it says the readings come along", /keeps its readings/i.test(t));
 ok("…and points at the edit form for a position keyed wrong",
    /Edit these details/i.test(t));
@@ -176,6 +205,8 @@ ok("the move went through the function, not two updates",
 ok("…naming 4RO's tire and 4LO", rpcCalls[0]?.p_to === "4LO"
    && rpcCalls[0]?.p_tire === tires.find((x) => x.position === "4LO" || x.id === "t11")?.id,
    JSON.stringify(rpcCalls[0]));
+ok("…and told not to pull anything, because this one is a swap",
+   rpcCalls[0]?.p_pull_other === false, JSON.stringify(rpcCalls[0]));
 ok("…and no tire row was updated directly",
    !writes.some((w) => w.table === "tw_tires"), JSON.stringify(writes.map((w) => w.table)));
 
@@ -184,10 +215,17 @@ ok("the dialog closed", !/Move this tire/i.test(t));
 ok("all twelve are still on the truck", /12\s*\/\s*12/.test(t.replace(/\s+/g, " ")));
 
 /* The screen has to show the swap, not just accept it. */
+/* By the row's own text, not by a button in it: a wheel with a tire on
+   it renders its position as a button, and a bare one renders it as
+   plain text. Matching the button finds nothing for exactly the rows
+   this test cares most about. */
 const rowTread = async (pos) => {
-  const tr = page.locator("table").last().locator("tr")
-    .filter({ has: page.getByRole("button", { name: pos, exact: true }) });
-  return (await tr.count()) ? (await tr.first().innerText()).replace(/\s+/g, " ") : "";
+  const tr = page.locator("table").last().locator("tr");
+  for (let i = 0; i < await tr.count(); i++) {
+    const text = (await tr.nth(i).innerText()).replace(/\s+/g, " ");
+    if (new RegExp(`^${pos}\\b`).test(text)) return text;
+  }
+  return "";
 };
 ok("4RO now shows the tire that was on 4LO", /11\/32/.test(await rowTread("4RO")),
    await rowTread("4RO"));
@@ -238,6 +276,64 @@ ok("…and reads as a move rather than a swap",
 ok("…with nothing swapped in the detail", moved?.detail?.swappedWith === null,
    JSON.stringify(moved?.detail));
 ok("still nothing crashed", crashes.length === 0, crashes.join("\n    "));
+
+/* ── the one the shop actually does ──────────────────────────── */
+/* "I move 4RI to 4LO but 4LO is removed from the truck, not swapped."
+   The first version of this screen could only swap, which would have
+   put the scrapped tire straight back on at 4RI. */
+console.log("\n── moving onto a wheel whose tire is being scrapped ──");
+rows.tw_tires = JSON.parse(PRISTINE);               // the truck as it started
+rpcCalls.length = 0;
+writes.length = 0;
+await openTruck();
+await page.getByRole("button", { name: "4RI", exact: true }).first().click();
+await page.waitForTimeout(900);
+await page.getByRole("button", { name: /Move to another wheel/i }).click();
+await page.waitForTimeout(600);
+const f3 = page.locator('div[style*="position: fixed"]').last();
+await f3.locator("select").first().selectOption("4LO");
+await page.waitForTimeout(500);
+t = await f3.innerText();
+ok("it takes the other tire off without being asked",
+   /The 11\/32 on 4LO comes off the truck/.test(t),
+   (t.match(/4RI[^\n]*|The [^\n]*comes off[^\n]*/) || ["(nothing)"])[0]);
+
+/* The reason is the shop's, not a default nobody chose. */
+const why = f3.locator("select").nth(1);
+await why.selectOption("Casing sent to retread");
+await page.waitForTimeout(300);
+await page.getByRole("button", { name: /Move it, 4LO comes off/i }).click();
+await page.waitForTimeout(2200);
+
+ok("one call to the function", rpcCalls.length === 1, JSON.stringify(rpcCalls));
+const call = rpcCalls[0] || {};
+ok("…told to pull the tire that was there", call.p_pull_other === true, JSON.stringify(call));
+ok("…with the date it came off", !!call.p_off_date, JSON.stringify(call));
+ok("…the odometer", Number(call.p_off_odometer) === 99141, JSON.stringify(call));
+ok("…and the reason that was chosen",
+   call.p_off_reason === "Casing sent to retread", JSON.stringify(call));
+
+t = await page.locator("body").innerText();
+ok("the truck is down to eleven tires", /11\s*\/\s*12/.test(t.replace(/\s+/g, " ")),
+   (t.match(/TIRES MOUNTED[^\n]*\n?[^\n]*/i) || [""])[0]);
+ok("4LO now carries the tire that came off 4RI", /10\/32/.test(await rowTread("4LO")),
+   await rowTread("4LO"));
+/* The wheel it left is empty. Nothing slides onto it on its own. */
+const r4RI = await rowTread("4RI");
+ok("…and 4RI is empty", /Mount a tire/i.test(r4RI), r4RI);
+/* The scrapped tire is off the truck, not sitting on 4RI. */
+ok("the scrapped tire is off the truck altogether",
+   !/11\/32/.test(r4RI), r4RI);
+
+const rl = writes.filter((w) => w.table === "tw_work_log").flatMap((w) => w.body).pop();
+ok("the log reads as a move, not a swap",
+   /tire moved 4RI → 4LO/.test(rl?.summary || "") && !/traded/.test(rl?.summary || ""),
+   rl?.summary);
+ok("…and says the other tire came off, and why",
+   /the tire on 4LO came off \(Casing sent to retread\)/.test(rl?.summary || ""), rl?.summary);
+ok("…with the pulled tire in the detail and nothing swapped",
+   !!rl?.detail?.pulled && rl?.detail?.swappedWith === null, JSON.stringify(rl?.detail));
+ok("nothing crashed on the replace", crashes.length === 0, crashes.join("\n    "));
 
 await browser.close();
 console.log(bad ? `\n${bad} check(s) FAILED` : "\nall checks passed");
