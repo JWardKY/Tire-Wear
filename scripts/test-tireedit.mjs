@@ -226,7 +226,14 @@ await pos2.selectOption("4RI");
 await page.waitForTimeout(500);
 t = await form3.innerText();
 ok("moving a wheel says what it means", /takes its readings with it/i.test(t));
-ok("…and that a rotation is not this", /a rotation is a pull and a mount/i.test(t));
+/* This form says the tire was ALWAYS on the new wheel. A rotation says
+   it was on the old one until today, and lives on its own button — so
+   this has to send somebody there rather than let them record a
+   rotation as a typo. */
+ok("…and that it is for a position keyed wrong",
+   /only for a position keyed wrong/i.test(t), t.slice(0, 400));
+ok("…and points at the button that does a real move",
+   /Move to another wheel/i.test(t), t.slice(0, 400));
 
 /* Somebody on another tablet mounts a tire on 4RI while this form is
    open. The dropdown cannot guard against that; the unique index can,
