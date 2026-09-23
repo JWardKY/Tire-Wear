@@ -14,6 +14,7 @@ import { saySo, sayOffline, tooBig } from "./dbError.js";
 import { dualMismatches, mismatchedWheels, wheelsFrom, DUAL_LIMIT } from "./dualMatch.js";
 import { checkDepth, checkMount, sayTyped, sayMount, sayRise, worstRise, whyNoRate }
   from "./treadCheck.js";
+import { destinations, checkMove, sayMove, sayThreshold } from "./moveTire.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -179,6 +180,7 @@ export default function TireWear({ who, tab, onBusy }) {
     mountTires: (vehId, list) => run(() => db.mountTires(vehId, list, who)),
     pullTire: (tireId, off) => run(() => db.pullTire(tireId, off)),
     updateTire: (tireId, t, before) => runRaw(() => db.updateTire(tireId, t, before, who)),
+    moveTire: (tireId, to, ctx) => run(() => db.moveTire(tireId, to, ctx, who)),
     setTireNotes: (tireId, notes) => run(() => db.setTireNotes(tireId, notes)),
     saveInspection: (vehId, date, odo, entries) =>
       run(() => db.saveInspection(vehId, date, odo, entries, who)),
@@ -706,6 +708,16 @@ function VehicleDetail(props) {
              the casing. */
           freePositions={positions.filter(
             (p) => p.id === openTire.pos || !activeTireAt[`${v.num}|${p.id}`])}
+          /* Moving it for real, rather than correcting a position keyed
+             wrong, needs every wheel on the truck — including the taken
+             ones, because a rotation is usually a swap. */
+          positions={positions} activeTireAt={activeTireAt} tireStats={tireStats}
+          lastOdo={lastOdo}
+          onMove={async ({ to, when, odo, other }) => {
+            await actions.moveTire(openTire.id, to, {
+              when, odo, veh: v.num, vehId: v.id, from: openTire.pos, other });
+            setOpenTire(null);
+          }}
           onSaveDetails={async (t) => {
             /* The tire as it stands goes with the patch, so the log line
                can say what it used to be. Once the row is overwritten
@@ -1358,8 +1370,10 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
       {movedWheel && (
         <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
           margin: "8px 0 0", lineHeight: 1.5 }}>
-          Moving it to {f.pos} takes its readings with it. Do this to fix a position
-          keyed wrong, not to record a rotation — a rotation is a pull and a mount.
+          Moving it to {f.pos} takes its readings with it, as though it had been on
+          {f.pos} all along. Do this only for a position keyed wrong. To record the
+          tire actually being moved, close this and use <i>Move to another wheel</i>,
+          which dates the move and can swap it with the tire already there.
         </p>
       )}
       {bad && (
@@ -1388,9 +1402,11 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
 }
 
 function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
-                     onClose, onPull, onSaveDetails, onSaveNotes, onDeleteReading }) {
+                     positions = [], activeTireAt = {}, tireStats = {}, lastOdo,
+                     onClose, onPull, onSaveDetails, onSaveNotes, onDeleteReading, onMove }) {
   const [pulling, setPulling] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [note, setNote] = useState(tire.notes || "");
   const noteDirty = note.trim() !== (tire.notes || "").trim();
 
@@ -1404,6 +1420,16 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
   const [offOdo, setOffOdo] = useState(stats?.last ? String(stats.last.odo) : "");
   const [offDate, setOffDate] = useState(todayISO());
   const [reason, setReason] = useState("Worn out");
+
+  /* Where it could go: every other wheel on this truck, taken or not.
+     A rotation is two tires trading places far more often than it is a
+     tire moving onto a bare wheel, so occupied ones are offered too. */
+  const [toPos, setToPos] = useState("");
+  const [moveDate, setMoveDate] = useState(todayISO());
+  const [moveOdo, setMoveOdo] = useState(lastOdo != null ? String(lastOdo) : "");
+  const wheels = destinations(positions, activeTireAt, tire.veh, tire.pos);
+  const landingOn = wheels.find((w) => w.id === toPos) || null;
+  const moveWhy = checkMove(tire.pos, toPos);
 
   const chart = (stats?.pts || []).map((p) => ({
     odo: p.odo, depth: p.d, label: nf(p.odo / 1000, 0) + "k",
@@ -1507,14 +1533,87 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
         </tbody>
       </table>
 
-      {!pulling ? (
+      {!pulling && !moving && (
         <div className="flex justify-between items-center">
-          <button onClick={() => setPulling(true)} style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
-            Pull this tire off
-          </button>
+          <div className="flex items-center" style={{ gap: 16 }}>
+            <button onClick={() => setPulling(true)} style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
+              Pull this tire off
+            </button>
+            {/* A rotation, not a correction. The edit form changes a
+                position that was keyed wrong; this one records the tire
+                actually being moved, and can swap it with the tire
+                already on the other wheel. */}
+            <button onClick={() => { setMoving(true); setToPos(""); }}
+              style={{ ...linkBtn, fontWeight: 600 }}>
+              Move to another wheel
+            </button>
+          </div>
           <Btn tone="ghost" onClick={onClose}>Close</Btn>
         </div>
-      ) : (
+      )}
+
+      {moving && (
+        <div style={{ borderTop: `1px solid ${C.lineSoft}`, paddingTop: 14 }}>
+          <SectionLabel>Move this tire</SectionLabel>
+          <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <Field label="Onto which wheel">
+              <select value={toPos} onChange={(e) => setToPos(e.target.value)}
+                style={{ ...inp, fontFamily: FM }}>
+                <option value="">Choose a wheel…</option>
+                {wheels.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.id} · {w.taken
+                      ? `${w.taken.brand || "Unbranded"}${
+                          tireStats[w.taken.id]?.depth != null
+                            ? ` ${tireStats[w.taken.id].depth}/32` : ""}`
+                      : "empty"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Date moved"><input type="date" value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value)} style={inp} /></Field>
+            <Field label="Odometer (mi)"><input type="number" inputMode="numeric"
+              value={moveOdo} onChange={(e) => setMoveOdo(e.target.value)}
+              placeholder="optional" style={{ ...inp, fontFamily: FM }} /></Field>
+          </div>
+
+          {/* What is about to happen, before it happens. The two treads
+              are in it because that is what somebody rotating is
+              deciding on: which way round the deep one should go. */}
+          {toPos && !moveWhy && (
+            <p style={{ fontSize: 13, color: C.ink, fontWeight: 600, margin: "10px 0 0" }}>
+              {sayMove({ from: tire.pos, to: toPos, moving: tire,
+                         other: landingOn?.taken || null, stats: tireStats })}
+            </p>
+          )}
+          {toPos && sayThreshold(tire.pos, toPos, settings) && (
+            <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
+              margin: "6px 0 0", lineHeight: 1.5 }}>
+              {sayThreshold(tire.pos, toPos, settings)}
+            </p>
+          )}
+          <p style={{ fontSize: 12, color: C.muted, margin: "8px 0 0", lineHeight: 1.5 }}>
+            The tire keeps its readings and its mount figures — it is the same casing on a
+            different wheel, so the wear rate carries on. Use <i>Edit these details</i>{" "}
+            instead if the position was simply keyed wrong in the first place.
+          </p>
+
+          <div className="flex justify-end mt-3" style={{ gap: 8 }}>
+            <Btn tone="ghost" onClick={() => setMoving(false)}>Never mind</Btn>
+            <Btn disabled={busy || !!moveWhy || !toPos}
+              onClick={() => onMove({
+                to: toPos, when: moveDate,
+                odo: moveOdo === "" ? null : Number(moveOdo),
+                other: landingOn?.taken || null,
+              })}>
+              {landingOn?.taken ? "Swap them" : "Move it"}
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {pulling && (
         <div style={{ borderTop: `1px solid ${C.lineSoft}`, paddingTop: 14 }}>
           <SectionLabel>Pull this tire</SectionLabel>
           <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>

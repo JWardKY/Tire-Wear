@@ -23,6 +23,7 @@ const SECTIONS = [
   ["defects", "Defects"],
   ["orders", "Work orders"],
   ["tireedit", "Fixing a tire you keyed wrong"],
+  ["move", "Moving a tire to another wheel"],
   ["tread", "A reading that cannot be right"],
   ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
@@ -377,6 +378,37 @@ export default function HelpSection() {
           going on and coming off show on their own in the history and on the truck's
           file, so you do not have to note those anywhere.
         </Note>
+      </Block>
+
+      <Block id="move" title="Moving a tire to another wheel">
+        <p style={p}>
+          Open the tire from the truck diagram and press <i>Move to another wheel</i>. Pick
+          where it is going, check the date, and press the button. If there is already a
+          tire on the wheel you picked, the two swap — that one comes back to where the
+          first one was. Nothing gets lost and nothing gets pulled off the truck.
+        </p>
+        <p style={p}>
+          The list shows every wheel on the truck with what is on it and how deep it is,
+          so you can see which way round to put them before you commit. It tells you what
+          it is about to do in plain words first: <i>4RO (14/32) and 4LO (11/32) trade
+          places</i>.
+        </p>
+        <p style={p}>
+          The tire keeps everything — its readings, its mount date, its mount tread — so
+          the wear rate carries straight on. It is the same casing on a different wheel.
+        </p>
+        <p style={p}>
+          Moving a tire on or off the steer axle is flagged, because a steer tire is
+          pulled at a different depth from the rest. The tread does not change but the
+          status might.
+        </p>
+        <p style={p}>
+          <b>This is not the same as fixing a typo.</b> If the tire was never on that
+          wheel and somebody keyed it wrong, use <i>Edit these details</i> instead — that
+          one says it was always on the new wheel. <i>Move to another wheel</i> says it
+          was on the old one until today. Both are written down, and they read
+          differently in the truck's history.
+        </p>
       </Block>
 
       <Block id="tread" title="A reading that cannot be right">

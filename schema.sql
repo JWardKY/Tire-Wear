@@ -134,6 +134,77 @@ comment on column tw_tires.wheel_material is
 create unique index if not exists tw_one_active_tire_per_position
   on tw_tires (vehicle_id, position) where removed_date is null;
 
+/* Moving a tire to another wheel on the same truck.
+   ─────────────────────────────────────────────────────────────────
+   A rotation is two tires trading places, and the index above is a
+   partial unique INDEX — checked row by row, not at commit, and not
+   deferrable because it carries a WHERE clause. So the two cannot
+   simply swap in two updates: whichever lands first collides with the
+   one still sitting there.
+
+   Hence one function and one transaction: park the tire being
+   displaced somewhere nothing else can be, move the first, bring the
+   second back. The park value carries the row's own id so two
+   rotations at once cannot collide on it, and a failure at any step
+   rolls the whole thing back rather than leaving a tire parked.
+
+   The tire keeps its id, its mount figures and every reading — it is
+   the same casing on a different wheel, so the wear rate carries on
+   from where it was. Nothing here touches tw_tread_readings.
+
+   security invoker on purpose: anon already has full rights on
+   tw_tires, so this grants nothing the caller did not have. It exists
+   for the transaction, not for the privilege. */
+create or replace function tw_move_tire(p_tire uuid, p_to text)
+returns jsonb
+language plpgsql
+security invoker
+as $$
+declare
+  v_veh   uuid;
+  v_from  text;
+  v_other uuid;
+  v_park  text;
+begin
+  select vehicle_id, position into v_veh, v_from
+    from tw_tires where id = p_tire and removed_date is null;
+
+  if v_veh is null then
+    raise exception 'That tire is not on a truck.' using errcode = 'P0002';
+  end if;
+  if p_to is null or btrim(p_to) = '' then
+    raise exception 'Say which wheel to move it to.' using errcode = '22023';
+  end if;
+  if p_to = v_from then
+    raise exception 'That tire is already on %.', v_from using errcode = '22023';
+  end if;
+
+  select id into v_other
+    from tw_tires
+   where vehicle_id = v_veh and position = p_to and removed_date is null;
+
+  if v_other is null then
+    update tw_tires set position = p_to where id = p_tire;
+  else
+    v_park := '~moving:' || v_other::text;
+    update tw_tires set position = v_park  where id = v_other;
+    update tw_tires set position = p_to    where id = p_tire;
+    update tw_tires set position = v_from  where id = v_other;
+  end if;
+
+  return jsonb_build_object(
+    'vehicle_id',   v_veh,
+    'from',         v_from,
+    'to',           p_to,
+    'swapped_with', v_other);
+end;
+$$;
+
+grant execute on function tw_move_tire(uuid, text) to anon, authenticated;
+/* Pinned, or the function resolves tw_tires against whatever the
+   caller's search_path happens to be. */
+alter function tw_move_tire(uuid, text) set search_path = public, pg_temp;
+
 comment on column tw_tires.notes is
   'Free-text note on the mounted tire, shown on the wheel position. Overwritten in place, so it carries no history — a dated observation belongs on tw_tread_readings instead.';
 

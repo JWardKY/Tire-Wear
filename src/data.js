@@ -267,6 +267,46 @@ export async function pullTire(tireId, off) {
   );
 }
 
+/* ── Moving a tire to another wheel ───────────────────────────────
+   A rotation, not a correction: the tire really was on the old wheel
+   and the readings taken there really were taken there. It keeps its
+   id, its mount figures and every reading, so the wear rate carries on
+   from where it was.
+
+   The swap goes through tw_move_tire rather than two updates from here
+   because tw_one_active_tire_per_position is a partial unique index —
+   checked row by row and not deferrable — so two tires cannot simply
+   trade places. The function parks one of them inside a transaction.
+   See the migration for why.
+
+   Logged, because once position is overwritten nothing else knows
+   where the tire used to be. A rotation is not derivable from anything
+   the way a mount or a pull is. */
+export async function moveTire(tireId, toPos, { when, odo, veh, vehId, from, other }, who) {
+  const { data, error } = await supabase.rpc("tw_move_tire", {
+    p_tire: tireId,
+    p_to: toPos,
+  });
+  if (error) throw error;
+
+  if (!who) return data;
+
+  const { sayLog } = await import("./moveTire.js");
+  const { log } = await import("./logData.js");
+  await log({
+    type: "tire_moved",
+    actor: who,
+    vehId: vehId || null,
+    unit: veh || null,
+    summary: sayLog({ veh, from, to: toPos, other, when, odo }),
+    detail: {
+      tire: tireId, truck: veh || null, from, to: toPos,
+      swappedWith: other?.id || null, odometer: odo || null, on: when || null,
+    },
+  });
+  return data;
+}
+
 /* One walk-around: a depth per tire plus the odometer it was taken at.
    Upsert rather than insert so re-entering a corrected depth at the same
    odometer fixes the reading instead of failing on the unique index. */

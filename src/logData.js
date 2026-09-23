@@ -33,6 +33,11 @@ const KINDS = new Set([
      saying what it used to be, and the mount odometer is what the wear
      rate and the cost per mile are measured from. */
   "tire_edited",
+  /* A rotation is the same case again. tw_work_history can derive that
+     a tire went on and came off, because those are dates on the row;
+     it cannot derive that it spent its first four thousand miles on
+     4RO, because once position is overwritten nothing knows. */
+  "tire_moved",
 ]);
 
 export const EVENT_LABEL = {
@@ -46,6 +51,7 @@ export const EVENT_LABEL = {
   tire_mounted: "Tire mounted",
   tire_pulled: "Tire pulled",
   tire_edited: "Tire details corrected",
+  tire_moved: "Tire moved",
   timecard_approved: "Timecard approved",
   timecard_unapproved: "Approval taken back",
   shift_corrected: "Punch corrected",
