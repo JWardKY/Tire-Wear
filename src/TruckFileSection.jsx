@@ -5,6 +5,7 @@ import {
 } from "./ui.jsx";
 import * as file from "./truckFile.js";
 import { findUnits, rollUp } from "./truckRollup.js";
+import { sayType } from "./retread.js";
 import { sayOffline } from "./dbError.js";
 
 /* ── The truck file ───────────────────────────────────────────────
@@ -538,7 +539,7 @@ function Tires({ f, roll }) {
                   <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{t.pos}</td>
                   <td style={td}>{[t.brand || "Unbranded", t.model].filter(Boolean).join(" ")}</td>
                   <td style={{ ...td, color: C.muted }}>{t.size || "—"}</td>
-                  <td style={{ ...td, color: C.muted }}>{t.type === "retread" ? "Retread" : "Virgin"}</td>
+                  <td style={{ ...td, color: C.muted }}>{sayType(t.type, t.caps)}</td>
                   <td style={{ ...td, ...tdNum, fontWeight: 600,
                     color: t.depth != null && t.pullAt != null && t.depth <= t.pullAt
                       ? C.pull : C.ink }}>
@@ -567,7 +568,7 @@ function Tires({ f, roll }) {
                   <Row key={t.id}>
                     <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{t.pos}</td>
                     <td style={td}>{t.brand || "Unbranded"}</td>
-                    <td style={{ ...td, color: C.muted }}>{t.type === "retread" ? "Retread" : "Virgin"}</td>
+                    <td style={{ ...td, color: C.muted }}>{sayType(t.type, t.caps)}</td>
                     <td style={{ ...td, whiteSpace: "nowrap", color: C.muted }}>{day(t.onDate)}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{day(t.offDate)}</td>
                     <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{t.miles == null ? "—" : nf(t.miles)}</td>

@@ -141,6 +141,7 @@ export async function truckFile(unit) {
     tires: check(tires).map((t) => ({
       id: t.id, pos: t.position, brand: t.brand || "", model: t.model || "",
       size: t.size || "", type: t.tire_type, wheel: t.wheel_material || "",
+      caps: t.retread_count == null ? null : Number(t.retread_count),
       casing: t.casing_id || "", cost: num(t.cost), notes: t.notes || "",
       onDate: t.mounted_date, onOdo: num(t.mounted_odometer), newDepth: num(t.mounted_depth),
       offDate: t.removed_date, offOdo: num(t.removed_odometer),

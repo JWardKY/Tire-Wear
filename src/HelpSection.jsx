@@ -25,6 +25,7 @@ const SECTIONS = [
   ["orders", "Work orders"],
   ["tireedit", "Fixing a tire you keyed wrong"],
   ["move", "Moving a tire to another wheel"],
+  ["caps", "Retreads — times capped"],
   ["tread", "A reading that cannot be right"],
   ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
@@ -448,6 +449,31 @@ export default function HelpSection() {
           one says it was always on the new wheel. <i>Move to another wheel</i> says it
           was on the old one until today. Both are written down, and they read
           differently in the truck's history.
+        </p>
+      </Block>
+
+      <Block id="caps" title="Retreads — how many times capped">
+        <p style={p}>
+          When you mount a <b>retread</b>, the form asks how many times that casing has
+          been capped and will not let you save until you answer. Pick <b>1st cap</b> for
+          a casing on its first retread, <b>2nd</b> for its second, and so on.
+        </p>
+        <p style={p}>
+          It matters because a first cap and a third cap do not wear the same and do not
+          cost the same. Without it every retread on the fleet looked identical, and the
+          retread-versus-virgin comparison on the Analysis page was averaging them all
+          together.
+        </p>
+        <p style={p}>
+          A <b>virgin</b> tire is never asked — it has not been capped at all. If you pick
+          retread, choose a cap, then change your mind back to virgin, the count goes
+          away with it.
+        </p>
+        <p style={p}>
+          <b>Tires already on the trucks say just "Retread" with no number.</b> That means
+          nobody was ever asked, not that it is on its first cap. There are about 138 of
+          them. If you know the number, open the tire and use <i>Edit these details</i> —
+          it asks there too, but it will not stop you saving if you do not know.
         </p>
       </Block>
 

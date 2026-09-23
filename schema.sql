@@ -95,6 +95,17 @@ create table if not exists tw_tires (
   size             text,
   tire_type        text not null default 'virgin'
                      check (tire_type in ('virgin','retread')),
+  /* How many times the casing has been capped: 1 = first retread.
+     Null on a virgin tire, and on a retread mounted before the field
+     existed — null means nobody recorded it, not that it is new. The
+     mount form requires it from here on; the column does not pretend
+     the 138 already on trucks have it.
+
+     The ceiling is 10 rather than 3. The form offers 1st through 4th,
+     which is the working life of a casing; the column refuses only
+     what is obviously a typo, because a database that rejects a real
+     fifth cap teaches somebody to enter a lie instead. */
+  retread_count    smallint,
   wheel_material   text check (wheel_material in ('aluminum','steel')),
   casing_id        text,                            -- serial, follows a casing through retreads
   mounted_date     date not null,
@@ -129,6 +140,12 @@ end $$;
 
 comment on column tw_tires.wheel_material is
   'The wheel the tire is mounted on: aluminum or steel. Null on tires mounted before the field existed.';
+
+alter table tw_tires drop constraint if exists tw_tires_retread_count_ck;
+alter table tw_tires add constraint tw_tires_retread_count_ck check (
+  retread_count is null
+  or (tire_type = 'retread' and retread_count between 1 and 10)
+);
 
 -- Only one tire may occupy a position at a time.
 create unique index if not exists tw_one_active_tire_per_position
@@ -408,7 +425,10 @@ select
   end as est_miles_remaining,
   case when t.cost is not null and w.miles_run > 0
        then round(t.cost / w.miles_run, 4) end as cost_per_mile,
-  t.notes
+  t.notes,
+  /* Appended, not slotted in: create or replace view refuses to
+     rename a column or put one in the middle. */
+  t.retread_count
 from tw_tires t
 join tw_vehicles v on v.id = t.vehicle_id
 join tw_settings s on s.id = true

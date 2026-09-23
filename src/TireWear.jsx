@@ -16,6 +16,7 @@ import { checkDepth, checkMount, sayTyped, sayMount, sayRise, worstRise, whyNoRa
   from "./treadCheck.js";
 import { destinations, checkMove, sayMove, sayThreshold, REPLACE, SWAP }
   from "./moveTire.js";
+import { CAPS, capLabel, capNeeded, sayType, sayTypeTight } from "./retread.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -956,7 +957,8 @@ function TireCard({ pos, tire, stats, odd, settings, mode, draft, setDraft, onTi
               <span title={tire.notes}
                 style={{ color: C.yellowHi, fontWeight: 700, marginRight: 4 }}>●</span>
             )}
-            {tire.brand || "Unbranded"}{tire.type === "retread" ? " · retread" : ""}
+            {tire.brand || "Unbranded"}
+            {sayTypeTight(tire.type, tire.caps) ? ` · ${sayTypeTight(tire.type, tire.caps)}` : ""}
           </div>
         </button>
       )}
@@ -1015,7 +1017,8 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
                     </>
                   ) : <button onClick={() => onEmpty(p)} style={linkBtn}>Mount a tire</button>}
                 </td>
-                <td style={{ ...td, color: C.muted }}>{t ? (t.type === "retread" ? "Retread" : "Virgin") : "—"}</td>
+                <td style={{ ...td, color: C.muted }}>
+                  {t ? sayType(t.type, t.caps) : "—"}</td>
                 <td style={{ ...td, ...tdNum, color: s ? STATUS_COLOR[s.status] : C.muted, fontWeight: 600 }}>
                   {s?.depth != null ? `${s.depth}/32` : "—"}
                   {odd && (
@@ -1059,20 +1062,27 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
   const [spec, setSpec] = useState(null);
   const [pick, setPick] = useState({});        // position id -> tread typed
   const [f, setF] = useState({
-    brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin", wheel: "",
+    brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin",
+    caps: "", wheel: "",
     newDepth: String(settings.newDepth), onDate: todayISO(),
     onOdo: lastOdo != null ? String(lastOdo) : "", cost: "", casing: "", notes: "",
   });
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const isOther = f.brand === "Other";
   const brandFinal = isOther ? f.brandOther.trim() : f.brand;
-  const ok = f.onOdo !== "" && Number(f.newDepth) > 0 && brandFinal !== "";
+  /* A retread with no cap count does not get recorded. Every retread
+     already on the fleet has a blank here and nobody can go back and
+     ask; the way to stop that list growing is to ask at the one moment
+     somebody is holding the tire. */
+  const capWhy = capNeeded(f.type, f.caps);
+  const ok = f.onOdo !== "" && Number(f.newDepth) > 0 && brandFinal !== "" && !capWhy;
 
   /* Everything about the tire except where it sits and how deep it is.
      Those two are per wheel, always. */
   const specOf = () => ({
     brand: brandFinal, model: f.model.trim(), size: f.size.trim(),
-    type: f.type, wheel: f.wheel, onDate: f.onDate, onOdo: Number(f.onOdo),
+    type: f.type, caps: f.caps === "" ? null : Number(f.caps),
+    wheel: f.wheel, onDate: f.onDate, onOdo: Number(f.onOdo),
     cost: f.cost ? Number(f.cost) : null, casing: f.casing.trim(),
     notes: f.notes.trim(),
   });
@@ -1169,6 +1179,21 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
             <option value="retread">Retread</option>
           </select>
         </Field>
+        {/* A retread is not one thing. A first cap on a good casing and
+            a third on a tired one wear differently and cost
+            differently, and without this every retread on the fleet
+            looked identical to every other. */}
+        {f.type === "retread" && (
+          <Field label="Times capped">
+            <select value={f.caps ?? ""} onChange={set("caps")}
+              style={{ ...inp, borderColor: f.caps ? C.line : C.pull }}>
+              <option value="">How many times?</option>
+              {CAPS.map((n) => (
+                <option key={n} value={n}>{capLabel(n)} cap</option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Wheel">
           <select value={f.wheel} onChange={set("wheel")} style={inp}>
             <option value="">Not recorded</option>
@@ -1231,6 +1256,7 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
     model: tire.model || "",
     size: tire.size || "",
     type: tire.type || "virgin",
+    caps: tire.caps == null ? "" : String(tire.caps),
     wheel: tire.wheel || "",
     casing: tire.casing || "",
     onDate: tire.onDate || todayISO(),
@@ -1263,7 +1289,8 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
     try {
       await onSave({
         pos: f.pos, brand: brandName, model: f.model.trim(), size: f.size.trim(),
-        type: f.type, wheel: f.wheel, casing: f.casing.trim(),
+        type: f.type, caps: f.caps === "" ? null : Number(f.caps),
+        wheel: f.wheel, casing: f.casing.trim(),
         onDate: f.onDate, onOdo: Number(f.onOdo), newDepth: Number(f.newDepth),
         cost: f.cost === "" ? null : Number(f.cost),
       });
@@ -1321,6 +1348,21 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
             <option value="retread">Retread</option>
           </select>
         </Field>
+        {/* A retread is not one thing. A first cap on a good casing and
+            a third on a tired one wear differently and cost
+            differently, and without this every retread on the fleet
+            looked identical to every other. */}
+        {f.type === "retread" && (
+          <Field label="Times capped">
+            <select value={f.caps ?? ""} onChange={set("caps")}
+              style={{ ...inp, borderColor: f.caps ? C.line : C.pull }}>
+              <option value="">How many times?</option>
+              {CAPS.map((n) => (
+                <option key={n} value={n}>{capLabel(n)} cap</option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Wheel">
           <select value={f.wheel} onChange={set("wheel")} style={inp}>
             <option value="">Not recorded</option>
@@ -1465,7 +1507,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
   return (
     <Modal width={620} onClose={onClose}
       title={`${tire.pos} · ${tire.brand || "Unbranded"}${tire.model ? " " + tire.model : ""}`}
-      sub={`${tire.veh} · ${tire.type === "retread" ? "Retread" : "Virgin"} · ${tire.size || "size not set"}${
+      sub={`${tire.veh} · ${sayType(tire.type, tire.caps)} · ${tire.size || "size not set"}${
         WHEEL_LABEL[tire.wheel] ? ` · ${WHEEL_LABEL[tire.wheel]} wheel` : ""}`}>
       {/* A tire's details were fixed at the moment it was mounted, and a
           typo in the brand or the mount odometer was permanent — there
@@ -1746,7 +1788,9 @@ function Analysis({ tires, tireStats, settings, byNum }) {
   };
 
   const byBrand = group((t) => t.brand);
-  const byType = group((t) => (t.type === "retread" ? "Retread" : "Virgin"));
+  /* Split by cap as well as by retread-or-not: a first cap and a
+     third are what this chart was quietly averaging together. */
+  const byType = group((t) => sayType(t.type, t.caps));
   const byRole = (() => {
     const m = {};
     scored.forEach(({ t, s }) => {
@@ -1825,7 +1869,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
                   <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{t.veh}</td>
                   <td style={{ ...td, fontFamily: FM }}>{t.pos}</td>
                   <td style={td}>{t.brand || "Unbranded"}{t.model ? " " + t.model : ""}</td>
-                  <td style={{ ...td, color: C.muted }}>{t.type === "retread" ? "Retread" : "Virgin"}</td>
+                  <td style={{ ...td, color: C.muted }}>{sayType(t.type, t.caps)}</td>
                   <td style={{ ...td, ...tdNum, color: STATUS_COLOR[s.status], fontWeight: 600 }}>{s.depth}/32</td>
                   <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(conv(s.miPer32))}</td>
                   <td style={{ ...td, ...tdNum, color: C.muted }}>{nf(s.miles)}</td>
@@ -1914,13 +1958,15 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
   }
 
   function exportTires() {
-    const head = ["truck", "position", "brand", "model", "size", "type", "wheel", "casing",
+    const head = ["truck", "position", "brand", "model", "size", "type", "times_capped",
+      "wheel", "casing",
       "mounted_date", "mounted_odo", "mounted_32nds", "current_32nds",
       "miles_run", "miles_per_32nd", "miles_per_mil", "est_miles_left", "cost", "status",
       "note"];
     const rows = tires.map((t) => {
       const s = tireStats[t.id] || {};
-      return [t.veh, t.pos, t.brand, t.model, t.size, t.type, t.wheel, t.casing, t.onDate, t.onOdo,
+      return [t.veh, t.pos, t.brand, t.model, t.size, t.type, t.caps ?? "",
+        t.wheel, t.casing, t.onDate, t.onOdo,
         t.newDepth, s.depth ?? "", s.miles ?? "", s.miPer32 ? Math.round(s.miPer32) : "",
         s.miPer32 ? Math.round(s.miPer32 / MILS_PER_32ND) : "",
         s.remain ? Math.round(s.remain) : "", t.cost ?? "", STATUS_LABEL[s.status] || "",
@@ -1931,11 +1977,12 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
 
   function exportReadings() {
     const tById = Object.fromEntries(tires.map((t) => [t.id, t]));
-    const head = ["date", "truck", "position", "odometer", "tread_32nds", "brand", "type"];
+    const head = ["date", "truck", "position", "odometer", "tread_32nds", "brand", "type",
+      "times_capped"];
     const rows = readings
       .map((r) => {
         const t = tById[r.tire];
-        return t ? [r.date, t.veh, t.pos, r.odo, r.d, t.brand, t.type] : null;
+        return t ? [r.date, t.veh, t.pos, r.odo, r.d, t.brand, t.type, t.caps ?? ""] : null;
       })
       .filter(Boolean)
       .sort((a, b) => (a[0] < b[0] ? 1 : -1));
