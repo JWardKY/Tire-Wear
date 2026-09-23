@@ -4,6 +4,7 @@ import { nf, Btn, Field, SectionLabel, inp, linkBtn } from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
+import UnitPicker from "./UnitPicker.jsx";
 
 /* ── Equipment worked ─────────────────────────────────────────────
    A mechanic's day, one unit at a time. This is the shape the shop
@@ -151,9 +152,16 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     const key = draftKey(mechanic.id, date);
     if (loadedFor.current !== key) return;
     try {
+      /* shopWork belongs in this list and was missing from it. A card
+         that is only shop time — picked before a cost code is on it,
+         which is what happens when no shop has been set up under Cost
+         codes — counted as empty, so the draft was deleted rather than
+         kept. Backgrounding the tab then lost it, which is the one
+         thing this whole mechanism exists to stop. */
       const worth = cards.some((c) =>
-        c.vehId || c.costCode || c.hours || c.workPerformed || c.workTypes.length
-        || c.parts.length || c.seconds || c.runningAt || c.jobLocation);
+        c.vehId || c.shopWork || c.costCode || c.hours || c.workPerformed
+        || c.workTypes.length || c.parts.length || c.seconds || c.runningAt
+        || c.jobLocation);
       if (worth) localStorage.setItem(key, JSON.stringify(cards));
       else localStorage.removeItem(key);
     } catch { /* storage full or blocked — the form still works */ }
@@ -566,11 +574,20 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                                            marginTop: 14 }}>
         <Field label={isShop ? "Shop time" : "Equipment"}>
-          <select
+          {/* Typed rather than scrolled. The list this replaced held the
+              whole fleet, which on a phone is a spinning wheel of 130
+              trucks with no way to jump to one. What it does with the
+              answer is unchanged. */}
+          <UnitPicker
             value={c.vehId || (c.shopWork ? `shop:${c.shopWork}` : "")}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v.startsWith("shop:")) {
+            vehicles={vehicles}
+            shopWork={SHOP_WORK}
+            onPick={(v) => {
+              if (!v) {
+                onPatch({ vehId: "", shopWork: "", shop: "", shopCode: "",
+                          where: "shop",
+                          costCode: c.costCode === c.shopCode ? "" : c.costCode });
+              } else if (v.startsWith("shop:")) {
                 /* Shop time is indirect however it is spent — sweeping the
                    bay and driving for parts both belong in the same band
                    on "where the time went", so the toggle goes away and
@@ -590,20 +607,7 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
                           where: "shop",
                           costCode: c.costCode === c.shopCode ? "" : c.costCode });
               }
-            }}
-            style={inp}>
-            <option value="">Pick the unit…</option>
-            <optgroup label="Trucks and equipment">
-              {vehicles.map((v) => (
-                <option key={v.id} value={v.id}>{v.num} — {v.make} {v.model}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Shop &amp; indirect time">
-              {SHOP_WORK.map((w) => (
-                <option key={w} value={`shop:${w}`}>{w}</option>
-              ))}
-            </optgroup>
-          </select>
+            }} />
         </Field>
 
         {isShop ? (

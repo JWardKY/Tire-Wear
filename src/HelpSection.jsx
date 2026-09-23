@@ -16,6 +16,7 @@ import { Btn, SectionLabel } from "./ui.jsx";
 
 const SECTIONS = [
   ["start", "Getting in"],
+  ["unit", "Finding a truck"],
   ["day", "A normal day"],
   ["approval", "Getting approved"],
   ["clocks", "The two clocks"],
@@ -105,6 +106,28 @@ export default function HelpSection() {
           again. That is deliberate — a tablet left on a bench should not still be
           showing your pay.
         </Note>
+      </Block>
+
+      <Block id="unit" title="Finding a truck without scrolling">
+        <p style={p}>
+          The <i>Equipment</i> box on your timecard is a box you type in, not a list you
+          scroll. Tap it and put in the number off the door. <b>881</b>, <b>dt881</b> and
+          <b>DT-881</b> all find the same truck, so it does not matter how you type it.
+        </p>
+        <p style={p}>
+          Press <b>Go</b> or <b>Enter</b> and it takes the top one. Each line shows the
+          make and model next to the number, so you can check it against the truck in
+          front of you before you start a clock on it.
+        </p>
+        <p style={p}>
+          Shop and indirect time are in the same box — type a word instead of a number.
+          <b> clean</b> finds Shop cleanup, <b>parts</b> finds Parts running. Tap the box
+          with nothing typed and the whole shop list is there.
+        </p>
+        <p style={p}>
+          Stuck on the number? Type the make — <b>kenworth</b> brings up the Kenworths.
+          The <b>×</b> on the right clears it if you picked the wrong one.
+        </p>
       </Block>
 
       <Block id="day" title="A normal day">
