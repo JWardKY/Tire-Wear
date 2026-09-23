@@ -35,11 +35,24 @@ export function destinations(positions, activeTireAt, veh, fromPos) {
    thirty-second. Worth saying before somebody wonders why. */
 export const isSteer = (pos) => /^1[LR]$/.test(String(pos || ""));
 
+/* What happens to the tire already on the wheel being moved to.
+   REPLACE is the default because it is what the shop actually does:
+   a tire is moved onto a wheel whose tire is being scrapped. Swapping
+   is the rarer case, and swapping by default would quietly put a
+   worn-out tire back on the truck. */
+export const REPLACE = "replace";
+export const SWAP = "swap";
+
 /* What the screen can refuse before the database does. Returns a
    sentence, or nothing when the move is fine. */
-export function checkMove(from, to) {
+export function checkMove(from, to, { other, mode, offDate } = {}) {
   if (!to) return "Pick the wheel it is going to.";
   if (to === from) return `It is already on ${from}.`;
+  /* Without a date the pulled tire keeps removed_date null, stays in
+     the one-tire-per-wheel index, and the move behind it collides. */
+  if (other && mode === REPLACE && !offDate) {
+    return "Say what date the tire coming off came off.";
+  }
   return "";
 }
 
@@ -47,7 +60,7 @@ export function checkMove(from, to) {
 /* What is about to happen, in a sentence, before it happens. The two
    treads are in it because that is what somebody is deciding on when
    they rotate: which way round the deep one should go. */
-export function sayMove({ from, to, moving, other, stats }) {
+export function sayMove({ from, to, moving, other, stats, mode = REPLACE }) {
   if (!to) return "";
   /* A tread only if there is one: a bare wheel has no tire, and a tire
      nobody has gauged has no depth. `at` is the only place that
@@ -56,10 +69,12 @@ export function sayMove({ from, to, moving, other, stats }) {
     const d = stats?.[t?.id]?.depth;
     return d == null ? "" : ` (${d}/32)`;
   };
-  if (other) {
-    return `${from}${at(moving)} and ${to}${at(other)} trade places.`;
-  }
-  return `${from}${at(moving)} moves to ${to}, which is empty.`;
+  if (!other) return `${from}${at(moving)} moves to ${to}, which is empty.`;
+  if (mode === SWAP) return `${from}${at(moving)} and ${to}${at(other)} trade places.`;
+  /* Said as two sentences on purpose. A tire leaving the truck for
+     good is not a detail of somebody else's move. */
+  const it = at(other) ? `The${at(other).replace(/^ \(|\)$/g, " ")}on ${to}` : `The tire on ${to}`;
+  return `${from}${at(moving)} moves to ${to}. ${it.trim()} comes off the truck.`;
 }
 
 /* The note about crossing between a steer wheel and the rest. */
@@ -79,14 +94,21 @@ export function sayThreshold(from, to, settings) {
    The date is in the sentence rather than left to the row's timestamp,
    because that timestamp is when somebody typed it. A rotation done on
    Friday and entered on Monday is a Friday rotation. */
-export function sayLog({ veh, from, to, other, when, odo }) {
-  const where = other
+export function sayLog({ veh, from, to, other, when, odo, mode = REPLACE, reason }) {
+  const swapped = other && mode === SWAP;
+  const where = swapped
     ? `${from} and ${to} traded places`
     : `tire moved ${from} → ${to}`;
   const miles = Number(odo);
   const at = Number.isFinite(miles) && miles > 0
     ? ` at ${miles.toLocaleString()} mi` : "";
-  return `${veh || "A truck"} — ${where}${on(when)}${at}`;
+  /* The pull itself shows in the history on its own — it is derivable
+     from removed_date. It is named here so the line explains why a
+     tire left the truck on the same day another one landed on it. */
+  const off = other && !swapped
+    ? `, and the tire on ${to} came off${reason ? ` (${reason})` : ""}`
+    : "";
+  return `${veh || "A truck"} — ${where}${on(when)}${at}${off}`;
 }
 
 const on = (date) => {

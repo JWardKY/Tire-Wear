@@ -19,7 +19,7 @@
    Needs nothing: no database, no browser.
 */
 import {
-  destinations, checkMove, sayMove, sayThreshold, sayLog, isSteer,
+  destinations, checkMove, sayMove, sayThreshold, sayLog, isSteer, REPLACE, SWAP,
 } from "../src/moveTire.js";
 
 let bad = 0;
@@ -72,17 +72,46 @@ ok("no wheel chosen", /Pick the wheel/i.test(checkMove("4RO", "")));
 ok("…and nothing chosen at all", /Pick the wheel/i.test(checkMove("4RO", null)));
 ok("its own wheel", /already on 4RO/.test(checkMove("4RO", "4RO")), checkMove("4RO", "4RO"));
 ok("a real move is not refused", checkMove("4RO", "4LO") === "");
+/* A pull with no date keeps removed_date null, so the tire stays in
+   the one-tire-per-wheel index and the move behind it collides. The
+   database refuses it too; this catches it at the form. */
+const OFF = { other: { id: "t9" }, mode: REPLACE };
+ok("taking a tire off with no date", /what date/i.test(checkMove("4RI", "4LO", { ...OFF, offDate: "" })));
+ok("…and with a date it is fine", checkMove("4RI", "4LO", { ...OFF, offDate: "2026-09-23" }) === "");
+ok("a swap needs no such date",
+   checkMove("4RI", "4LO", { other: { id: "t9" }, mode: SWAP, offDate: "" }) === "");
+ok("nor does a move onto a bare wheel",
+   checkMove("4RI", "3LI", { other: null, mode: REPLACE, offDate: "" }) === "");
 
 console.log("\nwhat it says before it happens:");
+/* The common case, and the one the first version could not do: the
+   tire on the wheel being moved to is scrapped, not swapped back. */
+const replace = sayMove({ from: "4RO", to: "4LO", moving: { id: "t11" },
+                          other: at[`${VEH}|4LO`], stats });
+ok("replacing is what it does unasked", /comes off the truck/.test(replace), replace);
+ok("…naming both wheels and both treads",
+   /4RO \(14\/32\)/.test(replace) && /11\/32/.test(replace) && /4LO/.test(replace), replace);
+ok("…and it does not say they trade places", !/trade places/.test(replace), replace);
+/* A tire leaving the truck for good is not a clause in somebody
+   else's move, so it gets its own sentence. */
+ok("…with the tire coming off in a sentence of its own",
+   /\.\s+The/.test(replace), replace);
+ok("a wheel whose tire nobody has gauged still reads",
+   /The tire on 4LO comes off/.test(
+     sayMove({ from: "4RO", to: "4LO", moving: { id: "t11" }, other: { id: "zz" }, stats })),
+   sayMove({ from: "4RO", to: "4LO", moving: { id: "t11" }, other: { id: "zz" }, stats }));
+
 /* The two treads are the whole decision: rotating is choosing which
    way round the deep one goes. */
 const swap = sayMove({ from: "4RO", to: "4LO", moving: { id: "t11" },
-                       other: at[`${VEH}|4LO`], stats });
+                       other: at[`${VEH}|4LO`], stats, mode: SWAP });
 ok("a swap names both wheels", /4RO/.test(swap) && /4LO/.test(swap), swap);
 ok("…and both treads", /14\/32/.test(swap) && /11\/32/.test(swap), swap);
 ok("…and says they trade places", /trade places/.test(swap), swap);
+ok("…and says nothing about a tire coming off", !/comes off/.test(swap), swap);
 const onto = sayMove({ from: "4RO", to: "4LO", moving: { id: "t11" }, other: null, stats });
-ok("a move onto a bare wheel says so", /empty/.test(onto) && !/trade/.test(onto), onto);
+ok("a move onto a bare wheel says so",
+   /empty/.test(onto) && !/trade/.test(onto) && !/comes off/.test(onto), onto);
 ok("…and does not invent a tread for a wheel with no tire",
    !/undefined|null|NaN/.test(onto), onto);
 ok("an unmeasured tire is not given a tread",
@@ -114,16 +143,32 @@ console.log("\nthe line in the work log:");
 /* Written rather than derived: once position is overwritten nothing
    else knows the tire was ever on 4RO. */
 const L = sayLog({ veh: VEH, from: "4RO", to: "4LO", other: { id: "t9" },
-                   when: "2026-09-22", odo: 99141 });
+                   when: "2026-09-22", odo: 99141, mode: SWAP });
 ok("it names the truck", /DT-899/.test(L), L);
 ok("…both wheels", /4RO/.test(L) && /4LO/.test(L), L);
 ok("…that they swapped", /traded places/.test(L), L);
 ok("…the date it happened", /09\/22\/26/.test(L), L);
 ok("…and the odometer, with a separator", /99,141 mi/.test(L), L);
+/* The replace line has to explain why a tire left the truck the same
+   day another landed on its wheel. The pull itself is derivable from
+   removed_date and shows in the history on its own. */
+const LR = sayLog({ veh: VEH, from: "4RI", to: "4LO", other: { id: "t9" },
+                    when: "2026-09-23", odo: 99141, reason: "Worn out" });
+ok("a replace reads as a move, not a swap",
+   /tire moved 4RI → 4LO/.test(LR) && !/traded places/.test(LR), LR);
+ok("…and says the other tire came off", /the tire on 4LO came off/.test(LR), LR);
+ok("…with the reason it came off", /\(Worn out\)/.test(LR), LR);
+ok("…and no reason given says no reason",
+   !/\(\)|\(null\)|\(undefined\)/.test(
+     sayLog({ veh: VEH, from: "4RI", to: "4LO", other: { id: "t9" }, when: "2026-09-23" })),
+   sayLog({ veh: VEH, from: "4RI", to: "4LO", other: { id: "t9" }, when: "2026-09-23" }));
+
 const L2 = sayLog({ veh: VEH, from: "4RO", to: "3RI", other: null,
                     when: "2026-09-22", odo: null });
 ok("a move onto a bare wheel reads as a move, not a swap",
    /4RO → 3RI/.test(L2) && !/traded/.test(L2), L2);
+ok("…and nothing came off, because there was nothing there",
+   !/came off/.test(L2), L2);
 ok("…and says nothing about an odometer nobody gave",
    !/mi/.test(L2) && !/null|undefined|NaN/.test(L2), L2);
 /* The date is in the sentence because the row's own timestamp is when
@@ -139,7 +184,8 @@ ok("a zero odometer is not printed",
    !/0 mi/.test(sayLog({ veh: VEH, from: "4RO", to: "4LO", other: null, odo: 0 })));
 
 console.log("\nnothing a mechanic would not say:");
-for (const [what, text] of [["a swap", swap], ["a move", onto], ["the log line", L],
+for (const [what, text] of [["a swap", swap], ["a move", onto], ["a replace", replace],
+                            ["the log line", L], ["the replace log line", LR],
                             ["the threshold note", sayThreshold("4RO", "1L", S)]]) {
   ok(`${what} carries no jargon`, !/null|undefined|NaN|object|\[/.test(text), text);
 }

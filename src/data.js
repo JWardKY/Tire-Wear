@@ -282,10 +282,22 @@ export async function pullTire(tireId, off) {
    Logged, because once position is overwritten nothing else knows
    where the tire used to be. A rotation is not derivable from anything
    the way a mount or a pull is. */
-export async function moveTire(tireId, toPos, { when, odo, veh, vehId, from, other }, who) {
+export async function moveTire(tireId, toPos, ctx, who) {
+  const { when, odo, veh, vehId, from, other, mode, reason } = ctx;
+  const { SWAP } = await import("./moveTire.js");
+  /* A wheel that is already taken goes one of two ways: the two tires
+     trade places, or the one there comes off the truck for good. The
+     second is what a shop does most of the time — the tire being
+     replaced is worn out, and swapping it back would put it straight
+     back on. */
+  const pullOther = !!other && mode !== SWAP;
   const { data, error } = await supabase.rpc("tw_move_tire", {
     p_tire: tireId,
     p_to: toPos,
+    p_pull_other: pullOther,
+    p_off_date: pullOther ? when : null,
+    p_off_odometer: pullOther ? odo : null,
+    p_off_reason: pullOther ? reason || null : null,
   });
   if (error) throw error;
 
@@ -298,10 +310,13 @@ export async function moveTire(tireId, toPos, { when, odo, veh, vehId, from, oth
     actor: who,
     vehId: vehId || null,
     unit: veh || null,
-    summary: sayLog({ veh, from, to: toPos, other, when, odo }),
+    summary: sayLog({ veh, from, to: toPos, other, when, odo, mode, reason }),
     detail: {
       tire: tireId, truck: veh || null, from, to: toPos,
-      swappedWith: other?.id || null, odometer: odo || null, on: when || null,
+      swappedWith: pullOther ? null : other?.id || null,
+      pulled: pullOther ? other?.id || null : null,
+      pulledReason: pullOther ? reason || null : null,
+      odometer: odo || null, on: when || null,
     },
   });
   return data;

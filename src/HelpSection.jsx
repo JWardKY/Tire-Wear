@@ -383,15 +383,32 @@ export default function HelpSection() {
       <Block id="move" title="Moving a tire to another wheel">
         <p style={p}>
           Open the tire from the truck diagram and press <i>Move to another wheel</i>. Pick
-          where it is going, check the date, and press the button. If there is already a
-          tire on the wheel you picked, the two swap — that one comes back to where the
-          first one was. Nothing gets lost and nothing gets pulled off the truck.
+          where it is going, check the date, and press the button.
+        </p>
+        <p style={p}>
+          <b>If there is already a tire on the wheel you picked, it asks what happens to
+          it.</b> Two choices, and they are not the same thing:
+        </p>
+        <p style={p}>
+          <b>Comes off the truck</b> — the usual one. You are putting a better tire on
+          that wheel and the one there is finished. It gets pulled, with the date, the
+          odometer and a reason, exactly as though you had pulled it on its own. Pick the
+          reason from the box beside it.
+        </p>
+        <p style={p}>
+          <b>They trade places</b> — a rotation. Both tires stay on the truck and swap
+          wheels.
+        </p>
+        <p style={p}>
+          Either way <b>the wheel the tire came off is left empty</b>. Nothing slides onto
+          it on its own — mount something there when you are ready.
         </p>
         <p style={p}>
           The list shows every wheel on the truck with what is on it and how deep it is,
           so you can see which way round to put them before you commit. It tells you what
-          it is about to do in plain words first: <i>4RO (14/32) and 4LO (11/32) trade
-          places</i>.
+          it is about to do in plain words first — <i>4RI (18/32) moves to 4LO. The 4/32
+          on 4LO comes off the truck.</i> — and the button says the same thing, so there
+          is no guessing which one you picked.
         </p>
         <p style={p}>
           The tire keeps everything — its readings, its mount date, its mount tread — so
