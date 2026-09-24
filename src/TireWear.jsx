@@ -17,6 +17,7 @@ import { checkDepth, checkMount, sayTyped, sayMount, sayRise, worstRise, whyNoRa
 import { destinations, checkMove, sayMove, sayThreshold, REPLACE, SWAP }
   from "./moveTire.js";
 import { CAPS, capLabel, capNeeded, sayType, sayTypeTight } from "./retread.js";
+import { roleLabel, roleOf } from "./axleRole.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -1773,9 +1774,14 @@ function Analysis({ tires, tireStats, settings, byNum }) {
     .map((t) => ({ t, s: tireStats[t.id] }))
     .filter((x) => x.s && x.s.miPer32);
 
-  const group = (keyFn) => {
+  /* The truck's axle list, which is what says whether a position is a
+     pusher. Per truck, because the same wheel number is a different
+     axle on a different configuration. */
+  const axlesFor = (t) => (CONFIGS[byNum[t.veh]?.cfg] || CONFIGS.dump12).axles;
+
+  const group = (keyFn, from = scored) => {
     const m = {};
-    scored.forEach(({ t, s }) => {
+    from.forEach(({ t, s }) => {
       const k = keyFn(t) || "Unspecified";
       (m[k] ||= []).push(s.miPer32);
     });
@@ -1787,25 +1793,42 @@ function Analysis({ tires, tireStats, settings, byNum }) {
       .sort((a, b) => b.avg - a.avg);
   };
 
-  const byBrand = group((t) => t.brand);
+  /* Brand, split by what the axle does, rather than one average
+     across the truck.
+
+     A pusher lifts: it covers the same miles on far less work, so its
+     miles-per-32nd runs high for reasons that have nothing to do with
+     the tire fitted to it. One fleet-wide brand average mixed that in
+     and the top of the chart was pusher-only tires sitting above every
+     brand with real mileage behind them.
+
+     Split, each chart answers the question somebody actually has when
+     they are ordering: what is the best tire FOR THIS POSITION, and
+     what is it getting per 32nd. */
+  const ROLE_ORDER = ["Steer", "Pusher", "Drive", "Trailer", "Front", "Rear"];
+  const byRoleBrand = (() => {
+    const m = new Map();
+    scored.forEach((x) => {
+      const role = roleOf(x.t.pos, axlesFor(x.t)) || "Unknown";
+      if (!m.has(role)) m.set(role, []);
+      m.get(role).push(x);
+    });
+    return [...m.entries()]
+      .map(([role, rows]) => ({ role, n: rows.length, data: group((t) => t.brand, rows) }))
+      .sort((a, b) => {
+        const ia = ROLE_ORDER.indexOf(a.role), ib = ROLE_ORDER.indexOf(b.role);
+        /* A role the list does not name goes last rather than first —
+           indexOf gives -1, which would sort it to the top. */
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.role.localeCompare(b.role);
+      });
+  })();
   /* Split by cap as well as by retread-or-not: a first cap and a
      third are what this chart was quietly averaging together. */
   const byType = group((t) => sayType(t.type, t.caps));
-  const byRole = (() => {
-    const m = {};
-    scored.forEach(({ t, s }) => {
-      const a = t.pos.match(/^(\d+)/);
-      const veh = byNum[t.veh];
-      const cfg = CONFIGS[veh?.cfg] || CONFIGS.dump12;
-      const ax = cfg.axles.find((x) => String(x.n) === (a ? a[1] : ""));
-      const slot = /O$/.test(t.pos) ? " outer" : /I$/.test(t.pos) ? " inner" : "";
-      const k = (ax?.role || "Unknown") + slot;
-      (m[k] ||= []).push(s.miPer32);
-    });
-    return Object.entries(m).map(([k, arr]) => ({
-      name: k, n: arr.length, avg: conv(arr.reduce((a, b) => a + b, 0) / arr.length),
-    })).sort((a, b) => b.avg - a.avg);
-  })();
+  /* Every wheel, pushers included. This is the one chart where the
+     pusher belongs, because showing that it wears differently is the
+     whole point of it. */
+  const byRole = group((t) => roleLabel(t.pos, axlesFor(t)));
 
   if (scored.length === 0)
     return (
@@ -1845,11 +1868,24 @@ function Analysis({ tires, tireStats, settings, byNum }) {
         </div>
       </div>
 
+      {/* One per axle, because a tire that is good on a drive is not
+          the same tire that is good on a steer, and the fleet-wide
+          average answered neither question. */}
       <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))" }}>
-        <ChartCard title="By brand" note={unitLabel} data={byBrand} />
-        <ChartCard title="Retread vs. virgin" note={unitLabel} data={byType} />
+        {byRoleBrand.map(({ role, n, data }) => (
+          <ChartCard key={role} title={`${role} — by brand`} note={unitLabel} data={data}
+            foot={`${n} tire${n === 1 ? "" : "s"} with a wear rate on ${
+              role === "Steer" ? "the steer axle"
+              : role === "Pusher" ? "pusher axles"
+              : role === "Drive" ? "the drive axles"
+              : `${role.toLowerCase()} positions`}.`} />
+        ))}
       </div>
-      <ChartCard title="By wheel position" note={unitLabel} data={byRole} wide />
+
+      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))" }}>
+        <ChartCard title="Retread vs. virgin" note={unitLabel} data={byType} />
+        <ChartCard title="By wheel position" note={unitLabel} data={byRole} />
+      </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
@@ -1884,7 +1920,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
   );
 }
 
-function ChartCard({ title, note, data, wide }) {
+function ChartCard({ title, note, data, wide, foot }) {
   const palette = [C.green700, C.green600, C.yellow, "#4E9166", "#7A6A12", "#7FAE92"];
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: "14px 16px 8px" }}>
@@ -1893,6 +1929,14 @@ function ChartCard({ title, note, data, wide }) {
           letterSpacing: "0.02em" }}>{title}</span>
         <span style={{ fontFamily: FM, fontSize: 10.5, color: C.muted }}>{note}</span>
       </div>
+      {/* Said on the chart, not only in Help. A number that quietly
+          leaves something out is one nobody can check. */}
+      {foot && (
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45,
+                      margin: "-4px 0 8px", maxWidth: 520 }}>
+          {foot}
+        </div>
+      )}
       <div style={{ height: Math.max(150, data.length * (wide ? 34 : 38) + 30) }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 46, left: 4, bottom: 4 }}>
