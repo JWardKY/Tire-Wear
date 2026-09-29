@@ -5,6 +5,7 @@ import * as time from "./timeData.js";
 import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
 import UnitPicker from "./UnitPicker.jsx";
+import { needsPm, ready as cardReady, saveBlock } from "./cardReady.js";
 
 /* ── Equipment worked ─────────────────────────────────────────────
    A mechanic's day, one unit at a time. This is the shape the shop
@@ -74,10 +75,6 @@ const blank = () => ({
   stints: [],
   runningAt: null,
 });
-
-/* A card that says a PM was done on a truck. Shop time is not a PM on
-   anything, so the unit is half the test. */
-const needsPm = (c) => !!c.vehId && c.workTypes.includes("PM service");
 
 /* Has anybody put anything on this card. Module level because both the
    seed effect and the save path need it, and they sit either side of
@@ -241,44 +238,17 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
     return g;
   }, [codes]);
 
-  /* A truck or a shop activity — one of the two, never neither. The
-     database says the same thing in tw_time_needs_a_home. */
-  const homed = (c) => !!c.vehId || (!!c.shopWork && !!c.shop);
-  const ready = (c) => homed(c) && c.costCode
-    && Number(c.hours) > 0 && Number(c.hours) <= 24
-    /* A card started from a job has to say what happened to the job.
-       It is one tap, and the alternative is an order that sits looking
-       untouched while somebody has actually spent the afternoon on it. */
-    && (!c.woId || c.jobOutcome === "done" || c.jobOutcome === "hold")
-    /* Ticking PM service and naming none is a tick that records
-       nothing — the truck would still read "no baseline" and the
-       mechanic would have every reason to think it did not. */
-    && (!needsPm(c) || c.pmPrograms.length > 0);
   const filled = isFilled;
 
   const live = cards.filter(filled);
-  const canSave = live.length > 0 && live.every(ready) && !cards.some((c) => c.runningAt);
+  const canSave = live.length > 0 && live.every(cardReady) && !cards.some((c) => c.runningAt);
 
   /* A greyed-out button that will not say what is wrong is where a
      timecard goes to die: the mechanic assumes it saved, walks away, and
-     the hours are simply gone. Name the first thing standing in the way. */
-  const blocker = (() => {
-    if (saving || canSave) return null;
-    if (!live.length) return "Pick a unit or shop time to start.";
-    if (cards.some((c) => c.runningAt))
-      return "A clock is still running — press Stop, then save.";
-    const bad = live.find((c) => !ready(c));
-    if (!bad) return null;
-    if (!homed(bad)) return "One card has no unit or shop on it yet.";
-    if (!bad.costCode) return "Choose what to charge the time to.";
-    if (!Number(bad.hours)) return "Put the hours on it — the clock fills them in when you stop.";
-    if (Number(bad.hours) > 24) return "That is more than twenty-four hours.";
-    if (bad.woId && !bad.jobOutcome)
-      return `Say whether ${bad.workOrder || "the job"} is finished — either way the hours save.`;
-    if (needsPm(bad) && !bad.pmPrograms.length)
-      return "Say which PM service was done, or untick PM service.";
-    return null;
-  })();
+     the hours are simply gone. The rule and its explanation live
+     together in cardReady.js so that one cannot gain a case the other
+     is missing. */
+  const blocker = saveBlock({ cards, live, saving, canSave, vehicles });
   const totalHours = live.reduce((a, c) => a + (Number(c.hours) || 0), 0);
 
   const save = async () => {
@@ -404,6 +374,7 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
 
       {cards.map((c, i) => (
         <UnitCard key={c.key} card={c} index={i} count={cards.length}
+          flagged={blocker?.key === c.key}
           now={now} vehicles={vehicles} codeGroups={codeGroups} shops={shops} parts={parts}
           programs={programs}
           onPatch={(f) => patch(c.key, f)}
@@ -426,13 +397,24 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
         it just asks which shop instead of where the work happened.
       </p>
 
+      {/* Its own full-width strip, directly above the button it explains.
+          It used to sit inside the button row on the far side of a
+          margin-auto, which put it off the left edge of a zoomed-in
+          tablet: the button was grey and the reason was on a part of the
+          page the mechanic could not see. */}
+      {blocker && (
+        <div className="no-print"
+          style={{ background: C.card, border: `1px solid ${C.line}`,
+            borderLeft: `4px solid ${C.watch}`, borderRadius: 8,
+            padding: "10px 14px", marginTop: 12 }}>
+          <span style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>
+            <strong>Not saved yet.</strong> {blocker.text}
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-end no-print"
         style={{ gap: 8, marginTop: 12 }}>
-        {blocker && (
-          <span style={{ fontSize: 12.5, color: C.watch, fontWeight: 600, marginRight: "auto" }}>
-            {blocker}
-          </span>
-        )}
         <Btn tone="ghost" onClick={clear} disabled={saving || !live.length}>Clear form</Btn>
         <Btn tone="ghost" onClick={() => window.print()}>Print</Btn>
         <Btn onClick={save} disabled={saving || !canSave}>
@@ -521,7 +503,7 @@ function JobOutcome({ c, onPatch }) {
 
 /* ── One unit ─────────────────────────────────────────────────── */
 
-function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, parts,
+function UnitCard({ card: c, index, count, flagged, now, vehicles, codeGroups, shops, parts,
   programs, onPatch, onClock, onRemove }) {
   const secs = liveSeconds(c, now);
   const running = !!c.runningAt;
@@ -538,7 +520,12 @@ function UnitCard({ card: c, index, count, now, vehicles, codeGroups, shops, par
   });
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${running ? C.green700 : C.line}`,
+    <div style={{ background: C.card,
+                  /* The card the message downstairs is about, so "Card 3
+                     has no cost code" and the card itself are the same
+                     thing found twice rather than a number to count out. */
+                  border: `1px solid ${flagged ? C.watch : running ? C.green700 : C.line}`,
+                  boxShadow: flagged ? `0 0 0 2px ${C.watch}33` : "none",
                   borderRadius: 8, padding: "14px 16px 16px", marginBottom: 10 }}>
       <div className="flex flex-wrap items-center justify-between" style={{ gap: 10 }}>
         <div>
