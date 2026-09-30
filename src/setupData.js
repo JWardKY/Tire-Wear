@@ -182,12 +182,18 @@ export async function applyCodePlan(plan) {
 export async function listVehicles() {
   const rows = await fetchAll(
     "tw_vehicles",
-    "id,number,make,model,model_year,division,axle_config,motive_vehicle_id,active,notes",
+    "id,number,make,model,model_year,division,axle_config,motive_vehicle_id,"
+      + "motive_asset_id,active,notes",
     "number");
   return rows.map((r) => ({
     id: r.id, num: r.number, make: r.make || "", model: r.model || "",
     year: r.model_year || "", division: r.division, cfg: r.axle_config,
-    motiveId: r.motive_vehicle_id, manual: r.motive_vehicle_id == null,
+    motiveId: r.motive_vehicle_id, assetId: r.motive_asset_id,
+    /* Either id means Motive is feeding it. Equipment comes from
+       Motive's asset list rather than its vehicle list, and counting
+       that as hand-entered would file 62 pavers and brooms under
+       "added by hand". */
+    manual: r.motive_vehicle_id == null && r.motive_asset_id == null,
     active: !!r.active, notes: r.notes || "",
   }));
 }

@@ -19,6 +19,7 @@ import { destinations, checkMove, sayMove, sayThreshold, REPLACE, SWAP }
 import { CAPS, capLabel, capNeeded, sayType, sayTypeTight } from "./retread.js";
 import { roleLabel, roleOf } from "./axleRole.js";
 import { suggestOffOdo, checkOffOdo, milesOff } from "./pullOdo.js";
+import { groupOf, groupBlurb, groupsPresent, firstGroup } from "./fleetGroup.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -53,7 +54,21 @@ const CONFIGS = {
     { n: 1, dual: true, role: "Trailer" }, { n: 2, dual: true, role: "Trailer" }] },
   light4: { label: "4-tire · light duty", axles: [
     { n: 1, dual: false, role: "Front" }, { n: 2, dual: false, role: "Rear" }] },
+  /* Yard and paving plant: pavers on tracks, rollers on drums, arrow
+     boards on two tires nobody gauges, loaders whose tires wear by the
+     hour rather than the mile — and the whole wear model here is miles
+     per 32nd off an odometer.
+
+     No axles at all, on purpose. Every other config would have the unit
+     claiming wheels it does not have and sitting on the Tires page
+     reading 0 of 4 forever. These units still book hours, carry defects
+     and come up for PM; they are simply not tire-tracked. */
+  notires: { label: "No tires tracked · equipment", axles: [] },
 };
+
+/* Whether this unit is in the tire program at all. One place, because
+   the fleet list and anything else that counts trucks have to agree. */
+export const tracksTires = (cfgKey) => (CONFIGS[cfgKey] || CONFIGS.dump12).axles.length > 0;
 
 function positionsFor(cfgKey) {
   const cfg = CONFIGS[cfgKey] || CONFIGS.dump12;
@@ -119,7 +134,10 @@ export default function TireWear({ who, tab, onBusy }) {
 
   const reload = useCallback(async () => {
     const d = await db.loadAll();
-    setFleet(d.vehicles);
+    /* Equipment with no tires belongs in the app — hours, defects, PM
+       and parts all hang off it — but not on a page about tread. It
+       would be 62 units reading 0 of 0 between the trucks. */
+    setFleet(d.vehicles.filter((v) => tracksTires(v.cfg)));
     setTires(d.tires);
     setReadings(d.readings);
     setOdos(d.odos);
@@ -346,7 +364,15 @@ function FleetView(props) {
     byNum, activeTireAt, tireStats, settings, attention, brands,
     actions, busy, lastOdoFor } = props;
 
-  const dtCount = filtered.filter((v) => v.div === "DT").length;
+  /* The divisions actually on the page, in fleet order, rather than a
+     list written out by hand — that list said ALL/DT/HT and stayed
+     saying it after 76 pickups and seven tankers arrived, so there was
+     no way to filter to either of them. */
+  const DIV_ORDER = ["DT", "HT", "LT", "EQ", "OT"];
+  const divisions = DIV_ORDER.filter((d) => byNum && Object.values(byNum).some((v) => v.div === d));
+  const counts = divisions
+    .map((d) => [d, filtered.filter((v) => v.div === d).length])
+    .filter(([, n]) => n > 0);
 
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>
@@ -361,7 +387,7 @@ function FleetView(props) {
                 style={{ width: "100%", padding: "8px 10px", border: `1px solid ${C.line}`,
                   borderRadius: 5, fontSize: 14, fontFamily: FB, outline: "none" }} />
               <div className="flex mt-2" style={{ gap: 4 }}>
-                {["ALL", "DT", "HT"].map((d) => (
+                {["ALL", ...divisions].map((d) => (
                   <button key={d} onClick={() => setDivFilter(d)}
                     style={{ flex: 1, fontFamily: FD, fontSize: 13, fontWeight: 600,
                       letterSpacing: "0.08em", padding: "6px 0", borderRadius: 4, cursor: "pointer",
@@ -371,7 +397,8 @@ function FleetView(props) {
                 ))}
               </div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 7, fontFamily: FM }}>
-                {filtered.length} trucks · {dtCount} DT · {filtered.length - dtCount} HT
+                {filtered.length} unit{filtered.length === 1 ? "" : "s"}
+                {counts.length > 1 && ` · ${counts.map(([d, n]) => `${n} ${d}`).join(" · ")}`}
               </div>
             </div>
             <div style={{ maxHeight: "calc(100vh - 230px)", overflowY: "auto" }}>
@@ -603,7 +630,11 @@ function VehicleDetail(props) {
             <select value={v.cfg} onChange={(e) => actions.setVehicleConfig(v.id, e.target.value)}
               style={{ padding: "7px 8px", border: `1px solid ${C.line}`, borderRadius: 5,
                 fontSize: 12.5, fontFamily: FB, background: "#fff", maxWidth: 240 }}>
-              {Object.entries(CONFIGS).map(([k, c]) => (
+              {/* Not "no tires tracked". Picking it here would take the
+                  truck off this page and leave nobody a way back to it —
+                  a unit leaves the tire program from Setup, where the
+                  whole fleet is listed, not from its own tire screen. */}
+              {Object.entries(CONFIGS).filter(([k]) => tracksTires(k)).map(([k, c]) => (
                 <option key={k} value={k}>{c.label}</option>
               ))}
             </select>
@@ -1797,9 +1828,24 @@ function Analysis({ tires, tireStats, settings, byNum }) {
   const conv = (v) => (v == null ? null : unit === "32nd" ? v : v / MILS_PER_32ND);
   const unitLabel = unit === "32nd" ? "miles per 32nd" : "miles per mil";
 
-  const scored = tires
+  /* Every tire with a rate, before the fleet is chosen — the tabs are
+     built off this so a tab never opens on an empty chart. */
+  const rated = tires
     .map((t) => ({ t, s: tireStats[t.id] }))
     .filter((x) => x.s && x.s.miPer32);
+
+  /* One fleet at a time, never all of them. A dump truck grinds twelve
+     tires through a quarry at 60,000 lb on the drives; a pickup carries
+     a toolbox. Averaged together the pickups lift every brand figure by
+     an amount that says nothing about the tire, and the ranking
+     somebody orders off becomes a ranking of what it was bolted to. */
+  const fleets = groupsPresent(rated.map((x) => byNum[x.t.veh]?.div));
+  const [fleet, setFleet] = useState(() => firstGroup(rated.map((x) => byNum[x.t.veh]?.div)));
+  /* If the only fleet on screen goes away — everything on it pulled —
+     fall back rather than show a tab that is no longer there. */
+  const chosen = fleets.some((g) => g.key === fleet) ? fleet : (fleets[0]?.key ?? fleet);
+
+  const scored = rated.filter((x) => groupOf(byNum[x.t.veh]?.div) === chosen);
 
   /* The truck's axle list, which is what says whether a position is a
      pusher. Per truck, because the same wheel number is a different
@@ -1857,8 +1903,28 @@ function Analysis({ tires, tireStats, settings, byNum }) {
      whole point of it. */
   const byRole = group((t) => roleLabel(t.pos, axlesFor(t)));
 
+  /* The fleet switch, repeated above the empty state as well as the
+     charts: a fleet with nothing on it must not be a dead end. */
+  const fleetTabs = fleets.length > 1 && (
+    <div className="flex flex-wrap" style={{ gap: 2 }}>
+      {fleets.map((g) => (
+        <button key={g.key} onClick={() => setFleet(g.key)} title={g.blurb}
+          style={{ fontFamily: FD, fontSize: 12.5, fontWeight: 600, letterSpacing: "0.06em",
+            textTransform: "uppercase", padding: "7px 13px", cursor: "pointer", borderRadius: 5,
+            border: `1px solid ${chosen === g.key ? C.green700 : C.line}`,
+            background: chosen === g.key ? C.green700 : "#fff",
+            color: chosen === g.key ? "#fff" : C.muted }}>
+          {g.label}
+          <span style={{ fontFamily: FM, fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>{g.n}</span>
+        </button>
+      ))}
+    </div>
+  );
+
   if (scored.length === 0)
     return (
+      <div className="grid gap-4">
+        {fleetTabs}
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 28 }}>
         <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900 }}>
           Nothing to compare yet
@@ -1868,6 +1934,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
           least one walk-around at a higher odometer. Comparisons across brand, retread versus
           virgin, and axle position all build from that.
         </p>
+      </div>
       </div>
     );
 
@@ -1880,9 +1947,14 @@ function Analysis({ tires, tireStats, settings, byNum }) {
             {scored.length} tire{scored.length > 1 ? "s" : ""} with a wear rate
           </div>
           <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
-            Higher is better — more miles for every 32nd of tread given up
+            {/* Which fleet these numbers are, on the figure itself. A
+                comparison that does not say what it covers is one
+                nobody can check. */}
+            {groupBlurb(chosen)} · higher is better
           </div>
         </div>
+        <div className="flex flex-wrap items-center" style={{ gap: 10 }}>
+        {fleetTabs}
         <div className="flex" style={{ gap: 2 }}>
           {[["32nd", "mi / 32nd"], ["mil", "mi / mil"]].map(([k, l]) => (
             <button key={k} onClick={() => setUnit(k)}
@@ -1892,6 +1964,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
                 color: unit === k ? "#fff" : C.muted,
                 borderRadius: k === "32nd" ? "5px 0 0 5px" : "0 5px 5px 0" }}>{l}</button>
           ))}
+        </div>
         </div>
       </div>
 
