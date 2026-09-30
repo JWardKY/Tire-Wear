@@ -18,6 +18,7 @@ import { destinations, checkMove, sayMove, sayThreshold, REPLACE, SWAP }
   from "./moveTire.js";
 import { CAPS, capLabel, capNeeded, sayType, sayTypeTight } from "./retread.js";
 import { roleLabel, roleOf } from "./axleRole.js";
+import { suggestOffOdo, checkOffOdo, milesOff } from "./pullOdo.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -1467,9 +1468,18 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tire.notes]);
 
-  const [offOdo, setOffOdo] = useState(stats?.last ? String(stats.last.odo) : "");
+  /* The truck's reading, not the tire's last point — stats.pts starts
+     with the mount, so "last point" on an ungauged tire is the reading
+     it went on at, and pulling it there books the casing zero miles.
+     See pullOdo.js. */
+  const lastRead = [...(stats?.pts || [])].reverse().find((p) => !p.mount) || null;
+  const [offOdo, setOffOdo] = useState(() => suggestOffOdo({
+    truckOdo: lastOdo, lastReadOdo: lastRead?.odo, mountOdo: tire.onOdo,
+  }));
   const [offDate, setOffDate] = useState(todayISO());
   const [reason, setReason] = useState("Worn out");
+  const offWhy = checkOffOdo(offOdo, { mountOdo: tire.onOdo, truckOdo: lastOdo });
+  const offMiles = milesOff(offOdo, tire.onOdo);
 
   /* Where it could go: every other wheel on this truck, taken or not.
      A rotation is two tires trading places far more often than it is a
@@ -1487,7 +1497,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
   const landingOn = wheels.find((w) => w.id === toPos) || null;
   const displaced = landingOn?.taken || null;
   const moveWhy = checkMove(tire.pos, toPos,
-    { other: displaced, mode: moveMode, offDate: moveDate });
+    { other: displaced, mode: moveMode, offDate: moveDate, offOdo: moveOdo });
 
   const chart = (stats?.pts || []).map((p) => ({
     odo: p.odo, depth: p.d, label: nf(p.odo / 1000, 0) + "k",
@@ -1716,16 +1726,33 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
             <Field label="Date off"><input type="date" value={offDate}
               onChange={(e) => setOffDate(e.target.value)} style={inp} /></Field>
             <Field label="Odometer off"><input type="number" value={offOdo}
-              onChange={(e) => setOffOdo(e.target.value)} style={{ ...inp, fontFamily: FM }} /></Field>
+              onChange={(e) => setOffOdo(e.target.value)}
+              style={{ ...inp, fontFamily: FM,
+                       borderColor: offWhy.stop ? C.pull : C.line }} /></Field>
             <Field label="Reason">
               <select value={reason} onChange={(e) => setReason(e.target.value)} style={inp}>
                 {PULL_REASONS.map((r) => <option key={r}>{r}</option>)}
               </select>
             </Field>
           </div>
+          {/* The miles this figure books to the casing, beside the box
+              while it is being typed. Zero miles is the shape the bug
+              took, and it is unmistakable written out. */}
+          {offWhy.say && (
+            <p style={{ fontSize: 12.5, fontWeight: 600, margin: "8px 0 0", lineHeight: 1.5,
+                        color: offWhy.stop ? C.pull : C.watch }}>
+              {offWhy.say}
+            </p>
+          )}
+          {!offWhy.stop && offMiles != null && (
+            <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0" }}>
+              This casing will have run {nf(offMiles)} mi.
+            </p>
+          )}
+
           <div className="flex justify-end mt-3" style={{ gap: 8 }}>
             <Btn tone="ghost" onClick={() => setPulling(false)}>Never mind</Btn>
-            <Btn tone="danger" disabled={busy || !Number(offOdo)} onClick={() => onPull({
+            <Btn tone="danger" disabled={busy || offWhy.stop} onClick={() => onPull({
               offDate, offOdo: Number(offOdo), offReason: reason })}>
               Pull tire
             </Btn>

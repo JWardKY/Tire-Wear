@@ -422,6 +422,7 @@
       "booked_hours",
       "changed_since_approved",
       "clock_hours",
+      "cost_codes",
       "difference",
       "emp_no",
       "first_in",
@@ -434,6 +435,7 @@
       "true_hours",
       "uncoded_hours",
       "uncoded_lines",
+      "units",
       "work_date"
     ],
     "tw_tire_alerts": [

@@ -438,6 +438,13 @@ export async function timecardDays(from, to) {
     approvedBy: r.approved_by || "",
     approvedAt: r.approved_at,
     lastEdit: r.last_edit,
+    /* What the day was spent on and what it was charged to, both
+       ordered by hours so the first name in the list is where the day
+       actually went. Arrays rather than a joined string: the board
+       shows the first few and counts the rest, and that decision
+       belongs to the screen rather than the view. */
+    units: r.units || [],
+    costCodes: r.cost_codes || [],
   }));
 }
 
