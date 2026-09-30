@@ -7,6 +7,7 @@ import * as wlog from "./logData.js";
 import * as clock from "./nowData.js";
 import { todayISO } from "./day.js";
 import { sayOffline } from "./dbError.js";
+import { summarise } from "./cardLists.js";
 
 /* ── The Hours section ────────────────────────────────────────────
    Where the hours went, for the office. Read only: hours are entered
@@ -425,6 +426,22 @@ function WhereTheTimeWent({ rows }) {
    not an approval. The view works that out by comparing approved_at
    against the last edit to any entry or shift on the card, so nothing
    here has to remember to check. */
+/* What a day was spent on, or charged to. The first few, the rest
+   counted, and the whole list on hover — a column that grew to fit
+   the worst day would make every other row unreadable. */
+function ListCell({ items, mono }) {
+  const s = summarise(items, 3);
+  if (s.empty) return <td style={{ ...td, color: C.muted }}>—</td>;
+  return (
+    <td style={{ ...td, ...(mono ? { fontFamily: FM } : null), lineHeight: 1.45 }} title={s.full}>
+      {s.shown.join(", ")}
+      {s.more > 0 && (
+        <span style={{ color: C.muted, whiteSpace: "nowrap" }}> +{s.more} more</span>
+      )}
+    </td>
+  );
+}
+
 function ApprovalCell({ d, busy, onApprove, onPull }) {
   const why = time.blocksApproval(d);
 
@@ -795,11 +812,11 @@ function Cards({ from, to, q, who, onErr }) {
         )}
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1180 }}>
             <thead>
               <tr>
                 {["Date", "Mechanic", "Emp #", "On the clock", "Booked", "True", "Gap", "Lines",
-                  "Approved", ""]
+                  "Worked on", "Cost codes", "Approved", ""]
                   .map((h, i) => (
                     <th key={h || i}
                       style={{ ...th, textAlign: i >= 3 && i <= 7 ? "right" : "left" }}>{h}</th>
@@ -828,6 +845,8 @@ function Cards({ from, to, q, who, onErr }) {
                       <span style={{ color: C.pull, fontWeight: 700 }}> · {d.uncodedLines} uncoded</span>
                     )}
                   </td>
+                  <ListCell items={d.units} />
+                  <ListCell items={d.costCodes} mono />
                   <td style={td}>
                     <ApprovalCell d={d} busy={busy || approving}
                       onApprove={() => approveOne(d)}
