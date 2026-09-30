@@ -16,6 +16,8 @@
 
    Nothing here touches the database. */
 
+import { checkOffOdo } from "./pullOdo.js";
+
 /* Every other wheel on the truck, each with whatever is on it now.
    Occupied wheels are offered as well as empty ones: a swap is the
    common case, not the exception. */
@@ -45,13 +47,22 @@ export const SWAP = "swap";
 
 /* What the screen can refuse before the database does. Returns a
    sentence, or nothing when the move is fine. */
-export function checkMove(from, to, { other, mode, offDate } = {}) {
+export function checkMove(from, to, { other, mode, offDate, offOdo } = {}) {
   if (!to) return "Pick the wheel it is going to.";
   if (to === from) return `It is already on ${from}.`;
   /* Without a date the pulled tire keeps removed_date null, stays in
      the one-tire-per-wheel index, and the move behind it collides. */
   if (other && mode === REPLACE && !offDate) {
     return "Say what date the tire coming off came off.";
+  }
+  /* The displaced tire comes off at this move's odometer, so the same
+     figure that cannot be right on a pull cannot be right here. Only a
+     figure that was given is judged: a move with the odometer left out
+     books no miles, which is the existing behaviour and a separate
+     question from a figure that contradicts itself. */
+  if (other && mode === REPLACE && offOdo !== "" && offOdo != null) {
+    const why = checkOffOdo(offOdo, { mountOdo: other.onOdo });
+    if (why.stop) return `${to} came off before it went on — ${why.say}`;
   }
   return "";
 }
