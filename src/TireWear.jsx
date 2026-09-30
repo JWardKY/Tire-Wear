@@ -53,7 +53,21 @@ const CONFIGS = {
     { n: 1, dual: true, role: "Trailer" }, { n: 2, dual: true, role: "Trailer" }] },
   light4: { label: "4-tire · light duty", axles: [
     { n: 1, dual: false, role: "Front" }, { n: 2, dual: false, role: "Rear" }] },
+  /* Yard and paving plant: pavers on tracks, rollers on drums, arrow
+     boards on two tires nobody gauges, loaders whose tires wear by the
+     hour rather than the mile — and the whole wear model here is miles
+     per 32nd off an odometer.
+
+     No axles at all, on purpose. Every other config would have the unit
+     claiming wheels it does not have and sitting on the Tires page
+     reading 0 of 4 forever. These units still book hours, carry defects
+     and come up for PM; they are simply not tire-tracked. */
+  notires: { label: "No tires tracked · equipment", axles: [] },
 };
+
+/* Whether this unit is in the tire program at all. One place, because
+   the fleet list and anything else that counts trucks have to agree. */
+export const tracksTires = (cfgKey) => (CONFIGS[cfgKey] || CONFIGS.dump12).axles.length > 0;
 
 function positionsFor(cfgKey) {
   const cfg = CONFIGS[cfgKey] || CONFIGS.dump12;
@@ -119,7 +133,10 @@ export default function TireWear({ who, tab, onBusy }) {
 
   const reload = useCallback(async () => {
     const d = await db.loadAll();
-    setFleet(d.vehicles);
+    /* Equipment with no tires belongs in the app — hours, defects, PM
+       and parts all hang off it — but not on a page about tread. It
+       would be 62 units reading 0 of 0 between the trucks. */
+    setFleet(d.vehicles.filter((v) => tracksTires(v.cfg)));
     setTires(d.tires);
     setReadings(d.readings);
     setOdos(d.odos);
@@ -346,7 +363,15 @@ function FleetView(props) {
     byNum, activeTireAt, tireStats, settings, attention, brands,
     actions, busy, lastOdoFor } = props;
 
-  const dtCount = filtered.filter((v) => v.div === "DT").length;
+  /* The divisions actually on the page, in fleet order, rather than a
+     list written out by hand — that list said ALL/DT/HT and stayed
+     saying it after 76 pickups and seven tankers arrived, so there was
+     no way to filter to either of them. */
+  const DIV_ORDER = ["DT", "HT", "LT", "EQ", "OT"];
+  const divisions = DIV_ORDER.filter((d) => byNum && Object.values(byNum).some((v) => v.div === d));
+  const counts = divisions
+    .map((d) => [d, filtered.filter((v) => v.div === d).length])
+    .filter(([, n]) => n > 0);
 
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>
@@ -361,7 +386,7 @@ function FleetView(props) {
                 style={{ width: "100%", padding: "8px 10px", border: `1px solid ${C.line}`,
                   borderRadius: 5, fontSize: 14, fontFamily: FB, outline: "none" }} />
               <div className="flex mt-2" style={{ gap: 4 }}>
-                {["ALL", "DT", "HT"].map((d) => (
+                {["ALL", ...divisions].map((d) => (
                   <button key={d} onClick={() => setDivFilter(d)}
                     style={{ flex: 1, fontFamily: FD, fontSize: 13, fontWeight: 600,
                       letterSpacing: "0.08em", padding: "6px 0", borderRadius: 4, cursor: "pointer",
@@ -371,7 +396,8 @@ function FleetView(props) {
                 ))}
               </div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 7, fontFamily: FM }}>
-                {filtered.length} trucks · {dtCount} DT · {filtered.length - dtCount} HT
+                {filtered.length} unit{filtered.length === 1 ? "" : "s"}
+                {counts.length > 1 && ` · ${counts.map(([d, n]) => `${n} ${d}`).join(" · ")}`}
               </div>
             </div>
             <div style={{ maxHeight: "calc(100vh - 230px)", overflowY: "auto" }}>
@@ -603,7 +629,11 @@ function VehicleDetail(props) {
             <select value={v.cfg} onChange={(e) => actions.setVehicleConfig(v.id, e.target.value)}
               style={{ padding: "7px 8px", border: `1px solid ${C.line}`, borderRadius: 5,
                 fontSize: 12.5, fontFamily: FB, background: "#fff", maxWidth: 240 }}>
-              {Object.entries(CONFIGS).map(([k, c]) => (
+              {/* Not "no tires tracked". Picking it here would take the
+                  truck off this page and leave nobody a way back to it —
+                  a unit leaves the tire program from Setup, where the
+                  whole fleet is listed, not from its own tire screen. */}
+              {Object.entries(CONFIGS).filter(([k]) => tracksTires(k)).map(([k, c]) => (
                 <option key={k} value={k}>{c.label}</option>
               ))}
             </select>

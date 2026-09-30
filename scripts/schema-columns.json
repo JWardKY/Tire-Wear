@@ -525,6 +525,7 @@
       "make",
       "model",
       "model_year",
+      "motive_asset_id",
       "motive_vehicle_id",
       "notes",
       "number",

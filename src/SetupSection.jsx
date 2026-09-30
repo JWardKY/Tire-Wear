@@ -651,6 +651,8 @@ function Codes({ codes, run }) {
 const DIVISIONS = [
   ["DT", "DT — haul fleet"],
   ["HT", "HT — haul fleet"],
+  ["LT", "LT — light trucks"],
+  ["EQ", "EQ — yard & paving equipment"],
   ["OT", "Other — rental, customer, one-off"],
 ];
 const CFGS = [
@@ -659,7 +661,11 @@ const CFGS = [
   ["quad14", "14-tire · steer + 2 pushers + tandem"],
   ["tandem10", "10-tire tractor · steer + tandem drive"],
   ["single6", "6-tire · steer + single drive"],
+  ["trailer8", "8-tire trailer · two axles, all duals"],
   ["light4", "4-tire · light duty"],
+  /* Last, because picking it takes the unit off the Tires page. It is
+     the right answer for a paver and the wrong one for a truck. */
+  ["notires", "No tires tracked · equipment"],
 ];
 const blankUnit = { num: "", make: "", model: "", year: "",
                     division: "OT", cfg: "tandem10", notes: "" };
