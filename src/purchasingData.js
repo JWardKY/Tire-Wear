@@ -277,8 +277,14 @@ export async function workOrderLines(woNumber) {
       .select("id,part_id,kind,qty_delta,note,who,created_at")
       .eq("work_order", woNumber).order("created_at", { ascending: false }).limit(200),
     supabase.from("tw_time_entries")
-      .select("id,hours,cost_code,note,mechanic_id,created_at")
-      .eq("work_order", woNumber).order("created_at", { ascending: false }).limit(200),
+      /* work_date and work_performed are what the printed order is
+         actually for: the day the work happened rather than the day it
+         was keyed, and what the mechanic wrote down that they did. A
+         packet that shows six hours and not what they went on answers
+         nothing anybody picks it up to ask. */
+      .select("id,hours,cost_code,note,work_performed,work_date,mechanic_id,created_at")
+      .eq("work_order", woNumber).order("work_date", { ascending: true })
+      .order("created_at", { ascending: true }).limit(200),
   ]);
   if (te) throw te;
   if (he) throw he;
@@ -315,7 +321,8 @@ export async function workOrderLines(woNumber) {
 
   const hours = (entries || []).map((h) => ({
     id: h.id, hours: Number(h.hours) || 0, costCode: h.cost_code || "",
-    note: h.note || "", who: names.get(h.mechanic_id) || "", at: h.created_at,
+    note: h.note || "", did: h.work_performed || "", date: h.work_date || null,
+    who: names.get(h.mechanic_id) || "", at: h.created_at,
   }));
 
   return {
@@ -343,7 +350,13 @@ export async function listWorkOrders(states) {
     detail: w.detail || "", priority: w.priority, state: w.state,
     assignedTo: w.assigned_to, assignedName: w.assigned_name || "",
     completedAt: w.completed_at, completionNote: w.completion_note || "",
+    completedBy: w.completed_by || "",
     holdReason: w.hold_reason || "", holdSince: w.hold_since,
+    /* The order's own history, for the printed page: when it was
+       raised and by whom, when somebody was put on it, when the first
+       hour was booked. */
+    startedAt: w.started_at, assignedAt: w.assigned_at,
+    createdBy: w.created_by || "",
     at: w.created_at,
   }));
 }
