@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { C, FD } from "./theme.js";
+import { C, FD, FM } from "./theme.js";
 import { fmtDate, nf, toCSV, Btn, Field, Modal, SectionLabel, inp, th, td, tdNum } from "./ui.jsx";
 import * as buy from "./purchasingData.js";
 import * as setup from "./setupData.js";
 import * as parts from "./partsData.js";
 import { sayOffline } from "./dbError.js";
+import { packet } from "./workOrderPage.js";
 
 /* ── Work ─────────────────────────────────────────────────────────
    Two views over the same shop.
@@ -62,6 +63,12 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
   const [closing, setClosing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [issuing, setIssuing] = useState(null);
+  /* The order somebody is reading, as a page of its own. The board
+     used to open a strip under the row with the parts and hours on it,
+     which answered "what has it cost" and nothing else — not what is
+     wrong with the truck, not what has already been tried, not who has
+     been on it. And it could not be printed, which is what a shop
+     actually does with a job: put it on the dash and write on it. */
   const [open, setOpen] = useState(null);
   /* Bumped after a part is issued. Lines is keyed on it, so a row that
      was already expanded refetches instead of showing the shelf as it
@@ -109,6 +116,16 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
     else onClearFocus?.();
   }, [focusWo, wos, filter, onClearFocus]);
 
+  const reading = shown.find((w) => w.id === open) || null;
+  if (reading) {
+    return (
+      <OrderPage key={`${reading.id}:${linesNonce}`} w={reading} who={who}
+        onBack={() => setOpen(null)}
+        onIssue={() => setIssuing(reading)}
+        onClose={() => setClosing(reading)} />
+    );
+  }
+
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between",
@@ -148,8 +165,8 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
               <React.Fragment key={w.id}>
               <tr>
                 <td style={{ ...td, fontFamily: "monospace" }}>
-                  <button onClick={() => setOpen(open === w.id ? null : w.id)}
-                    title="Parts and hours on this order"
+                  <button onClick={() => setOpen(w.id)}
+                    title="Open the whole order"
                     style={{ background: "none", border: 0, padding: 0, cursor: "pointer",
                              font: "inherit", color: C.green700, textDecoration: "underline" }}>
                     {w.wo}
@@ -190,11 +207,6 @@ function Orders({ who, run, setErr, focusWo, onClearFocus }) {
                   )}
                 </td>
               </tr>
-              {open === w.id && (
-                <tr><td colSpan={7} style={{ ...td, background: C.paper }}>
-                  <Lines key={`${w.id}:${linesNonce}`} wo={w.wo} />
-                </td></tr>
-              )}
               </React.Fragment>
             ))}
             {!shown.length && (
@@ -524,69 +536,245 @@ function IssuePartsDialog({ w, who, onClose, onDone }) {
    already being recorded — a part issued against WO-1043 by somebody
    typing the number counts here exactly the same as one issued from the
    button above. */
-function Lines({ wo }) {
-  const [d, setD] = useState(null);
+/* ── A work order as a page ───────────────────────────────────────
+   Everything about one job on one sheet: what is wrong with the truck,
+   how long it has been that way, who has been on it, what they did in
+   their own words, the time booked and the parts issued.
+
+   It prints, because a shop runs on paper more than anybody building
+   software expects. The packet goes on the dash, gets written on in
+   pencil, and comes back. Everything the screen needs and the paper
+   does not is marked no-print; the sheet keeps a ruled space at the
+   bottom for what gets written there anyway.
+
+   The arithmetic and the wording are in workOrderPage.js, so what this
+   says about a job can be checked without a browser. */
+function OrderPage({ w, who, onBack, onIssue, onClose }) {
+  const [lines, setLines] = useState(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     let live = true;
-    buy.workOrderLines(wo)
-      .then((r) => { if (live) setD(r); })
+    buy.workOrderLines(w.wo)
+      .then((r) => { if (live) setLines(r); })
       .catch((e) => { if (live) setErr(sayOffline(e, "load") || e.message || String(e)); });
     return () => { live = false; };
-  }, [wo]);
+  }, [w.wo]);
 
-  if (err) return <span style={{ color: C.pull, fontSize: 12.5 }}>{err}</span>;
-  if (!d) return <span style={{ color: C.muted, fontSize: 12.5 }}>loading…</span>;
-  if (!d.parts.length && !d.hours.length)
-    return (
-      <span style={{ color: C.muted, fontSize: 12.5 }}>
-        Nothing on this order yet. <b>PARTS</b> issues stock to it, and hours
-        booked against {wo} on the Hours tab land here too.
-      </span>
-    );
+  const d = packet(w, lines || {}, Date.now());
+  const TONE = { done: C.good, hold: C.watch, working: C.green700,
+                 stale: C.pull, open: C.muted };
+
+  const Row = ({ label, children }) => (
+    <div style={{ display: "flex", gap: 10, fontSize: 13, lineHeight: 1.6 }}>
+      <span style={{ color: C.muted, minWidth: 92 }}>{label}</span>
+      <span style={{ color: C.ink, fontWeight: 600 }}>{children}</span>
+    </div>
+  );
+
+  const Block = ({ title, children }) => (
+    <div className="print-block" style={{ marginTop: 18 }}>
+      <div style={{ fontFamily: FD, fontSize: 12, fontWeight: 700, letterSpacing: "0.1em",
+        textTransform: "uppercase", color: C.muted, borderBottom: `1px solid ${C.line}`,
+        paddingBottom: 4, marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
 
   return (
-    <div style={{ display: "flex", gap: 32, flexWrap: "wrap", fontSize: 12.5 }}>
-      {d.parts.length > 0 && (
-        <div>
-          <div style={{ fontFamily: FD, fontWeight: 700, color: C.green900, marginBottom: 4 }}>
-            Parts
+    <div>
+      <div className="flex flex-wrap items-center justify-between no-print"
+        style={{ gap: 8, marginBottom: 12 }}>
+        <Btn tone="ghost" onClick={onBack}>&larr; ALL WORK ORDERS</Btn>
+        <div className="flex flex-wrap" style={{ gap: 6 }}>
+          {w.state !== "done" && <Btn tone="ghost" onClick={onIssue}>PARTS</Btn>}
+          {w.state !== "done" && <Btn tone="ghost" onClick={onClose}>DONE</Btn>}
+          <Btn onClick={() => window.print()}>PRINT</Btn>
+        </div>
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+        padding: "20px 24px 26px", maxWidth: 860 }}>
+
+        {/* The heading the screen does not need and a sheet on a dash
+            very much does, or it comes out of the printer anonymous. */}
+        <div className="print-only" style={{ display: "none", fontFamily: FD, fontSize: 11,
+          letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
+          The Allen Company · Haul Division · work order
+        </div>
+
+        <div className="flex flex-wrap items-baseline justify-between" style={{ gap: 12 }}>
+          <div>
+            <div style={{ fontFamily: FM, fontSize: 30, fontWeight: 700, color: C.green900,
+              lineHeight: 1.05 }}>{w.wo}</div>
+            <div style={{ fontFamily: FD, fontSize: 19, fontWeight: 700, color: C.ink,
+              marginTop: 2 }}>{w.unit || "No unit on it"}</div>
           </div>
-          {d.parts.map((p) => (
-            <div key={p.id} style={{ color: C.muted, lineHeight: 1.7 }}>
-              <span style={{ fontFamily: "monospace", color: C.ink }}>{nf(p.qty)} × {p.num}</span>
-              {p.name ? ` ${p.name}` : ""}
-              {p.cost != null ? ` · $${nf(p.cost, 2)}` : ""}
-              {p.who ? ` · ${p.who}` : ""}
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: FD, fontSize: 15, fontWeight: 700,
+              color: TONE[d.status.tone] || C.muted }}>{d.status.line}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
+              {PRIO_LABEL[w.priority] || w.priority} priority
             </div>
-          ))}
-          <div style={{ marginTop: 4, fontWeight: 700, color: C.ink }}>
-            ${nf(d.partsCost, 2)}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14, display: "grid", gap: 2 }}>
+          <Row label="Raised">
+            {w.at ? fmtDate(w.at) : "—"}{w.createdBy ? ` · ${w.createdBy}` : ""}
+          </Row>
+          <Row label="On it">{d.crew.length ? d.crew.join(", ") : "Nobody yet"}</Row>
+          {w.startedAt && <Row label="Started">{fmtDate(w.startedAt)}</Row>}
+          {w.state === "done" && w.completedAt && (
+            <Row label="Finished">
+              {fmtDate(w.completedAt)}{w.completedBy ? ` · ${w.completedBy}` : ""}
+            </Row>
+          )}
+        </div>
+
+        <Block title="What needs doing">
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{w.title}</div>
+          {w.detail && (
+            <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.6, marginTop: 5,
+              whiteSpace: "pre-wrap" }}>{w.detail}</div>
+          )}
+          {w.holdReason && (
+            <div style={{ fontSize: 13, color: C.watch, fontWeight: 600, marginTop: 8 }}>
+              On hold — {w.holdReason}
+            </div>
+          )}
+        </Block>
+
+        {err && (
+          <div style={{ color: C.pull, fontSize: 13, marginTop: 14 }}>{err}</div>
+        )}
+        {!lines && !err && (
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 14 }}>Loading the rest…</div>
+        )}
+
+        {lines && d.untouched && (
+          <Block title="Progress">
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+              Nothing booked to this order yet — no hours and no parts.
+              Hours land here when somebody books them against {w.wo} on their timecard.
+            </div>
+          </Block>
+        )}
+
+        {/* What they actually did, in their own words and oldest first.
+            This is the running story of the job, and it is the reason
+            somebody picks the sheet up. */}
+        {lines && d.done.length > 0 && (
+          <Block title="What has been done">
+            {d.done.map((x, i) => (
+              <div key={i} style={{ marginBottom: 9 }}>
+                <div style={{ fontSize: 12, color: C.muted, fontFamily: FM }}>
+                  {x.date ? fmtDate(x.date) : "undated"}
+                  {x.who ? ` · ${x.who}` : ""}
+                  {x.hours ? ` · ${nf(x.hours, 2)} h` : ""}
+                </div>
+                <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55,
+                  whiteSpace: "pre-wrap" }}>{x.did}</div>
+              </div>
+            ))}
+          </Block>
+        )}
+
+        {lines && d.days.length > 0 && (
+          <Block title="Time on it">
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <tbody>
+                {d.days.map((day, i) => (
+                  <tr key={i} style={{ borderTop: i ? `1px solid ${C.lineSoft}` : "none" }}>
+                    <td style={{ ...td, fontFamily: FM, whiteSpace: "nowrap" }}>
+                      {day.date ? fmtDate(day.date) : "undated"}
+                    </td>
+                    <td style={td}>{day.who.join(", ")}</td>
+                    <td style={{ ...td, ...tdNum, fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {nf(day.hours, 2)} h
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: `2px solid ${C.line}` }}>
+                  <td style={td} colSpan={2}>
+                    <b>Total labour</b>
+                  </td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 700, whiteSpace: "nowrap" }}>
+                    {nf(d.hoursTotal, 2)} h
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </Block>
+        )}
+
+        {lines && d.parts.length > 0 && (
+          <Block title="Parts issued">
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <tbody>
+                {d.parts.map((p, i) => (
+                  <tr key={p.id} style={{ borderTop: i ? `1px solid ${C.lineSoft}` : "none" }}>
+                    <td style={{ ...td, fontFamily: FM, whiteSpace: "nowrap" }}>
+                      {nf(p.qty)} × {p.num}
+                    </td>
+                    <td style={td}>
+                      {p.name}
+                      {p.who && (
+                        <span style={{ color: C.muted }}> · {p.who}</span>
+                      )}
+                    </td>
+                    <td style={{ ...td, ...tdNum, whiteSpace: "nowrap" }}>
+                      {p.cost == null ? "—" : `$${nf(p.cost, 2)}`}
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: `2px solid ${C.line}` }}>
+                  <td style={td} colSpan={2}><b>Total parts</b></td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 700, whiteSpace: "nowrap" }}>
+                    ${nf(d.partsCost, 2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {/* A total with holes in it says so, or somebody quotes it. */}
             {d.partsWithoutCost > 0 && (
-              <span style={{ color: C.muted, fontWeight: 400 }}>
-                {" "}· {d.partsWithoutCost} with no cost on file, not counted
-              </span>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 5 }}>
+                {d.partsWithoutCost} part{d.partsWithoutCost === 1 ? " has" : "s have"} no
+                cost on file and {d.partsWithoutCost === 1 ? "is" : "are"} not in that figure.
+              </div>
             )}
-          </div>
-        </div>
-      )}
-      {d.hours.length > 0 && (
-        <div>
-          <div style={{ fontFamily: FD, fontWeight: 700, color: C.green900, marginBottom: 4 }}>
-            Hours
-          </div>
-          {d.hours.map((h) => (
-            <div key={h.id} style={{ color: C.muted, lineHeight: 1.7 }}>
-              <span style={{ color: C.ink }}>{nf(h.hours, 2)} h</span>
-              {h.who ? ` · ${h.who}` : ""}{h.costCode ? ` · ${h.costCode}` : ""}
-            </div>
+          </Block>
+        )}
+
+        {w.state === "done" && w.completionNote && (
+          <Block title="Closed out">
+            <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.6,
+              whiteSpace: "pre-wrap" }}>{w.completionNote}</div>
+          </Block>
+        )}
+
+        {/* Ruled space, on paper only. Somebody is going to write on
+            this sheet whatever the app does, and a line to write on
+            beats the margin. */}
+        <div className="print-only" style={{ display: "none", marginTop: 22 }}>
+          <div style={{ fontFamily: FD, fontSize: 12, fontWeight: 700, letterSpacing: "0.1em",
+            textTransform: "uppercase", color: C.muted, borderBottom: `1px solid ${C.line}`,
+            paddingBottom: 4, marginBottom: 14 }}>Notes from the floor</div>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ borderBottom: `1px solid ${C.line}`, height: 26 }} />
           ))}
-          <div style={{ marginTop: 4, fontWeight: 700, color: C.ink }}>
-            {nf(d.hoursTotal, 2)} h
+          <div style={{ display: "flex", gap: 26, marginTop: 20, fontSize: 12, color: C.muted }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ borderBottom: `1px solid ${C.line}`, height: 24 }} />
+              Signed
+            </div>
+            <div style={{ width: 170 }}>
+              <div style={{ borderBottom: `1px solid ${C.line}`, height: 24 }} />
+              Date
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
