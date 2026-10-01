@@ -55,6 +55,19 @@ const toTire = (r, vehNumById) => ({
   notes: r.notes || "",
 });
 
+/* A tire somebody can buy, with its new depth and its price. */
+const toModel = (r) => ({
+  id: r.id,
+  brand: r.brand || "",
+  model: r.model || "",
+  size: r.size || "",
+  type: r.tire_type,
+  newDepth: r.new_depth_32nds == null ? null : Number(r.new_depth_32nds),
+  cost: r.cost == null ? null : Number(r.cost),
+  active: !!r.active,
+  notes: r.notes || "",
+});
+
 const toReading = (r) => ({
   id: r.id,
   tire: r.tire_id,
@@ -97,7 +110,7 @@ const toWear = (r) => ({
 /* ── Load ─────────────────────────────────────────────────────── */
 
 export async function loadAll() {
-  const [vehRows, tireRows, readingRows, odoRows, wearRows, brandRows, setRows] =
+  const [vehRows, tireRows, readingRows, odoRows, wearRows, brandRows, modelRows, setRows] =
     await Promise.all([
       fetchAll("tw_vehicles", "*", "number"),
       fetchAll("tw_tires", "*"),
@@ -105,6 +118,7 @@ export async function loadAll() {
       fetchAll("tw_odometer_log", "*"),
       fetchAll("tw_tire_wear", "*"),
       fetchAll("tw_tire_brands", "*", "sort_order"),
+      fetchAll("tw_tire_models", "*", "brand"),
       fetchAll("tw_settings", "*"),
     ]);
 
@@ -121,6 +135,7 @@ export async function loadAll() {
     odos: odoRows.map((r) => toOdo(r, vehNumById)),
     wear,
     brands: brandRows.filter((b) => b.active).map((b) => b.name),
+    models: modelRows.map(toModel),
     settings: setRows.length
       ? toSettings(setRows[0])
       : { pullSteer: 6, pullOther: 4, newDepth: 28, dualMatch: 4, alertEmails: [] },
@@ -159,6 +174,12 @@ const tireRow = (vehicleId, t, who) => ({
   mounted_odometer: t.onOdo,
   mounted_depth: t.newDepth,
   cost: t.cost,
+  /* Which catalog row it came off, so a spelling corrected later
+     reaches the tires that used it. The brand, model, size, depth and
+     cost are still written down here: they are what was fitted and
+     what was paid, and a price list changing later must not rewrite
+     them. */
+  model_id: t.modelId || null,
   notes: t.notes || null,
   created_by: who,
 });
@@ -416,3 +437,47 @@ export async function eraseAll() {
   check(await supabase.from("tw_odometer_log").delete().neq("id", ZERO_UUID));
 }
 
+
+
+/* ── The catalog ──────────────────────────────────────────────────
+   Kept here rather than in setupData because it is tire data and the
+   Tires screen is the only thing that reads it. */
+
+const modelRow = (m) => ({
+  brand: m.brand.trim(),
+  model: (m.model || "").trim(),
+  size: (m.size || "").trim(),
+  tire_type: m.type,
+  new_depth_32nds: m.newDepth === "" || m.newDepth == null ? null : Number(m.newDepth),
+  cost: m.cost === "" || m.cost == null ? null : Number(m.cost),
+  notes: (m.notes || "").trim() || null,
+});
+
+/* The unique index is on the squashed text, so a second "HDC 3"
+   beside "hdc3" is refused by the database as well as by the form.
+   That error is worth saying as itself — it names the thing somebody
+   has just done — rather than being swallowed. */
+export async function addModel(m) {
+  const { error } = await supabase.from("tw_tire_models").insert(modelRow(m));
+  if (error) {
+    if (error.code === "23505") throw new Error("That tire is already in the catalog.");
+    throw error;
+  }
+}
+
+export async function updateModel(id, m) {
+  const { error } = await supabase.from("tw_tire_models")
+    .update({ ...modelRow(m), updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) {
+    if (error.code === "23505") throw new Error("That tire is already in the catalog.");
+    throw error;
+  }
+}
+
+/* Retired rather than deleted. A tire nobody buys any more is still
+   the tire 138 casings on the fleet came off, and model_id points at
+   this row. */
+export async function retireModel(id, active) {
+  check(await supabase.from("tw_tire_models")
+    .update({ active, updated_at: new Date().toISOString() }).eq("id", id));
+}

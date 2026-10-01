@@ -20,6 +20,8 @@ import { CAPS, capLabel, capNeeded, sayType, sayTypeTight } from "./retread.js";
 import { roleLabel, roleOf } from "./axleRole.js";
 import { suggestOffOdo, checkOffOdo, milesOff } from "./pullOdo.js";
 import { groupOf, groupBlurb, groupsPresent, firstGroup } from "./fleetGroup.js";
+import { labelOf, findModels, specFrom, sayMissing, isReady, checkModel, modelKey }
+  from "./tireModel.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -130,6 +132,7 @@ export default function TireWear({ who, tab, onBusy }) {
   const [odos, setOdos] = useState([]);
   const [wear, setWear] = useState({});
   const [brands, setBrands] = useState([]);
+  const [models, setModels] = useState([]);
   const [settings, setSettings] = useState(DEFAULTS);
 
   const reload = useCallback(async () => {
@@ -143,6 +146,7 @@ export default function TireWear({ who, tab, onBusy }) {
     setOdos(d.odos);
     setWear(d.wear);
     setBrands(d.brands);
+    setModels(d.models || []);
     setSettings({ ...DEFAULTS, ...d.settings });
   }, []);
 
@@ -209,6 +213,9 @@ export default function TireWear({ who, tab, onBusy }) {
     deleteReading: (id) => run(() => db.deleteReading(id)),
     logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
     updateSettings: (patch) => run(() => db.updateSettings(patch)),
+    addModel: (m) => runRaw(() => db.addModel(m)),
+    updateModel: (id, m) => runRaw(() => db.updateModel(id, m)),
+    retireModel: (id, active) => run(() => db.retireModel(id, active)),
     eraseAll: () => run(() => db.eraseAll()),
   }), [run, runRaw, who]);
 
@@ -343,12 +350,15 @@ export default function TireWear({ who, tab, onBusy }) {
         {tab === "fleet" && (
           <FleetView
             {...{ filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
-              byNum, activeTireAt, tireStats, settings, attention, brands,
+              byNum, activeTireAt, tireStats, settings, attention, brands, models,
               actions, busy, lastOdoFor }}
           />
         )}
         {tab === "analysis" && (
           <Analysis {...{ tires, tireStats, settings, byNum }} />
+        )}
+        {tab === "catalog" && (
+          <Catalog {...{ models, tires, actions, busy }} />
         )}
         {tab === "settings" && (
           <Settings {...{ settings, tires, readings, odos, tireStats, actions, busy }} />
@@ -361,7 +371,7 @@ export default function TireWear({ who, tab, onBusy }) {
 /* ── Fleet view ───────────────────────────────────────────────── */
 function FleetView(props) {
   const { filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
-    byNum, activeTireAt, tireStats, settings, attention, brands,
+    byNum, activeTireAt, tireStats, settings, attention, brands, models,
     actions, busy, lastOdoFor } = props;
 
   /* The divisions actually on the page, in fleet order, rather than a
@@ -431,7 +441,7 @@ function FleetView(props) {
             <VehicleDetail
               key={sel}
               v={byNum[sel]} summary={vehSummary[sel]}
-              {...{ activeTireAt, tireStats, settings, brands, actions, busy, lastOdoFor }}
+              {...{ activeTireAt, tireStats, settings, brands, models, actions, busy, lastOdoFor }}
             />
           ) : (
             <StartHere attention={attention} setSel={setSel} byNum={byNum} />
@@ -519,7 +529,7 @@ function StartHere({ attention, setSel, byNum }) {
 
 /* ── Vehicle detail ───────────────────────────────────────────── */
 function VehicleDetail(props) {
-  const { v, summary, activeTireAt, tireStats, settings, brands,
+  const { v, summary, activeTireAt, tireStats, settings, brands, models,
     actions, busy, lastOdoFor } = props;
 
   const [mode, setMode] = useState("view"); // view | inspect
@@ -722,6 +732,7 @@ function VehicleDetail(props) {
 
       {mountPos && (
         <MountDialog pos={mountPos} veh={v.num} lastOdo={lastOdo} settings={settings}
+          models={models}
           brands={brands} busy={busy}
           freePositions={positions.filter(
             (p) => p.id !== mountPos.id && !activeTireAt[`${v.num}|${p.id}`])}
@@ -1086,7 +1097,313 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
 }
 
 /* ── Dialogs ──────────────────────────────────────────────────── */
-function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
+/* ── The catalog ──────────────────────────────────────────────────
+   One row per tire somebody can buy. The two columns that matter are
+   editable in place, because the job this page exists for is filling
+   in 36 depths and 36 prices once — and a dialog per row would be
+   seventy-two taps of overhead on a tablet.
+
+   Rows with a gap sort first and stay first until they are filled.
+   That is the whole workflow: open it, work down until the orange is
+   gone, and never look up a price at a wheel again. */
+function Catalog({ models, tires, actions, busy }) {
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [showRetired, setShowRetired] = useState(false);
+  const [err, setErr] = useState("");
+
+  /* How many tires on the fleet came off each row — what makes a row
+     worth finishing rather than retiring. */
+  const used = useMemo(() => {
+    const m = {};
+    tires.forEach((t) => {
+      const k = modelKey(t);
+      m[k] = (m[k] || 0) + 1;
+    });
+    return m;
+  }, [tires]);
+
+  const shown = useMemo(() => {
+    const live = models.filter((m) => showRetired || m.active);
+    return [...live].sort((a, b) =>
+      (isReady(a) - isReady(b))
+      || (b.active - a.active)
+      || labelOf(a).localeCompare(labelOf(b)));
+  }, [models, showRetired]);
+
+  const todo = models.filter((m) => m.active && !isReady(m)).length;
+
+  const save = async (m, patch) => {
+    setErr("");
+    const next = { ...m, ...patch };
+    const why = checkModel(next, models);
+    if (why) { setErr(why); return; }
+    try { await actions.updateModel(m.id, next); }
+    catch (e) { setErr(e.message || String(e)); }
+  };
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"
+        style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                 padding: "12px 16px" }}>
+        <div>
+          <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900,
+            lineHeight: 1.1 }}>
+            {models.filter((m) => m.active).length} tire{models.filter((m) => m.active).length === 1 ? "" : "s"} in the catalog
+          </div>
+          <div style={{ fontSize: 12.5, color: todo ? C.watch : C.muted, marginTop: 2 }}>
+            {todo
+              ? `${todo} still need a depth or a price before they can fill a mount form in`
+              : "Every one carries its new depth and its price"}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
+          <button onClick={() => setShowRetired((v) => !v)}
+            style={{ ...linkBtn, fontSize: 12.5 }}>
+            {showRetired ? "Hide retired" : "Show retired"}
+          </button>
+          <Btn onClick={() => setAdding(true)}>ADD A TIRE</Btn>
+        </div>
+      </div>
+
+      {err && (
+        <div style={{ background: "#FDECEA", color: C.pull, border: `1px solid ${C.pull}33`,
+          borderRadius: 8, padding: "10px 14px", fontSize: 13, fontWeight: 600 }}>{err}</div>
+      )}
+
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                    overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <thead><tr>
+              {["Tire", "Type", "New depth", "Price", "On the fleet", ""].map((h, i) => (
+                <th key={h || i} style={{ ...th, textAlign: i === 2 || i === 3 || i === 4 ? "right" : "left" }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {shown.map((m) => (
+                <CatalogRow key={m.id} m={m} used={used[modelKey(m)] || 0} busy={busy}
+                  onSave={(patch) => save(m, patch)}
+                  onEdit={() => setEditing(m)}
+                  onRetire={() => actions.retireModel(m.id, !m.active)} />
+              ))}
+              {!shown.length && (
+                <tr><td colSpan={6} style={{ ...td, color: C.muted, padding: 22 }}>
+                  Nothing in the catalog yet. ADD A TIRE puts one in.
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.lineSoft}`,
+          fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+          The depth is how deep a <b>new</b> one is, not what is on a truck now. Mounting a
+          tire copies the depth and the price onto it, and a price changed here afterwards
+          does not rewrite what a tire already cost.
+        </div>
+      </div>
+
+      {(adding || editing) && (
+        <ModelDialog m={editing} models={models} busy={busy}
+          onClose={() => { setAdding(false); setEditing(null); }}
+          onSave={async (next) => {
+            setErr("");
+            const why = checkModel(next, models);
+            if (why) return why;
+            try {
+              if (editing) await actions.updateModel(editing.id, next);
+              else await actions.addModel(next);
+              setAdding(false); setEditing(null);
+              return "";
+            } catch (e) { return e.message || String(e); }
+          }} />
+      )}
+    </div>
+  );
+}
+
+/* One row, with the two numbers editable where they sit. Typed freely
+   and settled on the way out — the same rule the parts quantity box
+   had to learn: nothing rewrites a box while somebody is typing in it. */
+function CatalogRow({ m, used, busy, onSave, onEdit, onRetire }) {
+  const [depth, setDepth] = useState(m.newDepth == null ? "" : String(m.newDepth));
+  const [cost, setCost] = useState(m.cost == null ? "" : String(m.cost));
+
+  useEffect(() => { setDepth(m.newDepth == null ? "" : String(m.newDepth)); }, [m.newDepth]);
+  useEffect(() => { setCost(m.cost == null ? "" : String(m.cost)); }, [m.cost]);
+
+  const box = (value, onChange, onDone, placeholder, warn) => (
+    <input value={value} inputMode="decimal" disabled={busy}
+      onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ""))}
+      onFocus={(e) => e.target.select()}
+      onBlur={onDone} placeholder={placeholder}
+      style={{ ...inp, fontFamily: FM, width: 92, textAlign: "right", padding: "6px 8px",
+        borderColor: warn ? C.watch : C.line }} />
+  );
+
+  return (
+    <tr style={{ borderTop: `1px solid ${C.lineSoft}`, opacity: m.active ? 1 : 0.55 }}>
+      <td style={td}>
+        <div style={{ fontWeight: 600, color: C.ink }}>
+          {[m.brand, m.model].filter(Boolean).join(" ") || "Unbranded"}
+        </div>
+        <div style={{ fontSize: 12, color: C.muted, fontFamily: FM }}>
+          {m.size || "no size"}{!m.active && " · retired"}
+        </div>
+      </td>
+      <td style={{ ...td, color: C.muted }}>{m.type === "retread" ? "Retread" : "Virgin"}</td>
+      <td style={{ ...td, textAlign: "right" }}>
+        {box(depth, setDepth,
+          () => { if (depth !== String(m.newDepth ?? "")) onSave({ newDepth: depth }); },
+          "—", m.newDepth == null)}
+      </td>
+      <td style={{ ...td, textAlign: "right" }}>
+        {box(cost, setCost,
+          () => { if (cost !== String(m.cost ?? "")) onSave({ cost }); },
+          "—", m.cost == null)}
+      </td>
+      <td style={{ ...td, ...tdNum, color: C.muted }}>{used || "—"}</td>
+      <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+        <button onClick={onEdit} style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
+        {" · "}
+        <button onClick={onRetire}
+          style={{ ...linkBtn, fontSize: 12.5, color: m.active ? C.pull : C.green700 }}>
+          {m.active ? "Retire" : "Put back"}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function ModelDialog({ m, models, busy, onClose, onSave }) {
+  const [f, setF] = useState({
+    brand: m?.brand || "", model: m?.model || "", size: m?.size || "",
+    type: m?.type || "virgin",
+    newDepth: m?.newDepth == null ? "" : String(m.newDepth),
+    cost: m?.cost == null ? "" : String(m.cost),
+    notes: m?.notes || "",
+  });
+  const [why, setWhy] = useState("");
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const next = { ...f, id: m?.id };
+  const blocked = checkModel(next, models);
+
+  return (
+    <Modal title={m ? "Edit this tire" : "Add a tire to the catalog"}
+      sub={m ? labelOf(m) : "Brand, model and size are what makes it one tire"}
+      onClose={onClose}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <Field label="Brand"><input value={f.brand} onChange={set("brand")} autoFocus
+          placeholder="Continental" style={inp} /></Field>
+        <Field label="Model / pattern"><input value={f.model} onChange={set("model")}
+          placeholder="HDC3" style={inp} /></Field>
+        <Field label="Size"><input value={f.size} onChange={set("size")}
+          placeholder="11R24.5" style={inp} /></Field>
+        <Field label="Type">
+          <select value={f.type} onChange={set("type")} style={inp}>
+            <option value="virgin">Virgin</option>
+            <option value="retread">Retread</option>
+          </select>
+        </Field>
+        <Field label="New depth (32nds)">
+          <input value={f.newDepth} inputMode="decimal" onChange={set("newDepth")}
+            placeholder="28" style={{ ...inp, fontFamily: FM }} /></Field>
+        <Field label="Price">
+          <input value={f.cost} inputMode="decimal" onChange={set("cost")}
+            placeholder="655.24" style={{ ...inp, fontFamily: FM }} /></Field>
+      </div>
+      <Field label="Notes"><input value={f.notes} onChange={set("notes")}
+        placeholder="Anything worth knowing" style={inp} /></Field>
+      {(blocked || why) && (
+        <p style={{ fontSize: 12.5, color: C.pull, fontWeight: 600, margin: "10px 0 0" }}>
+          {blocked || why}
+        </p>
+      )}
+      <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 0", lineHeight: 1.5 }}>
+        Depth and price can be left blank and filled in later — the catalog says which
+        ones still need them. The depth is how deep a new one is.
+      </p>
+      <div className="flex justify-end mt-4" style={{ gap: 8 }}>
+        <Btn tone="ghost" onClick={onClose}>CANCEL</Btn>
+        <Btn disabled={busy || !!blocked}
+          onClick={async () => { const e = await onSave(next); if (e) setWhy(e); }}>
+          {m ? "SAVE" : "ADD IT"}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Picking a tire out of the catalog ────────────────────────────
+   A search rather than a dropdown: the catalog is 36 rows today and
+   will be more, and a select that long on a tablet is a scroll
+   nobody finishes. Typing matches brand, model and size at once,
+   because somebody looking for a tire types "hdc3" or "425" and
+   should not have to decide which box that was.
+
+   A row that is still missing its depth or price is offered all the
+   same, and says so. It still fills in the brand, model and size,
+   which is most of the typing — and seeing "no price on it yet" at
+   the wheel is how the catalog gets finished. */
+function CatalogPick({ models, onPick, picked }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const hits = useMemo(() => findModels(models, q).slice(0, 8), [models, q]);
+  const chosen = models.find((m) => m.id === picked) || null;
+
+  if (!models.length) return null;
+
+  return (
+    <div style={{ marginBottom: 14, paddingBottom: 12,
+                  borderBottom: `1px solid ${C.lineSoft}` }}>
+      <Field label="Pick it from the catalog">
+        <div style={{ position: "relative" }}>
+          <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            inputMode="search" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+            placeholder="Brand, model or size…"
+            style={{ ...inp, fontSize: 16 }} />
+          {open && hits.length > 0 && (
+            <div style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%",
+              background: "#fff", border: `1px solid ${C.line}`, borderRadius: 6,
+              boxShadow: "0 8px 24px rgba(0,0,0,.12)", maxHeight: 300, overflowY: "auto" }}>
+              {hits.map((m) => (
+                <button key={m.id}
+                  onClick={() => { onPick(m); setQ(""); setOpen(false); }}
+                  style={{ display: "block", width: "100%", textAlign: "left",
+                    padding: "11px 12px", border: 0, borderTop: `1px solid ${C.lineSoft}`,
+                    background: "#fff", cursor: "pointer", font: "inherit", minHeight: 46 }}>
+                  <div style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>{labelOf(m)}</div>
+                  <div style={{ fontSize: 12, color: isReady(m) ? C.muted : C.watch,
+                                fontFamily: FM, marginTop: 1 }}>
+                    {isReady(m)
+                      ? `${m.newDepth}/32 · $${nf(m.cost, 2)}`
+                      : sayMissing(m)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Field>
+      {chosen && (
+        <div style={{ fontSize: 12.5, color: C.green700, fontWeight: 600, marginTop: 6 }}>
+          From the catalog: {labelOf(chosen)}
+          {!isReady(chosen) && (
+            <span style={{ color: C.watch }}> — {sayMissing(chosen).toLowerCase()}</span>
+          )}
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+        Picking one fills in the brand, model, size, depth and price. Anything not in
+        the catalog can still be typed in below.
+      </div>
+    </div>
+  );
+}
+
+function MountDialog({ pos, veh, lastOdo, settings, brands, models = [], busy,
                       freePositions = [], onClose, onSave, onSaveMany }) {
   /* Two steps. The first mounts one tire; the second offers to put the
      same tire on the wheels still empty, which is what setting up a
@@ -1095,6 +1412,7 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
   const [spec, setSpec] = useState(null);
   const [pick, setPick] = useState({});        // position id -> tread typed
   const [f, setF] = useState({
+    modelId: null,
     brand: "", brandOther: "", model: "", size: "11R24.5", type: "virgin",
     caps: "", wheel: "",
     newDepth: String(settings.newDepth), onDate: todayISO(),
@@ -1108,11 +1426,19 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
      ask; the way to stop that list growing is to ask at the one moment
      somebody is holding the tire. */
   const capWhy = capNeeded(f.type, f.caps);
+  const pickedModel = models.find((m) => m.id === f.modelId) || null;
+  const stillMatches = !!pickedModel && modelKey(pickedModel) === modelKey({
+    brand: brandFinal, model: f.model, size: f.size, type: f.type,
+  });
   const ok = f.onOdo !== "" && Number(f.newDepth) > 0 && brandFinal !== "" && !capWhy;
 
   /* Everything about the tire except where it sits and how deep it is.
      Those two are per wheel, always. */
   const specOf = () => ({
+    /* Dropped the moment the spec stops matching the row it came from,
+       so a tire typed over by hand is not filed under a catalog entry
+       it is no longer describing. */
+    modelId: stillMatches ? f.modelId : null,
     brand: brandFinal, model: f.model.trim(), size: f.size.trim(),
     type: f.type, caps: f.caps === "" ? null : Number(f.caps),
     wheel: f.wheel, onDate: f.onDate, onOdo: Number(f.onOdo),
@@ -1183,8 +1509,31 @@ function MountDialog({ pos, veh, lastOdo, settings, brands, busy,
     );
   }
 
+  /* Pick the tire out of the catalog and the rest of the form fills
+     itself in. The boxes underneath stay editable and stay usable with
+     nothing picked: a tire that is not in the catalog at seven in the
+     morning must not stop somebody mounting it. Same rule as the parts
+     box — the catalog is a shortcut, never a gate. */
+  const fromCatalog = (m) => {
+    const sp = specFrom(m);
+    setF((prev) => ({
+      ...prev,
+      modelId: sp.modelId,
+      brand: brands.includes(sp.brand) ? sp.brand : "Other",
+      brandOther: brands.includes(sp.brand) ? "" : sp.brand,
+      model: sp.model, size: sp.size, type: sp.type,
+      /* Only where the catalog has one. A blank in the catalog leaves
+         what was typed rather than wiping it to nothing. */
+      newDepth: sp.newDepth == null ? prev.newDepth : String(sp.newDepth),
+      cost: sp.cost == null ? prev.cost : String(sp.cost),
+      /* A virgin tire cannot carry a cap count. */
+      caps: sp.type === "retread" ? prev.caps : "",
+    }));
+  };
+
   return (
     <Modal title={`Mount a tire at ${pos.id}`} sub={`${veh} · ${pos.role}`} onClose={onClose}>
+      <CatalogPick models={models} onPick={fromCatalog} picked={f.modelId} />
       <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <Field label="Brand">
           <select value={f.brand} onChange={set("brand")} style={inp}>
