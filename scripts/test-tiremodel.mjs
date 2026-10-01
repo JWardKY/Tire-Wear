@@ -20,7 +20,7 @@
 */
 import {
   modelKey, sameModel, labelOf, missing, sayMissing, isReady,
-  checkModel, findModels, specFrom, TYPES,
+  checkModel, findModels, specFrom, shortLabels, TYPES,
 } from "../src/tireModel.js";
 
 let bad = 0;
@@ -156,6 +156,39 @@ ok("a row with gaps fills in what it has and no more",
   && specFrom(shelf2[1]).brand === "Continental", specFrom(shelf2[1]));
 ok("nothing at all does not crash", typeof specFrom({}).brand === "string");
 ok("both types are offered", TYPES.join() === "virgin,retread");
+
+console.log("\nwhat to call one on a chart:");
+/* Sixteen characters of axis, and two tires that would read alike. */
+const shelf3 = [
+  M({ brand: "Continental", model: "HDC3", size: "11R24.5", type: "virgin" }),
+  M({ brand: "Continental", model: "HDC3", size: "11R24.5", type: "retread" }),
+  M({ brand: "Continental", model: "HAC3", size: "425/65R22.5", type: "virgin" }),
+  M({ brand: "Continental", model: "HAC3", size: "11R24.5", type: "virgin" }),
+  M({ brand: "", model: "", size: "11R24.5", type: "virgin" }),
+];
+const names = shortLabels(shelf3);
+const nameOf = (m) => names.get(modelKey(m));
+ok("brand and model, and no more", nameOf(shelf3[0]) === "Continental HDC3", nameOf(shelf3[0]));
+/* A cap and a virgin casing of the same pattern are different money,
+   so they cannot be one bar with one name. */
+ok("a retread is marked", nameOf(shelf3[1]) === "Continental HDC3 cap", nameOf(shelf3[1]));
+ok("…and is not the same name as the virgin one", nameOf(shelf3[0]) !== nameOf(shelf3[1]));
+/* The size earns its place only where two would otherwise read alike. */
+ok("the size is added where two would clash",
+  nameOf(shelf3[2]) === "Continental HAC3 425/65R22.5"
+  && nameOf(shelf3[3]) === "Continental HAC3 11R24.5",
+  [nameOf(shelf3[2]), nameOf(shelf3[3])]);
+ok("…and is left off where nothing clashes",
+  !/11R24\.5/.test(nameOf(shelf3[0])), nameOf(shelf3[0]));
+ok("a tire with no brand still gets a name", nameOf(shelf3[4]) === "Unbranded", nameOf(shelf3[4]));
+/* The same tire spelled two ways is one line, which is the whole
+   point of the catalog reaching the chart. */
+const spellings = shortLabels([
+  M({ brand: "Continental", model: "HDC3", size: "11R24.5", type: "virgin" }),
+  M({ brand: "continental", model: "HDC 3", size: "11/24.5", type: "virgin" }),
+]);
+ok("two spellings of one tire are one entry", spellings.size === 1, [...spellings.values()]);
+ok("nothing at all does not crash", shortLabels([]).size === 0);
 
 console.log(bad ? `\n${bad} failed` : "\nall good");
 process.exit(bad ? 1 : 0);

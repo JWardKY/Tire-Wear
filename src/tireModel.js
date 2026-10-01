@@ -152,3 +152,43 @@ export function specFrom(m = {}) {
     cost: costOf(m),
   };
 }
+
+/* ── What to call a tire on a chart ───────────────────────────────
+   A bar chart has about sixteen characters of axis. "Continental
+   HDC3 · 11R24.5 · Virgin" is forty-two, and chopping it leaves
+   "Continental HD…" against "Continental HD…".
+
+   So the name is brand and model, with two things added only where
+   they are doing work:
+
+   A retread is marked, because a cap and a virgin casing of the same
+   pattern are different money and would otherwise be two bars with
+   one name.
+
+   And the size is added ONLY when two tires on the same chart would
+   otherwise read alike — Continental HAC3 comes in 425/65R22.5 and
+   11R24.5 at different prices, and two bars both reading "Continental
+   HAC3" is a chart that looks broken. Adding the size to every line
+   instead would cost the room the names need, every time, to solve a
+   collision that happens twice on this fleet. */
+export function shortLabels(list = []) {
+  const base = (m) => {
+    const name = [clean(m.brand), clean(m.model)].filter(Boolean).join(" ") || "Unbranded";
+    return String(m.type || m.tire_type || "").toLowerCase() === "retread"
+      ? `${name} cap` : name;
+  };
+  const seen = new Map();   // base name -> how many distinct tires use it
+  const keys = new Map();   // modelKey -> the tire it came from
+  list.forEach((m) => { if (!keys.has(modelKey(m))) keys.set(modelKey(m), m); });
+  keys.forEach((m) => {
+    const b = base(m);
+    seen.set(b, (seen.get(b) || 0) + 1);
+  });
+  const out = new Map();
+  keys.forEach((m, k) => {
+    const b = base(m);
+    const size = clean(m.size);
+    out.set(k, seen.get(b) > 1 && size ? `${b} ${size}` : b);
+  });
+  return out;
+}
