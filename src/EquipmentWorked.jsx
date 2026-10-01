@@ -6,6 +6,7 @@ import * as buy from "./purchasingData.js";
 import * as shop from "./shopData.js";
 import UnitPicker from "./UnitPicker.jsx";
 import { needsPm, ready as cardReady, saveBlock } from "./cardReady.js";
+import { typeQty, settleQty, addQty, lineKey, sameLine } from "./partQty.js";
 
 /* ── Equipment worked ─────────────────────────────────────────────
    A mechanic's day, one unit at a time. This is the shape the shop
@@ -277,7 +278,12 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
           unitSeconds: Math.round(c.seconds),
           stints: c.stints,
           workPerformed: c.workPerformed.trim() || null,
-          parts: c.parts.map((p) => ({ partId: p.partId, number: p.num, qty: p.qty })),
+          /* settleQty here as well as on blur: tapping Save on an iPad
+             does not always blur the box first, and a quantity still
+             held as text would reach the database as text. */
+          parts: c.parts.map((p) => ({
+            partId: p.partId, number: p.num, qty: settleQty(p.qty),
+          })),
           who: mechanic.name,
         }, mechanic.id);
         saved += 1;
@@ -868,7 +874,9 @@ function PartsPulled({ parts, picked, onChange }) {
       const next = picked.slice();
       next[at] = {
         ...next[at],
-        qty: Math.round((next[at].qty + line.qty) * 100) / 100,
+        /* Through addQty rather than +, because while the box is
+           being typed in qty is text and "3" + 1 is "31". */
+        qty: addQty(next[at].qty, line.qty),
         partId: next[at].partId || line.partId,
         name: next[at].name || line.name,
       };
@@ -898,8 +906,12 @@ function PartsPulled({ parts, picked, onChange }) {
     put({ partId: null, num, name: "", uom: "", qty: 1 });
   };
 
-  const setQty = (partId, qty) =>
-    onChange(picked.map((p) => (p.partId === partId ? { ...p, qty } : p)));
+  /* By part number, not partId. A part nobody has put in the catalog
+     has no id, so two typed parts were both null — changing one
+     changed both, and removing one removed both. */
+  const setQty = (line, qty) =>
+    onChange(picked.map((p) => (sameLine(p, line) ? { ...p, qty } : p)));
+  const drop = (line) => onChange(picked.filter((p) => !sameLine(p, line)));
 
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.lineSoft}` }}>
@@ -913,7 +925,7 @@ function PartsPulled({ parts, picked, onChange }) {
       ) : (
         <div style={{ marginBottom: 8 }}>
           {picked.map((p) => (
-            <div key={p.partId} className="flex flex-wrap items-center"
+            <div key={lineKey(p)} className="flex flex-wrap items-center"
               style={{ gap: 8, padding: "6px 0", borderTop: `1px solid ${C.lineSoft}` }}>
               <span style={{ fontFamily: FM, fontSize: 13, fontWeight: 600 }}>{p.num}</span>
               <span style={{ fontSize: 13, color: C.muted, flex: 1, minWidth: 120 }}>
@@ -926,11 +938,20 @@ function PartsPulled({ parts, picked, onChange }) {
                   </span>
                 )}
               </span>
-              <input type="number" min="1" step="1" value={p.qty}
-                onChange={(e) => setQty(p.partId, Math.max(1, Number(e.target.value) || 1))}
-                style={{ ...inp, fontFamily: FM, width: 78 }} />
+              {/* Nothing rewrites this box while somebody is typing in
+                  it — that was the bug. It holds text, including none,
+                  and becomes a number when they leave. Tapping it
+                  selects what is there, so the next digit replaces the
+                  quantity instead of landing beside it: the shop was
+                  typing "31" for three and then picking out the 1. */}
+              <input type="text" inputMode="decimal" value={String(p.qty)}
+                aria-label={`How many ${p.num}`}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setQty(p, typeQty(e.target.value))}
+                onBlur={() => setQty(p, settleQty(p.qty))}
+                style={{ ...inp, fontFamily: FM, width: 78, textAlign: "right" }} />
               <span style={{ fontSize: 12, color: C.muted, width: 34 }}>{p.uom}</span>
-              <button onClick={() => onChange(picked.filter((x) => x.partId !== p.partId))}
+              <button onClick={() => drop(p)}
                 style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
             </div>
           ))}
