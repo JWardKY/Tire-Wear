@@ -470,6 +470,7 @@
       "created_by",
       "id",
       "model",
+      "model_id",
       "mounted_date",
       "mounted_depth",
       "mounted_odometer",
@@ -601,6 +602,19 @@
       "updated_at",
       "vehicle_id",
       "wo_number"
+    ],
+    "tw_tire_models": [
+      "active",
+      "brand",
+      "cost",
+      "created_at",
+      "id",
+      "model",
+      "new_depth_32nds",
+      "notes",
+      "size",
+      "tire_type",
+      "updated_at"
     ]
   }
 }

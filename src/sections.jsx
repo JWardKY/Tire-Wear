@@ -83,6 +83,7 @@ export const SECTIONS = [
     subTabs: [
       ["fleet", "Fleet"],
       ["analysis", "Analysis"],
+      ["catalog", "Tire catalog"],
       ["settings", "Settings"],
     ],
     Component: TiresSection,
