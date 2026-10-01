@@ -20,8 +20,9 @@ import { CAPS, capLabel, capNeeded, sayType, sayTypeTight } from "./retread.js";
 import { roleLabel, roleOf } from "./axleRole.js";
 import { suggestOffOdo, checkOffOdo, milesOff } from "./pullOdo.js";
 import { groupOf, groupBlurb, groupsPresent, firstGroup } from "./fleetGroup.js";
-import { labelOf, findModels, specFrom, sayMissing, isReady, checkModel, modelKey }
-  from "./tireModel.js";
+import { labelOf, findModels, specFrom, sayMissing, isReady, checkModel, modelKey,
+  shortLabels } from "./tireModel.js";
+import { lifeOf, costGroup, cheapestFirst, coverage, money } from "./tireCost.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -355,7 +356,7 @@ export default function TireWear({ who, tab, onBusy }) {
           />
         )}
         {tab === "analysis" && (
-          <Analysis {...{ tires, tireStats, settings, byNum }} />
+          <Analysis {...{ tires, tireStats, settings, byNum, models }} />
         )}
         {tab === "catalog" && (
           <Catalog {...{ models, tires, actions, busy }} />
@@ -2172,7 +2173,7 @@ function OdoDialog({ veh, lastOdo, busy, onClose, onSave }) {
 }
 
 /* ── Analysis ─────────────────────────────────────────────────── */
-function Analysis({ tires, tireStats, settings, byNum }) {
+function Analysis({ tires, tireStats, settings, byNum, models = [] }) {
   const [unit, setUnit] = useState("32nd");
   const conv = (v) => (v == null ? null : unit === "32nd" ? v : v / MILS_PER_32ND);
   const unitLabel = unit === "32nd" ? "miles per 32nd" : "miles per mil";
@@ -2195,6 +2196,34 @@ function Analysis({ tires, tireStats, settings, byNum }) {
   const chosen = fleets.some((g) => g.key === fleet) ? fleet : (fleets[0]?.key ?? fleet);
 
   const scored = rated.filter((x) => groupOf(byNum[x.t.veh]?.div) === chosen);
+
+  /* ── What it costs ──────────────────────────────────────────────
+     Built off every tire on this fleet, not only the ones with a wear
+     rate. Cost per 32nd needs no mileage, so a tire gauged once this
+     morning belongs in that comparison — and a tire already pulled is
+     the best cost data there is, because what it ran is settled
+     rather than projected. */
+  const [costUnit, setCostUnit] = useState("mile");   // mile | 32nd
+  const priced = tires
+    .map((t) => ({ t, s: tireStats[t.id] }))
+    .filter((x) => x.s && groupOf(byNum[x.t.veh]?.div) === chosen);
+  const cover = coverage(priced);
+
+  /* One line per tire, with the catalog's spelling where the catalog
+     knows it. Without this the 141 Continental HDC3s on this fleet
+     are five bars — HDC3, HDC 3, Hdc3, Conti HDC 3 — none of which
+     has enough behind it to mean anything. */
+  const names = useMemo(
+    () => shortLabels([...models, ...tires]),
+    [models, tires]);
+  const nameOf = (t) => names.get(modelKey(t))
+    || `${t.brand || "Unbranded"}${t.model ? " " + t.model : ""}`;
+
+  const costField = costUnit === "mile" ? "perMile" : "per32";
+  const costByModel = cheapestFirst(costGroup(priced, nameOf), costField);
+  const costByType = cheapestFirst(costGroup(priced, (t) => sayType(t.type, t.caps)), costField);
+  const costLabel = costUnit === "mile" ? "$ per mile" : "$ per 32nd of usable tread";
+  const sayMoney = (v) => money(v);
 
   /* The truck's axle list, which is what says whether a position is a
      pusher. Per truck, because the same wheel number is a different
@@ -2336,6 +2365,60 @@ function Analysis({ tires, tireStats, settings, byNum }) {
         <ChartCard title="By wheel position" note={unitLabel} data={byRole} />
       </div>
 
+      {/* ── What it costs ──────────────────────────────────────────
+          The charts above say which tire lasts longest. These say
+          which one is the better buy, which is not the same question
+          and is the one somebody is holding a quote for. Lower is
+          better here and higher is better up there, so both say so on
+          themselves rather than leaving it to be worked out. */}
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                    padding: "12px 16px" }}
+        className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900,
+            lineHeight: 1.1 }}>What it costs</div>
+          {/* A figure that does not say what it leaves out invites the
+              reader to assume it covers everything. */}
+          <div style={{ fontSize: 12.5, marginTop: 2,
+            color: cover.missing ? C.watch : C.muted }}>
+            {cover.say} · lower is better
+          </div>
+        </div>
+        <div className="flex" style={{ gap: 2 }}>
+          {[["mile", "$ / mile"], ["32nd", "$ / 32nd"]].map(([k, l]) => (
+            <button key={k} onClick={() => setCostUnit(k)}
+              style={{ fontFamily: FM, fontSize: 12.5, fontWeight: 600, padding: "7px 13px",
+                cursor: "pointer", border: `1px solid ${costUnit === k ? C.green700 : C.line}`,
+                background: costUnit === k ? C.green700 : "#fff",
+                color: costUnit === k ? "#fff" : C.muted,
+                borderRadius: k === "mile" ? "5px 0 0 5px" : "0 5px 5px 0" }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {cover.priced === 0 ? (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+                      padding: 22, fontSize: 13.5, color: C.muted, lineHeight: 1.6 }}>
+          None of the tires on this fleet has a price on it, so there is nothing to divide.
+          Put the price on a tire in <b>Tire catalog</b> and every tire mounted off that row
+          from then on carries it — or type it straight onto a tire in <i>Edit these
+          details</i>.
+        </div>
+      ) : (
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))" }}>
+          <ChartCard title="By tire" note={costLabel} axis={150}
+            data={costByModel.map((g) => ({ ...g, avg: g[costField] }))}
+            fmt={sayMoney}
+            foot={costUnit === "mile"
+              ? "Price over the miles the casing runs — what it has done plus, for one still on a truck, what today's wear rate says is left in it."
+              : "Price over the tread it is allowed to give: what it measured going on, down to the depth it has to come off at."} />
+          <ChartCard title="Retread vs. virgin" note={costLabel} axis={150}
+            data={costByType.map((g) => ({ ...g, avg: g[costField] }))}
+            fmt={sayMoney}
+            foot="The question the fleet is actually asking. A cap costs a fraction of a new casing, so it wins here on far less mileage than it needs to win on the charts above." />
+        </div>
+      )}
+
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
           <SectionLabel noMargin>Every tire with a rate</SectionLabel>
@@ -2344,12 +2427,14 @@ function Analysis({ tires, tireStats, settings, byNum }) {
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
             <thead><tr>
               {["Truck", "Pos", "Brand / model", "Type", "Tread", unit === "32nd" ? "mi / 32nd" : "mi / mil",
-                "Miles run", "Est. left"].map((h, i) => (
+                "Miles run", "Est. left", "$ / 32nd", "$ / mile"].map((h, i) => (
                 <th key={h} style={{ ...th, textAlign: i >= 4 ? "right" : "left" }}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {scored.sort((a, b) => b.s.miPer32 - a.s.miPer32).map(({ t, s }) => (
+              {scored.sort((a, b) => b.s.miPer32 - a.s.miPer32).map(({ t, s }) => {
+                const L = lifeOf(t, s);
+                return (
                 <tr key={t.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                   <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{t.veh}</td>
                   <td style={{ ...td, fontFamily: FM }}>{t.pos}</td>
@@ -2359,8 +2444,23 @@ function Analysis({ tires, tireStats, settings, byNum }) {
                   <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(conv(s.miPer32))}</td>
                   <td style={{ ...td, ...tdNum, color: C.muted }}>{nf(s.miles)}</td>
                   <td style={{ ...td, ...tdNum }}>{s.remain ? nf(s.remain) : "—"}</td>
+                  {/* Why, not a blank. A column that goes quiet on a
+                      tire reads as the app failing rather than as a
+                      price nobody has typed in yet, and the second is
+                      something somebody can go and fix. */}
+                  <td style={{ ...td, ...tdNum }} title={L.why || undefined}>
+                    {L.per32 == null
+                      ? <span style={{ color: C.muted, fontSize: 12 }}>{L.why || "—"}</span>
+                      : money(L.per32)}
+                  </td>
+                  <td style={{ ...td, ...tdNum, fontWeight: 600 }} title={L.why || undefined}>
+                    {L.perMile == null ? <span style={{ color: C.muted }}>—</span> : money(L.perMile)}
+                    {L.perMile != null && L.projected && (
+                      <span style={{ color: C.muted, fontWeight: 400, fontSize: 11 }}> est.</span>
+                    )}
+                  </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
@@ -2369,7 +2469,7 @@ function Analysis({ tires, tireStats, settings, byNum }) {
   );
 }
 
-function ChartCard({ title, note, data, wide, foot }) {
+function ChartCard({ title, note, data, wide, foot, fmt, axis = 112 }) {
   const palette = [C.green700, C.green600, C.yellow, "#4E9166", "#7A6A12", "#7FAE92"];
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: "14px 16px 8px" }}>
@@ -2392,13 +2492,19 @@ function ChartCard({ title, note, data, wide, foot }) {
             <CartesianGrid stroke={C.lineSoft} horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10.5, fill: C.muted, fontFamily: FM }}
               axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" width={112}
+            <YAxis type="category" dataKey="name" width={axis}
               tick={{ fontSize: 12, fill: C.ink, fontFamily: FB }} axisLine={false} tickLine={false} />
             <Tooltip cursor={{ fill: "#F1F5F9" }}
               contentStyle={{ fontFamily: FB, fontSize: 12, borderRadius: 6, border: `1px solid ${C.line}` }}
-              formatter={(v, n, p) => [`${nf(v)} mi  ·  ${p.payload.n} tire${p.payload.n > 1 ? "s" : ""}`, ""]} />
+              formatter={(v, n, p) => [
+                /* The money charts count what they could price, not
+                   what is on the fleet — a tooltip saying "18 tires"
+                   over a bar built from four is the kind of quiet
+                   wrong this page cannot afford. */
+                `${fmt ? fmt(v) : `${nf(v)} mi`}  ·  ${fmt ? p.payload.priced : p.payload.n} tire${
+                  (fmt ? p.payload.priced : p.payload.n) === 1 ? "" : "s"}`, ""]} />
             <Bar dataKey="avg" radius={[0, 3, 3, 0]} barSize={wide ? 18 : 20}
-              label={{ position: "right", formatter: (v) => nf(v),
+              label={{ position: "right", formatter: (v) => (fmt ? fmt(v) : nf(v)),
                 style: { fontFamily: FM, fontSize: 11, fill: C.muted } }}>
               {data.map((d, i) => <Cell key={i} fill={palette[i % palette.length]} />)}
             </Bar>
