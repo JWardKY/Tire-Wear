@@ -24,6 +24,10 @@ import { labelOf, findModels, specFrom, sayMissing, isReady, checkModel, modelKe
   shortLabels } from "./tireModel.js";
 import { lifeOf, costGroup, cheapestFirst, coverage, money } from "./tireCost.js";
 import { planPrice, sayPlan, idsFor, spendAfter, worthAsking } from "./priceFlow.js";
+/* Why a tire came off. Shared, because a tire displaced by a move
+   comes off for the same reasons as one pulled on its own. */
+import { reasonsFor, keepReason, sayReason, isFailure, DEFAULT_REASON }
+  from "./pullReason.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -1949,11 +1953,6 @@ function EditTire({ tire, brands, freePositions, busy, movedSinceMount, readings
   );
 }
 
-/* Why a tire came off. Shared, because a tire displaced by a move
-   comes off for the same reasons as one pulled on its own. */
-const PULL_REASONS = ["Worn out", "Road hazard", "Sidewall damage",
-  "Irregular wear", "Rotated off", "Casing sent to retread"];
-
 function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
                      positions = [], activeTireAt = {}, tireStats = {}, lastOdo,
                      onClose, onPull, onSaveDetails, onSaveNotes, onDeleteReading, onMove }) {
@@ -1979,7 +1978,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
     truckOdo: lastOdo, lastReadOdo: lastRead?.odo, mountOdo: tire.onOdo,
   }));
   const [offDate, setOffDate] = useState(todayISO());
-  const [reason, setReason] = useState("Worn out");
+  const [reason, setReason] = useState(DEFAULT_REASON);
   const offWhy = checkOffOdo(offOdo, { mountOdo: tire.onOdo, truckOdo: lastOdo });
   const offMiles = milesOff(offOdo, tire.onOdo);
 
@@ -1994,7 +1993,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
      and defaulting to a swap would quietly put a worn-out tire back on
      the truck. */
   const [moveMode, setMoveMode] = useState(REPLACE);
-  const [offReason, setOffReason] = useState(PULL_REASONS[0]);
+  const [offReason, setOffReason] = useState(DEFAULT_REASON);
   const wheels = destinations(positions, activeTireAt, tire.veh, tire.pos);
   const landingOn = wheels.find((w) => w.id === toPos) || null;
   const displaced = landingOn?.taken || null;
@@ -2168,10 +2167,15 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
                     onChange={() => setMoveMode(SWAP)} />
                   Goes on {tire.pos} — they trade places
                 </label>
+                {/* The reasons belong to the displaced tire, not the
+                    moving one: it is the tire already on that wheel
+                    which is coming off, and whether a retread can
+                    have failed is a question about that casing. */}
                 {moveMode === REPLACE && (
-                  <select value={offReason} onChange={(e) => setOffReason(e.target.value)}
+                  <select value={keepReason(offReason, displaced)}
+                    onChange={(e) => setOffReason(e.target.value)}
                     style={{ ...inp, width: "auto", padding: "5px 8px", fontSize: 12.5 }}>
-                    {PULL_REASONS.map((r) => <option key={r}>{r}</option>)}
+                    {reasonsFor(displaced).map((r) => <option key={r}>{r}</option>)}
                   </select>
                 )}
               </div>
@@ -2211,7 +2215,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
               onClick={() => onMove({
                 to: toPos, when: moveDate,
                 odo: moveOdo === "" ? null : Number(moveOdo),
-                other: displaced, mode: moveMode, reason: offReason,
+                other: displaced, mode: moveMode, reason: keepReason(offReason, displaced),
               })}>
               {!displaced ? "Move it"
                 : moveMode === SWAP ? "Swap them"
@@ -2232,11 +2236,21 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
               style={{ ...inp, fontFamily: FM,
                        borderColor: offWhy.stop ? C.pull : C.line }} /></Field>
             <Field label="Reason">
-              <select value={reason} onChange={(e) => setReason(e.target.value)} style={inp}>
-                {PULL_REASONS.map((r) => <option key={r}>{r}</option>)}
+              <select value={keepReason(reason, tire)}
+                onChange={(e) => setReason(e.target.value)} style={inp}>
+                {reasonsFor(tire).map((r) => <option key={r}>{r}</option>)}
               </select>
             </Field>
           </div>
+          {/* A tire that stopped rather than finished. Said here
+              because what it means for the figures is not obvious,
+              and because this is the only record there will be. */}
+          {isFailure(keepReason(reason, tire)) && (
+            <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
+                        margin: "8px 0 0", lineHeight: 1.5 }}>
+              {sayReason(keepReason(reason, tire), tire)}
+            </p>
+          )}
           {/* The miles this figure books to the casing, beside the box
               while it is being typed. Zero miles is the shape the bug
               took, and it is unmistakable written out. */}
@@ -2255,7 +2269,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
           <div className="flex justify-end mt-3" style={{ gap: 8 }}>
             <Btn tone="ghost" onClick={() => setPulling(false)}>Never mind</Btn>
             <Btn tone="danger" disabled={busy || offWhy.stop} onClick={() => onPull({
-              offDate, offOdo: Number(offOdo), offReason: reason })}>
+              offDate, offOdo: Number(offOdo), offReason: keepReason(reason, tire) })}>
               Pull tire
             </Btn>
           </div>

@@ -25,6 +25,7 @@ const SECTIONS = [
   ["orders", "Work orders"],
   ["tireedit", "Fixing a tire you keyed wrong"],
   ["move", "Moving a tire to another wheel"],
+  ["why", "Why a tire came off"],
   ["caps", "Retreads — times capped"],
   ["tread", "A reading that cannot be right"],
   ["duals", "Duals that do not match"],
@@ -450,6 +451,37 @@ export default function HelpSection() {
           was on the old one until today. Both are written down, and they read
           differently in the truck's history.
         </p>
+      </Block>
+
+      <Block id="why" title="Why a tire came off">
+        <p style={p}>
+          Every tire that comes off is asked for a reason, whether it is pulled on its
+          own or displaced by a move. Eight to pick from, and two of them are new:
+        </p>
+        <p style={p}>
+          <b>Tire blew</b> — it let go on the road. Not the same thing as worn out, and
+          worth its own word: a blowout is a tow, a lost load and sometimes a fender, and
+          none of that shows if it goes down as ordinary wear.
+        </p>
+        <p style={p}>
+          <b>Retread failure</b> — a cap came apart. <b>This one is only offered on a
+          retread</b>, because it cannot happen to a virgin casing. It is the single most
+          useful thing this app records: the case for running caps is money, the case
+          against is one coming apart, and if that goes in as <i>Road hazard</i> the
+          retread programme looks better than it is forever.
+        </p>
+        <p style={p}>
+          The other six are unchanged — <i>Worn out</i>, <i>Road hazard</i>, <i>Sidewall
+          damage</i>, <i>Irregular wear</i>, <i>Rotated off</i> and <i>Casing sent to
+          retread</i> — and it still opens on <i>Worn out</i>, which is the common one.
+        </p>
+        <Note>
+          A tire that blew, failed as a retread, hit something or tore a sidewall came off
+          early, so its miles stop where they stop. Its cost per mile on the Analysis page
+          will read dearer than a tire that wore out properly — which is the point. A
+          casing that only ever gets to half its tread cost twice as much a mile to run,
+          and that is a real cost worth seeing.
+        </Note>
       </Block>
 
       <Block id="caps" title="Retreads — how many times capped">
