@@ -1,26 +1,21 @@
-/* Driving time on a timecard.
+/* Driving time on a timecard — the clock.
    ─────────────────────────────────────────────────────────────────
-   A mechanic's day is not all spent in the shop. Trucks get shuttled
-   between Clays Ferry and Clover Bottom, somebody runs to the dealer
-   for a part, somebody drives out to a quarry for a road call. That
-   time was going on whatever job was nearest to hand, or nowhere at
-   all.
+   The first version of this asked for eight things before it would
+   take a trip: the unit, both ends, a cost code, the hours, a work
+   order, a note. Jason's answer was that it asks way too much — pick
+   the truck, start, stop — and he was right. The control it should
+   have been copying was already in the app: the equipment card has a
+   clock on it, so this has the same one.
 
-   The design is the thing worth protecting here: a driving line is an
-   ORDINARY time entry with "Driving" on it. The card total, the
-   approval, the payroll export and the supervisor's hours board all
-   already read time entries, so none of them has to learn about this
-   tab. A second kind of record would mean teaching every one of them,
-   and the first one somebody forgot would be hours that never reached
-   payroll.
-
-   Which is why the tests below care so much about the entry shape: it
-   has to be something addEntry already knows how to write.
+   What survived the rewrite is the part that matters underneath: a
+   driving line is an ORDINARY time entry with "Driving" on it, so the
+   card total, the approval, the payroll export and the hours board all
+   keep working without knowing this tab exists.
 
    Needs nothing: no database, no browser.
 */
 import { DRIVING, isDriving, drivingOnly, notDriving, drivenHours,
-  whyNotReady, ready, sayTrip, reverseOf, entryFrom, COMMON_PLACES }
+  hms, liveSeconds, quarters, suggestCode, whyNotReady, ready, entryFrom }
   from "../src/driveLine.js";
 
 let bad = 0;
@@ -29,22 +24,18 @@ const ok = (l, v, got) => {
   console.log(`  ${v ? "ok" : "!!"}  ${l}${!v && got !== undefined ? `\n        got: ${JSON.stringify(got)}` : ""}`);
 };
 
-const trip = (over = {}) => ({
-  date: "2026-10-02", vehId: "v1", unitLabel: "", from: "Clays Ferry Shop",
-  to: "Clover Bottom Shop", hours: "1.5", costCode: "880",
-  workOrder: "", note: "", ...over,
-});
+const CODES = [
+  { code: "880", name: "Transmission", codeGroup: "Vehicle" },
+  { code: "SHOP-CF", name: "Clays Ferry Shop", codeGroup: "Shop" },
+];
 
 console.log("what counts as driving:");
 ok("a line with Driving on it", isDriving({ workTypes: ["Driving"] }));
 ok("…however it is cased", isDriving({ workTypes: [" driving "] }));
-/* The row comes back from the database under its own name in some
-   places and the app's in others. */
 ok("read off a database row too", isDriving({ work_types: ["Driving"] }));
 ok("a line with other work on it as well",
   isDriving({ workTypes: ["PM service", "Driving"] }));
 ok("not a line without it", !isDriving({ workTypes: ["PM service"] }));
-ok("not an empty line", !isDriving({ workTypes: [] }) && !isDriving({}));
 ok("nothing at all does not crash", !isDriving(null));
 
 console.log("\npulling a day apart:");
@@ -52,102 +43,94 @@ const day = [
   { id: "a", hours: 3, workTypes: ["Repair"] },
   { id: "b", hours: 1.5, workTypes: ["Driving"] },
   { id: "c", hours: 2, workTypes: ["Driving", "Repair"] },
-  { id: "d", hours: 1, workTypes: [] },
 ];
-ok("the driving lines", drivingOnly(day).map((e) => e.id).join() === "b,c",
-  drivingOnly(day).map((e) => e.id));
-ok("…and everything else", notDriving(day).map((e) => e.id).join() === "a,d",
-  notDriving(day).map((e) => e.id));
+ok("the driving lines", drivingOnly(day).map((e) => e.id).join() === "b,c");
+ok("…and everything else", notDriving(day).map((e) => e.id).join() === "a");
 /* The two halves have to add back up to the day, or the tab and the
-   card total are telling the mechanic different things. */
+   card total tell the mechanic different things. */
 ok("and the two halves are the whole day",
   drivingOnly(day).length + notDriving(day).length === day.length);
 ok("driving hours add up", drivenHours(day) === 3.5, drivenHours(day));
-/* A line that was both driving and a repair counts its hours ONCE,
-   where the whole line sits. Splitting them would invent hours. */
+/* A line that was both driving and a repair counts its hours ONCE. */
 ok("…counting a mixed line once, not twice", drivenHours([day[2]]) === 2);
-ok("a day with no driving is nought hours", drivenHours([day[0]]) === 0);
 
-console.log("\nwhat a trip has to say before it can be saved:");
+console.log("\nthe clock:");
+ok("nothing run is nought", hms(0) === "0:00:00");
+ok("a minute", hms(60) === "0:01:00");
+ok("an hour and a half", hms(5400) === "1:30:00");
+ok("it does not go backwards", hms(-50) === "0:00:00");
+const T0 = Date.parse("2026-10-02T13:00:00Z");
+ok("a stopped clock is what it banked",
+  liveSeconds({ seconds: 900, runningAt: null }, T0) === 900);
+ok("a running one counts on from where it started",
+  liveSeconds({ seconds: 900, runningAt: "2026-10-02T12:50:00Z" }, T0) === 1500);
+/* A phone whose clock has drifted backwards must not eat banked time. */
+ok("a clock that reads backwards never subtracts",
+  liveSeconds({ seconds: 900, runningAt: "2026-10-02T13:10:00Z" }, T0) === 900);
+
+console.log("\nhours, the way payroll charges them:");
+ok("half an hour", quarters(1800) === 0.5);
+ok("an hour and a quarter", quarters(4500) === 1.25);
+ok("rounded to the nearest quarter", quarters(2000) === 0.5, quarters(2000));
+/* The one that matters: a trip that happened is never nought hours.
+   Ten minutes down the road is a quarter, and the database refuses a
+   row with nought hours on it anyway. */
+ok("a ten-minute shuttle is a quarter, not nothing", quarters(600) === 0.25, quarters(600));
+ok("…and so is two minutes", quarters(120) === 0.25, quarters(120));
+ok("but a clock never started is nought", quarters(0) === 0);
+ok("…and junk is nought", quarters(null) === 0 && quarters("x") === 0);
+
+console.log("\nthe cost code nobody is asked for:");
+/* What they have already charged today is the best guess by a
+   distance — a day is usually spent on one or two jobs. */
+ok("what was charged last today",
+  suggestCode(CODES, [{ costCode: "880" }]) === "880");
+ok("…the most recent of several",
+  suggestCode(CODES, [{ costCode: "SHOP-CF" }, { costCode: "880" }]) === "880");
+/* A truck shuttled with nothing else booked is shop time. */
+ok("a shop code when nothing has been charged yet",
+  suggestCode(CODES, []) === "SHOP-CF", suggestCode(CODES, []));
+ok("…and a code that no longer exists is skipped",
+  suggestCode(CODES, [{ costCode: "GONE" }]) === "SHOP-CF");
+ok("no codes at all does not crash", suggestCode([], []) === "");
+
+console.log("\nwhat stops a trip going on the card:");
+const trip = (over = {}) => ({ vehId: "v1", seconds: 1800, runningAt: null,
+  costCode: "880", now: T0, ...over });
 ok("a full one is ready", ready(trip()), whyNotReady(trip()));
-/* Both ends, always. "Drove 2 hours" cannot be checked against a
-   truck's miles, cannot be charged with any confidence, and means
-   nothing in a year. */
-ok("it needs a start", whyNotReady(trip({ from: "" })) === "Say where the trip started");
-ok("…and an end", whyNotReady(trip({ to: "" })) === "Say where it ended");
-ok("…and whitespace is not an answer", !ready(trip({ from: "   " })));
-ok("it needs a unit", /which unit/.test(whyNotReady(trip({ vehId: "" }))),
-  whyNotReady(trip({ vehId: "" })));
-/* Something not on the fleet still counts — a hired truck, somebody's
-   own pickup on a parts run. */
-ok("…though a typed one will do",
-  ready(trip({ vehId: "", unitLabel: "Company pickup" })));
-ok("it needs a cost code", /charge/i.test(whyNotReady(trip({ costCode: "" }))),
-  whyNotReady(trip({ costCode: "" })));
-ok("it needs hours", /hours/i.test(whyNotReady(trip({ hours: "" }))),
-  whyNotReady(trip({ hours: "" })));
-ok("nought hours is not a trip", !ready(trip({ hours: "0" })));
-ok("…nor a minus figure", !ready(trip({ hours: "-2" })));
-ok("…nor more than a day", !ready(trip({ hours: "25" })));
-ok("…nor something that is not a number", !ready(trip({ hours: "abc" })));
-ok("a quarter of an hour is fine", ready(trip({ hours: "0.25" })));
-
-console.log("\nthe trip in one line:");
-ok("both ends", sayTrip({ droveFrom: "Clays Ferry", droveTo: "Richmond" })
-  === "Clays Ferry → Richmond");
-ok("read off a database row too",
-  sayTrip({ drove_from: "Clays Ferry", drove_to: "Richmond" })
-  === "Clays Ferry → Richmond");
-ok("one end only still says something",
-  sayTrip({ droveFrom: "Clays Ferry" }) === "From Clays Ferry");
-ok("neither says nothing", sayTrip({}) === "");
-
-console.log("\nthe way back:");
-/* Somebody who drove a truck down and came back should not have to
-   type the same two places in the other order. */
-const back = reverseOf(trip());
-ok("the ends swap", back.from === "Clover Bottom Shop" && back.to === "Clays Ferry Shop",
-  [back.from, back.to]);
-ok("…and everything else is kept", back.vehId === "v1" && back.costCode === "880");
+/* Two things, and one of them is filled in for them. */
+ok("the truck comes first", whyNotReady(trip({ vehId: "" })) === "Pick the truck first");
+ok("then the clock", whyNotReady(trip({ seconds: 0 })) === "Start the clock");
+ok("a clock still running is not a finished trip",
+  /Stop the clock/.test(whyNotReady(trip({ runningAt: "2026-10-02T12:50:00Z" }))),
+  whyNotReady(trip({ runningAt: "2026-10-02T12:50:00Z" })));
+ok("and payroll needs somewhere to charge it",
+  /cost code/.test(whyNotReady(trip({ costCode: "" }))), whyNotReady(trip({ costCode: "" })));
 
 console.log("\nwhat gets written:");
-const e = entryFrom(trip(), "2026-10-02");
+const e = entryFrom({ vehId: "v1", seconds: 1800, runningAt: null, costCode: "880",
+  stoppedAt: T0, stints: [{ start: "a", stop: "b" }] }, "2026-10-02");
 ok("Driving is on it", e.workTypes.includes(DRIVING), e.workTypes);
-/* The whole design in one assertion: this is a time entry, the same
-   shape addEntry already writes, so the card total, the approval and
-   payroll need to know nothing about driving. */
+/* The whole design in one assertion: an ordinary time entry, the same
+   shape addEntry already writes. */
 ok("it is an ordinary time entry",
-  e.hours === 1.5 && e.costCode === "880" && e.date === "2026-10-02", e);
-/* Its own kind of time, not "road". Road already means an outside
-   service call everywhere this fleet reads it — the Now board, the
-   hours split, the payroll export — so filing driving under it would
-   have quietly inflated every one of those with shuttle runs. */
+  e.hours === 0.5 && e.costCode === "880" && e.date === "2026-10-02", e);
 ok("…booked as driving, not as a road call", e.where === "driving", e.where);
 ok("…and specifically not as a road call", e.where !== "road");
-ok("the trip is on it", e.droveFrom === "Clays Ferry Shop" && e.droveTo === "Clover Bottom Shop", e);
-ok("the unit is on it", e.vehId === "v1" && !e.unitLabel, e);
-ok("a typed unit goes to the label instead",
-  entryFrom(trip({ vehId: "", unitLabel: " Company pickup " })).unitLabel === "Company pickup");
+ok("the truck is on it", e.vehId === "v1" && !e.unitLabel, e);
+ok("the seconds behind the hours are kept",
+  e.unitSeconds === 1800, e.unitSeconds);
+/* So a supervisor can see the clock was really run rather than a
+   figure typed in. */
+ok("…and so are the stints", e.stints.length === 1, e.stints);
 /* A mechanic who drove a truck to the quarry AND fixed it there has
-   one line with both kinds of work on it, and the hours count once. */
+   one line with both, and the hours count once. */
 ok("driving joins other work rather than replacing it",
-  entryFrom(trip({ workTypes: ["Repair"] })).workTypes.join() === "Repair,Driving",
-  entryFrom(trip({ workTypes: ["Repair"] })).workTypes);
+  entryFrom({ vehId: "v1", seconds: 900, costCode: "880", workTypes: ["Repair"],
+    stoppedAt: T0 }).workTypes.join() === "Repair,Driving");
 ok("…and is not put on twice",
-  entryFrom(trip({ workTypes: ["Driving"] })).workTypes.join() === "Driving",
-  entryFrom(trip({ workTypes: ["Driving"] })).workTypes);
-ok("…however it was cased the first time",
-  entryFrom(trip({ workTypes: ["driving"] })).workTypes.join() === "Driving",
-  entryFrom(trip({ workTypes: ["driving"] })).workTypes);
-ok("an empty work order is nothing, not an empty string",
-  entryFrom(trip()).workOrder === null, entryFrom(trip()).workOrder);
-
-console.log("\nthe places offered:");
-ok("the two shops are there",
-  COMMON_PLACES.includes("Clays Ferry Shop") && COMMON_PLACES.includes("Clover Bottom Shop"),
-  COMMON_PLACES);
-ok("they are a starting point, not a list to choose from",
-  ready(trip({ from: "Somebody's quarry", to: "A dealer in Lexington" })));
+  entryFrom({ vehId: "v1", seconds: 900, costCode: "880", workTypes: ["driving"],
+    stoppedAt: T0 }).workTypes.join() === "Driving");
 
 console.log(bad ? `\n${bad} failed` : "\nall good");
 process.exit(bad ? 1 : 0);

@@ -2,16 +2,19 @@
    ─────────────────────────────────────────────────────────────────
    scripts/test-driveline.mjs holds the rules. This holds the part
    only a browser can answer: that the tab is there behind the PIN
-   with the rest of somebody's own hours, that a trip cannot be saved
-   half-written, and — the point of the whole design — that what
-   reaches the database is an ORDINARY time entry.
+   with the rest of somebody's own hours, that the clock does not run
+   until a truck is picked, that stopping it puts the trip on the card
+   without anybody pressing Save — and, the point of the whole design,
+   that what reaches the database is an ORDINARY time entry.
 
    That last one is why this test exists at all. If driving were ever
    written as its own kind of record, the card total, the approval and
    the payroll export would each have to learn about it, and the first
-   one somebody forgot would be hours that never reached payroll. So
-   the assertion to break is the one about the insert landing in
-   tw_time_entries with hours and a cost code on it.
+   one somebody forgot would be hours that never reached payroll.
+
+   The first version of this screen asked for eight things before it
+   would take a trip. It asked way too much, and the test it needed was
+   this one: pick the truck, press Start, press Stop, and nothing else.
 
    Run the built app first:
      VITE_SUPABASE_URL=https://example.supabase.co \
@@ -33,11 +36,18 @@ const rows = {
   tw_vehicles: [{ id: "v1", number: "DT-898", make: "Peterbilt", model: "567",
     model_year: "2023", division: "DT", axle_config: "dump12", motive_vehicle_id: null,
     motive_asset_id: null, active: true, notes: null,
+    created_at: "2026-01-01", updated_at: "2026-01-01" },
+    /* A second truck, so starting on the wrong one can be put right. */
+    { id: "v2", number: "DT-889", make: "Kenworth", model: "T880",
+    model_year: "2022", division: "DT", axle_config: "dump12", motive_vehicle_id: null,
+    motive_asset_id: null, active: true, notes: null,
     created_at: "2026-01-01", updated_at: "2026-01-01" }],
   tw_mechanics: [{ id: MECH.id, name: MECH.name, email: MECH.email,
     active: true, pin_set: true }],
-  tw_cost_codes: [{ code: "880", name: "Repair", active: true,
-    group: "Labour", code_group: "Labour" }],
+  tw_cost_codes: [
+    { code: "880", name: "Repair", active: true, group: "Labour", code_group: "Labour" },
+    { code: "SHOP-CF", name: "Clays Ferry Shop", active: true, group: "Shop", code_group: "Shop" },
+  ],
   tw_parts: [], tw_parts_reorder: [],
   tw_shifts: [], tw_shift_days: [], tw_on_clock: [], tw_timecard_days: [],
   /* A shop line already on the card. The Driving tab has to leave it
@@ -47,7 +57,7 @@ const rows = {
     vehicle_id: "v1", unit_label: null, where_worked: "shop", hours: 3,
     cost_code: "880", work_order: null, note: "Gearbox out", defect_id: null,
     work_types: ["Repair"], unit_seconds: 0, stints: [], work_performed: null,
-    job_location: null, pm_program_id: null, drove_from: null, drove_to: null,
+    job_location: null, pm_program_id: null,
     created_at: "2026-10-02", updated_at: "2026-10-02" }],
   tw_hours: [], tw_pm_programs: [],
   tw_work_log: [], tw_timecard_approvals: [], tw_defects: [], tw_work_orders: [],
@@ -105,7 +115,6 @@ await ctx.route("**/rest/v1/tw_hours*", async (route) => {
     work_types: t.work_types, unit_seconds: t.unit_seconds, stints: t.stints,
     work_performed: t.work_performed, created_at: t.created_at,
     job_location: t.job_location,
-    drove_from: t.drove_from, drove_to: t.drove_to,
   }));
   return route.fallback();
 });
@@ -131,116 +140,141 @@ await page.waitForTimeout(1200);
 
 let t = await page.locator("body").innerText();
 ok("it opens", /hours driving/i.test(t), t.slice(0, 300));
-ok("…and says what it is for when there is nothing on it",
-  /Shuttling a truck, a parts run/i.test(t), t.slice(0, 400));
+ok("no rejected reads", rest400.length === 0, rest400.join("\n    "));
 /* Three hours of shop work are already on this card. This tab is
-   about driving, so none of it belongs here — and the hours at the
-   top are the driving hours, not the day's. */
+   about driving, so none of it belongs here. */
 ok("the shop line already on the card is not on this tab",
   !/Gearbox out/.test(t), t.slice(0, 600));
 ok("…and its hours are not counted as driving", /0\.00 hours driving/i.test(t),
   (t.match(/[^\n]*hours driving[^\n]*/i) || [""])[0]);
-ok("no rejected reads", rest400.length === 0, rest400.join("\n    "));
 
-console.log("\n── a trip cannot be saved half-written ──");
-const add = page.getByRole("button", { name: /ADD IT TO THE CARD/i }).first();
-ok("the button is there", (await add.count()) > 0);
-ok("…and will not go yet", await add.isDisabled());
-t = await page.locator("body").innerText();
-/* Each gap says what is missing rather than leaving a dead button. */
-ok("it says which unit is wanted first", /Say which unit was driven/i.test(t), t.slice(0, 500));
+console.log("\n── the whole of it: a truck and a button ──");
+/* What this screen was asked for. Anything beyond these two is the
+   thing that made the last version wrong. */
+const inputs = await page.locator("select:visible, input:visible, textarea:visible").count();
+ok("one control to pick the truck, and nothing else to fill in",
+  inputs === 1, `${inputs} inputs on the screen`);
+/* Typed, not chosen from a list. A dropdown of 276 units is a
+   spinning wheel on a phone with no way to jump to one, which is why
+   the equipment card has this control and why driving uses the same
+   one. */
+const unit = page.getByLabel("Equipment").first();
+ok("the truck is typed in, the way it is on the equipment card",
+  (await unit.evaluate((el) => el.tagName)) === "INPUT",
+  await unit.evaluate((el) => el.tagName));
+const go = page.getByRole("button", { name: /^START$|^STOP$/ }).first();
+ok("there is a Start button", (await go.count()) > 0);
+/* Hours cannot be booked against nothing — the database will not take
+   a row with no unit on it. */
+ok("…which will not go until a truck is picked", await go.isDisabled());
+ok("and it says so", /Pick the truck, then press Start/i.test(t), t.slice(0, 600));
+ok("the clock reads nothing yet", /0:00:00/.test(t), t.slice(0, 600));
 
-await page.getByLabel(/Which unit/i).first().selectOption("v1");
-await page.waitForTimeout(300);
+console.log("\n── start ──");
+await unit.click();
+await unit.fill("898");
+await page.waitForTimeout(500);
 t = await page.locator("body").innerText();
-ok("…then where it started", /Say where the trip started/i.test(t), t.slice(0, 500));
-await page.getByLabel(/^From/i).first().fill("Clays Ferry Shop");
-await page.waitForTimeout(250);
+ok("typing part of the number finds the truck", /DT-898/.test(t), t.slice(0, 600));
+await unit.press("Enter");
+await page.waitForTimeout(500);
+ok("picking a truck arms it", !(await go.isDisabled()));
+await go.click();
+await page.waitForTimeout(2600);
 t = await page.locator("body").innerText();
-ok("…then where it ended", /Say where it ended/i.test(t), t.slice(0, 500));
-await page.getByLabel(/^To/i).first().fill("Clover Bottom Shop");
-await page.waitForTimeout(250);
-t = await page.locator("body").innerText();
-/* Driving a truck to a quarry is chargeable to that quarry; driving
-   one to the dealer is shop overhead. The app does not guess. */
-ok("…then what to charge it to", /Choose what to charge the driving to/i.test(t), t.slice(0, 500));
-await page.getByLabel(/Charge it to/i).first().selectOption("880");
-await page.waitForTimeout(250);
-t = await page.locator("body").innerText();
-ok("…and last the hours", /Put the hours on it/i.test(t), t.slice(0, 500));
-ok("still not saveable", await add.isDisabled());
-
-const hrs = page.getByLabel(/^Hours/i).first();
-await hrs.click();
-await page.keyboard.type("1.5");
+ok("the clock is running", /the clock is running/i.test(t),
+  (t.match(/[^\n]*clock is running[^\n]*/i) || [""])[0]);
+ok("…against the truck picked", /DT-898/.test(t), t.slice(0, 500));
+ok("…and it is counting", /0:00:0[1-9]/.test(t), (t.match(/\d:\d\d:\d\d/) || [""])[0]);
+ok("the button now says Stop",
+  /STOP/.test(await page.getByRole("button", { name: /^START$|^STOP$/ }).first().innerText()));
+/* Started on the wrong truck. Putting it right must not cost the
+   minutes already driven — the equipment card lets the unit be
+   changed under a running clock and so does this. */
+ok("the truck can still be corrected under a running clock",
+  !(await page.getByLabel("Equipment").first().isDisabled()));
+const ran = (await page.locator("body").innerText()).match(/\d:\d\d:\d\d/)?.[0];
+await page.getByLabel("Equipment").first().fill("889");
 await page.waitForTimeout(400);
-ok("with everything on it, it can be saved", !(await add.isDisabled()));
+await page.getByLabel("Equipment").first().press("Enter");
+await page.waitForTimeout(700);
+t = await page.locator("body").innerText();
+ok("…and the trip follows the truck that was really driven",
+  /DT-889/.test(t), t.slice(0, 600));
+ok("…without the clock being reset", /0:00:0[1-9]|0:00:1\d/.test(t),
+  [ran, (t.match(/\d:\d\d:\d\d/) || [])[0]].join(" → "));
+/* Back to the one this test books against. */
+await page.getByLabel("Equipment").first().fill("898");
+await page.waitForTimeout(400);
+await page.getByLabel("Equipment").first().press("Enter");
+await page.waitForTimeout(500);
+/* Nothing is written until the clock stops. */
+ok("nothing is on the card yet",
+  writes.filter((w) => w.table === "tw_time_entries" && w.method === "POST").length === 0,
+  JSON.stringify(writes.map((w) => w.method + " " + w.table)));
 
-console.log("\n── what reaches the database ──");
-await add.click();
-await page.waitForTimeout(1400);
+console.log("\n── stop ──");
+await page.getByRole("button", { name: /^STOP$/ }).first().click();
+await page.waitForTimeout(1600);
 
 const posted = writes.filter((w) => w.table === "tw_time_entries" && w.method === "POST");
-ok("it is written", posted.length === 1, JSON.stringify(writes.map((w) => w.table)));
+/* Stopping is the save. A trip nobody saved is a trip that did not
+   get paid. */
+ok("stopping puts it on the card with no Save to press", posted.length === 1,
+  JSON.stringify(writes.map((w) => w.method + " " + w.table)));
 const body = Array.isArray(posted[0]?.body) ? posted[0].body[0] : posted[0]?.body;
 /* The whole design: an ordinary time entry. Everything downstream —
    the card total, the approval, payroll — reads these already. */
 ok("as an ordinary time entry, not a new kind of record",
-  Number(body?.hours) === 1.5 && body?.cost_code === "880"
-  && body?.mechanic_id === "m1", JSON.stringify(body));
+  body?.mechanic_id === "m1" && Number(body?.hours) > 0, JSON.stringify(body));
 ok("…marked as driving", (body?.work_types || []).includes("Driving"),
   JSON.stringify(body?.work_types));
 ok("…against the truck that was driven", body?.vehicle_id === "v1", JSON.stringify(body));
-ok("…carrying both ends of the trip",
-  body?.drove_from === "Clays Ferry Shop" && body?.drove_to === "Clover Bottom Shop",
-  JSON.stringify(body));
-/* Not "road": that already means an outside service call on the Now
-   board, the hours split and the payroll export. */
-ok("…and booked as driving, not as a road call",
+ok("…booked as driving, not as a road call",
   body?.where_worked === "driving", body?.where_worked);
+/* A three-second shuttle is still a quarter hour: payroll charges in
+   quarters and the database refuses a row with nought hours. */
+ok("…for a quarter of an hour, the smallest payroll charges",
+  Number(body?.hours) === 0.25, body?.hours);
+/* So a supervisor can see a clock was really run rather than a figure
+   typed in afterwards. */
+ok("…with the seconds actually run kept behind it",
+  Number(body?.unit_seconds) > 0, body?.unit_seconds);
+ok("…and the stint that produced them", (body?.stints || []).length === 1,
+  JSON.stringify(body?.stints));
+/* Nobody was asked for this. It is the one thing payroll cannot do
+   without, so it is guessed from what they have already charged. */
+ok("the cost code was filled in rather than asked for",
+  body?.cost_code === "880", body?.cost_code);
 
-console.log("\n── and it shows up ──");
+console.log("\n── and after ──");
 t = await page.locator("body").innerText();
-ok("the trip is on the list", /Clays Ferry Shop → Clover Bottom Shop/.test(t), t.slice(0, 600));
-ok("…with its hours", /1\.50/.test(t), t.slice(0, 600));
-ok("…and counted at the top", /1\.50 hours driving/i.test(t),
+ok("the trip is on the list", /DT-898/.test(t), t.slice(0, 700));
+ok("…and counted at the top", /0\.25 hours driving/i.test(t),
   (t.match(/[^\n]*hours driving[^\n]*/i) || [""])[0]);
+ok("the clock is back to nothing", /0:00:00/.test(t), t.slice(0, 700));
+/* The next thing a mechanic does is usually drive it back. */
+ok("…but the truck stays picked", /DT-898/.test(t), t.slice(0, 700));
 
-console.log("\n── the way back ──");
-/* Saving does not wipe the form. Somebody who drove a truck down is
-   usually about to log the trip back, and should not retype the unit,
-   both ends and the cost code to do it. */
-ok("the trip is still in the form after saving",
-  (await page.getByLabel(/^From/i).first().inputValue()) === "Clays Ferry Shop",
-  await page.getByLabel(/^From/i).first().inputValue());
-ok("…but its hours are cleared, so nothing is booked twice",
-  (await page.getByLabel(/^Hours/i).first().inputValue()) === "",
-  await page.getByLabel(/^Hours/i).first().inputValue());
-/* Hours typed but not yet saved, so turning the trip round has
-   something to drop. The way back took as long as it took. */
-await page.getByLabel(/^Hours/i).first().click();
-await page.keyboard.type("2");
-await page.waitForTimeout(300);
-await page.getByRole("button", { name: /Turn it round/i }).first().click();
-await page.waitForTimeout(400);
-ok("the ends swap over",
-  (await page.getByLabel(/^From/i).first().inputValue()) === "Clover Bottom Shop"
-  && (await page.getByLabel(/^To/i).first().inputValue()) === "Clays Ferry Shop",
-  [await page.getByLabel(/^From/i).first().inputValue(),
-   await page.getByLabel(/^To/i).first().inputValue()].join(" / "));
-/* The hours do not come with it: the way back took as long as it took. */
-ok("…without carrying the hours over",
-  (await page.getByLabel(/^Hours/i).first().inputValue()) === "",
-  await page.getByLabel(/^Hours/i).first().inputValue());
+console.log("\n── changing where it charges ──");
+/* Asked for after the fact, on the finished line, rather than put in
+   front of a clock. */
+const codeBox = page.locator("tbody select").first();
+ok("the cost code can be changed on the line", (await codeBox.count()) > 0);
+await codeBox.selectOption("SHOP-CF");
+await page.waitForTimeout(1400);
+const patched = writes.filter((w) => w.table === "tw_time_entries" && w.method === "PATCH");
+ok("…and it saves", patched.some((w) => w.body?.cost_code === "SHOP-CF"),
+  JSON.stringify(patched.map((w) => w.body?.cost_code)));
 
 /* The hours are on the card, not in a corner of their own: this is
    the whole reason a driving line is an ordinary time entry. */
 await page.getByRole("button", { name: "Today", exact: true }).first().click();
 await page.waitForTimeout(1600);
 t = await page.locator("body").innerText();
-ok("the driving hours are on the timecard itself", /4\.5/.test(t),
+ok("the driving hours are on the timecard itself", /3\.25/.test(t),
   (t.match(/[^\n]*hours on[^\n]*/i) || [""])[0]);
-ok("…added to the shop hours that were already there, not instead of them",
+ok("…added to the shop hours already there, not instead of them",
   /Gearbox out/.test(t), t.slice(0, 900));
 
 ok("nothing threw", crashes.length === 0, crashes.join(" | "));
