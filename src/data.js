@@ -45,6 +45,7 @@ const toTire = (r, vehNumById) => ({
   caps: r.retread_count == null ? null : Number(r.retread_count),
   wheel: r.wheel_material || "",
   casing: r.casing_id || "",
+  modelId: r.model_id || null,
   newDepth: r.mounted_depth == null ? null : Number(r.mounted_depth),
   onDate: r.mounted_date,
   onOdo: r.mounted_odometer,
@@ -480,4 +481,25 @@ export async function updateModel(id, m) {
 export async function retireModel(id, active) {
   check(await supabase.from("tw_tire_models")
     .update({ active, updated_at: new Date().toISOString() }).eq("id", id));
+}
+
+/* Putting a catalog price onto the tires that row is already fitted
+   to. The caller has worked out which ids those are and has had it
+   confirmed — see src/priceFlow.js for the rules, and note that only
+   tires still on a truck ever reach this.
+
+   Written in chunks because this is the one write in the app that
+   can carry a hundred and forty ids, and a URL with all of them in
+   an in() list is long enough to be refused by something between
+   here and Postgres. */
+export async function setTirePrices(ids, cost, modelId = null) {
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) return 0;
+  const patch = { cost: Number(cost) };
+  if (modelId) patch.model_id = modelId;   /* file them under the row while we are here */
+  for (let i = 0; i < list.length; i += 50) {
+    check(await supabase.from("tw_tires").update(patch)
+      .in("id", list.slice(i, i + 50)));
+  }
+  return list.length;
 }

@@ -23,6 +23,7 @@ import { groupOf, groupBlurb, groupsPresent, firstGroup } from "./fleetGroup.js"
 import { labelOf, findModels, specFrom, sayMissing, isReady, checkModel, modelKey,
   shortLabels } from "./tireModel.js";
 import { lifeOf, costGroup, cheapestFirst, coverage, money } from "./tireCost.js";
+import { planPrice, sayPlan, idsFor, spendAfter, worthAsking } from "./priceFlow.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -217,6 +218,7 @@ export default function TireWear({ who, tab, onBusy }) {
     addModel: (m) => runRaw(() => db.addModel(m)),
     updateModel: (id, m) => runRaw(() => db.updateModel(id, m)),
     retireModel: (id, active) => run(() => db.retireModel(id, active)),
+    setTirePrices: (ids, cost, modelId) => run(() => db.setTirePrices(ids, cost, modelId)),
     eraseAll: () => run(() => db.eraseAll()),
   }), [run, runRaw, who]);
 
@@ -1134,12 +1136,36 @@ function Catalog({ models, tires, actions, busy }) {
 
   const todo = models.filter((m) => m.active && !isReady(m)).length;
 
+  /* How many tires each row could put its price onto right now. Worked
+     out per row so the button can say the number rather than opening a
+     dialog to admit there is nothing to do. */
+  const plans = useMemo(() => {
+    const m = new Map();
+    models.forEach((mo) => m.set(mo.id, planPrice(mo, tires, mo.cost)));
+    return m;
+  }, [models, tires]);
+
+  /* A price changed here is only half the job. The other half is the
+     tires that row is already fitted to, which is where the money
+     actually is — see src/priceFlow.js. */
+  const [flow, setFlow] = useState(null);
+  const offerToFit = (m, before, after) => {
+    const was = before == null || before === "" ? null : Number(before);
+    const now = after == null || after === "" ? null : Number(after);
+    if (now == null || was === now) return;
+    const plan = planPrice(m, tires, now);
+    if (worthAsking(plan)) setFlow({ model: m, plan });
+  };
+
   const save = async (m, patch) => {
     setErr("");
     const next = { ...m, ...patch };
     const why = checkModel(next, models);
     if (why) { setErr(why); return; }
-    try { await actions.updateModel(m.id, next); }
+    try {
+      await actions.updateModel(m.id, next);
+      if ("cost" in patch) offerToFit(next, m.cost, next.cost);
+    }
     catch (e) { setErr(e.message || String(e)); }
   };
 
@@ -1185,7 +1211,9 @@ function Catalog({ models, tires, actions, busy }) {
             <tbody>
               {shown.map((m) => (
                 <CatalogRow key={m.id} m={m} used={used[modelKey(m)] || 0} busy={busy}
+                  plan={plans.get(m.id)}
                   onSave={(patch) => save(m, patch)}
+                  onPrice={() => setFlow({ model: m, plan: plans.get(m.id) })}
                   onEdit={() => setEditing(m)}
                   onRetire={() => actions.retireModel(m.id, !m.active)} />
               ))}
@@ -1205,6 +1233,17 @@ function Catalog({ models, tires, actions, busy }) {
         </div>
       </div>
 
+      {flow && (
+        <FitPriceDialog {...flow} busy={busy}
+          onClose={() => setFlow(null)}
+          onFit={async (ids) => {
+            setErr("");
+            try { await actions.setTirePrices(ids, flow.plan.cost, flow.model.id); }
+            catch (e) { setErr(e.message || String(e)); }
+            setFlow(null);
+          }} />
+      )}
+
       {(adding || editing) && (
         <ModelDialog m={editing} models={models} busy={busy}
           onClose={() => { setAdding(false); setEditing(null); }}
@@ -1215,7 +1254,12 @@ function Catalog({ models, tires, actions, busy }) {
             try {
               if (editing) await actions.updateModel(editing.id, next);
               else await actions.addModel(next);
+              const was = editing ? editing.cost : null;
               setAdding(false); setEditing(null);
+              /* Only an edit: a brand new row cannot be fitted to
+                 anything yet by its id, but it can match tires by
+                 name, so the same offer is worth making. */
+              offerToFit({ ...next, id: editing ? editing.id : null }, was, next.cost);
               return "";
             } catch (e) { return e.message || String(e); }
           }} />
@@ -1227,7 +1271,7 @@ function Catalog({ models, tires, actions, busy }) {
 /* One row, with the two numbers editable where they sit. Typed freely
    and settled on the way out — the same rule the parts quantity box
    had to learn: nothing rewrites a box while somebody is typing in it. */
-function CatalogRow({ m, used, busy, onSave, onEdit, onRetire }) {
+function CatalogRow({ m, used, busy, plan, onSave, onPrice, onEdit, onRetire }) {
   const [depth, setDepth] = useState(m.newDepth == null ? "" : String(m.newDepth));
   const [cost, setCost] = useState(m.cost == null ? "" : String(m.cost));
 
@@ -1266,6 +1310,20 @@ function CatalogRow({ m, used, busy, onSave, onEdit, onRetire }) {
       </td>
       <td style={{ ...td, ...tdNum, color: C.muted }}>{used || "—"}</td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+        {/* The price typed here is only worth anything once it is on
+            the tires. Said as the number of tires rather than as
+            "apply", because that is the thing somebody is deciding. */}
+        {worthAsking(plan) && (
+          <>
+            <button onClick={onPrice} disabled={busy}
+              style={{ ...linkBtn, fontSize: 12.5, fontWeight: 700, color: C.green700 }}
+              title={`Put ${money(m.cost)} on the ${plan.total} fitted ${
+                plan.total === 1 ? "tire that needs it" : "tires that need it"}`}>
+              Price {plan.total} fitted
+            </button>
+            {" · "}
+          </>
+        )}
         <button onClick={onEdit} style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
         {" · "}
         <button onClick={onRetire}
@@ -1274,6 +1332,69 @@ function CatalogRow({ m, used, busy, onSave, onEdit, onRetire }) {
         </button>
       </td>
     </tr>
+  );
+}
+
+/* ── Putting a price on the tires already fitted ──────────────────
+   One click here writes to as many rows as the row is fitted to, so
+   it says the count and the money before the button rather than
+   after. The tires that already say something different are a
+   separate tick: a figure somebody typed off an invoice at the wheel
+   is better information than a list price, and overwriting it is a
+   decision rather than a side effect. */
+function FitPriceDialog({ model, plan, busy, onClose, onFit }) {
+  const [alsoChange, setAlsoChange] = useState(false);
+  const ids = idsFor(plan, alsoChange);
+  const spend = spendAfter(plan, alsoChange);
+
+  return (
+    <Modal title="Put this price on the tires already fitted?"
+      sub={`${labelOf(model)} · ${money(plan.cost)}`} onClose={onClose}>
+      <p style={{ fontSize: 14, color: C.ink, marginTop: 0, lineHeight: 1.6 }}>
+        {sayPlan(plan, money)}
+      </p>
+
+      {plan.differs.length > 0 && (
+        <label className="flex items-start" style={{ gap: 9, cursor: "pointer",
+          background: "#FFF8E1", border: `1px solid ${C.watch}44`, borderRadius: 6,
+          padding: "10px 12px", marginTop: 4 }}>
+          <input type="checkbox" checked={alsoChange} style={{ marginTop: 2 }}
+            onChange={(e) => setAlsoChange(e.target.checked)} />
+          <span style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>
+            Change the {plan.differs.length} that already say something else
+            <span style={{ display: "block", color: C.muted, fontSize: 12, marginTop: 2 }}>
+              {plan.differs.slice(0, 4).map((t) =>
+                `${t.veh} ${t.pos} ${money(t.cost)}`).join(" · ")}
+              {plan.differs.length > 4 ? ` · and ${plan.differs.length - 4} more` : ""}
+            </span>
+          </span>
+        </label>
+      )}
+
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "12px 0 0", lineHeight: 1.6 }}>
+        The price only — the tread depth on a tire is not touched. What a tire measured
+        going on was read off that wheel by somebody holding a gauge, and the catalog's
+        depth is what a new one has, which is a different number.
+        <br />
+        Only tires still on a truck, too. A tire that has come off keeps what it cost —
+        that figure is part of what the fleet has already spent, and the cost per mile
+        on it is settled.
+      </p>
+
+      <div className="flex justify-between items-center mt-4" style={{ gap: 8 }}>
+        <span style={{ fontFamily: FM, fontSize: 12.5, color: C.muted }}>
+          {ids.length
+            ? `${ids.length} tire${ids.length === 1 ? "" : "s"} · ${money(spend)} of rubber`
+            : "Nothing selected"}
+        </span>
+        <div className="flex" style={{ gap: 8 }}>
+          <Btn tone="ghost" onClick={onClose}>NOT NOW</Btn>
+          <Btn disabled={busy || !ids.length} onClick={() => onFit(ids)}>
+            PUT IT ON {ids.length}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
