@@ -41,6 +41,7 @@ export const SECTIONS = [
     blurb: "Your own hours for the day — behind a PIN, because these are pay records",
     subTabs: [
       ["today", "Today"],
+      ["driving", "Driving"],
       ["myjobs", "My jobs"],
       ["history", "My history"],
       ["pin", "My PIN"],

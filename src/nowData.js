@@ -457,7 +457,8 @@ export function accountedFor(clockHours, entries) {
   const diff = r2(total - booked);
 
   const kindOf = (e) =>
-    e.where === "road" ? "call" : e.where === "plant" ? "idle" : "shop";
+    e.where === "road" ? "call" : e.where === "driving" ? "driving"
+      : e.where === "plant" ? "idle" : "shop";
 
   const scale = Math.max(total, booked) || 1;
   const segments = entries

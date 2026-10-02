@@ -18,6 +18,7 @@ const SECTIONS = [
   ["start", "Getting in"],
   ["unit", "Finding a truck"],
   ["day", "A normal day"],
+  ["driving", "Driving time"],
   ["approval", "Getting approved"],
   ["clocks", "The two clocks"],
   ["missed", "Forgot to punch"],
@@ -180,6 +181,44 @@ export default function HelpSection() {
           Until you press <B>Save timecard</B>, everything on that form is only on your
           phone. It survives the phone going to sleep, but it is not in the system and
           nobody else can see it. Save before you leave.
+        </Note>
+      </Block>
+
+      <Block id="driving" title="Driving time — the Driving tab">
+        <p style={p}>
+          Not all of a day is spent in the shop. Shuttling a truck between Clays Ferry and
+          Clover Bottom, running to the dealer for a part, driving out to a breakdown —
+          that time goes on <B>Timecard → Driving</B>, and it is behind your PIN like the
+          rest of your hours.
+        </p>
+        <p style={p}>
+          A trip wants four things: <b>which unit</b> you drove, <b>where it started</b>,
+          <b> where it ended</b>, and <b>what to charge it to</b>. Then the hours. The
+          button stays grey until all of them are on it and tells you which one it is
+          waiting for.
+        </p>
+        <p style={p}>
+          <b>Both ends, always.</b> "Drove two hours" cannot be checked against a truck's
+          miles, cannot be charged to the right job with any confidence, and means nothing
+          to anybody in a year. Both ends and it is a trip somebody can follow. The two
+          shops are offered as you type, but anything can be typed — a quarry, a dealer, a
+          customer's yard.
+        </p>
+        <p style={p}>
+          Driving a truck to a job is chargeable to <b>that job</b>. Driving one to the
+          dealer is shop overhead. The app does not guess which, so pick the cost code the
+          same way you would for any other hour.
+        </p>
+        <p style={p}>
+          <b>Turn it round</b> fills the form in backwards for the trip home, so you do not
+          type the same two places in the other order. It leaves the hours blank, because
+          the way back took as long as it took.
+        </p>
+        <Note>
+          These hours are on your timecard like any other line — they count towards the
+          day's total, they go through approval, and they reach payroll with everything
+          else. If you drove a truck somewhere <i>and</i> worked on it there, that is one
+          line with both on it, not two: the hours should only be counted once.
         </Note>
       </Block>
 
