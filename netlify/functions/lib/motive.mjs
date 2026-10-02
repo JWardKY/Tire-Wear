@@ -204,6 +204,17 @@ export async function fetchInspectionParts(key, sinceISO, status = "with_defects
         /* Filled in when a mechanic actually records a resolution.
            Unambiguous where a bare status is not. */
         hasMechanic: part.mechanic_details != null,
+        /* Kept for the sibling rule below, never to close on its own —
+           see planClosuresFromParts. The report's status is Motive
+           saying it has finished with the report; the part's status is
+           Motive saying it has finished with the fault, and they
+           disagree often enough that one of them has to be a
+           corroborating signal rather than the signal. */
+        reportStatus: (r.status || "").toLowerCase() || null,
+        category: part.category || null,
+        notes: part.notes || null,
+        unit: (r.vehicle && r.vehicle.number) || r.vehicle_number || null,
+        date: r.date || null,
       });
     }
   }
@@ -472,12 +483,78 @@ export const CLOSE_GUARD = { maxRatio: 0.8, minToApplyRatio: 4 };
    cannot drag it back: planDefects never matches a repeat against a
    closed row, so a genuine recurrence arrives as a new defect with its
    own key — which is what an auditor should read. */
+/* Categories where the note IS the fault rather than a description of
+   it. faultOf splits on the note for exactly these, and the sibling
+   rule below has to respect the same line: two "Other" write-ups on one
+   truck are two different jobs until the words say otherwise. */
+const CATCH_ALL = new Set(["other", "", "misc", "miscellaneous"]);
+
+/* How far after a fault was first written up a repair can still be
+   taken as that fault's repair. The feed itself only reaches back a
+   fortnight, so this mostly guards against a future wider window
+   quietly reaching across a recurrence months later. */
+export const SIBLING_DAYS = 30;
+
+const daysBetween = (a, b) => {
+  const ms = Date.parse(b) - Date.parse(a);
+  return Number.isFinite(ms) ? ms / 86400000 : null;
+};
+
+/* The same fault, written up twice, resolved once.
+
+   DT-866 is the case this exists for. The passenger headlight was
+   written up on the 9:24 pre-trip AND again on the post-trip the same
+   day. Alex Oswald fixed it that evening — "Had a broken wire, wire has
+   been repaired" — and signed off the post-trip's part. Motive then
+   marked the PRE-TRIP report "resolved" at the report level while
+   leaving its own part "open", which is where it still sits nine days
+   later, and where our board still showed the job.
+
+   Closing on the report status would catch it, and must not: HT-1373
+   report 10954864043 reads "resolved" with its defect part open and the
+   check-engine light still on the truck. So the report status is a
+   corroborating signal, never the signal. A fault closes this way only
+   when ALL of:
+
+     - Motive says it has finished with this fault's own report, AND
+     - a part on the same unit, in the same category, was actually
+       REPAIRED by a named mechanic, AND
+     - that repair is dated on or after the fault was first written up,
+       within a month of it.
+
+   HT-1373 fails the second test — nothing on that truck was repaired by
+   anybody — so it stays open, which is the whole point. */
+function sameFaultRepairedElsewhere(parts, d, ownLinks) {
+  const unit = norm(d.unit_number);
+  const cat = norm(d.category);
+  const mine = new Set(ownLinks.map((l) => `${l.log_id}:${l.part_id}`));
+  for (const [key, p] of parts) {
+    if (mine.has(key)) continue;
+    const status = (p.status || "").toLowerCase();
+    /* A named mechanic, not merely a status. This is somebody signing a
+       federal inspection record to say they fixed it. */
+    if (!p.hasMechanic) continue;
+    if (status !== "repaired" && status !== "corrected") continue;
+    if (norm(p.unit) !== unit || norm(p.category) !== cat) continue;
+    /* "Other" is Motive's commonest category and means nothing on its
+       own, so there the words have to agree too. */
+    if (CATCH_ALL.has(cat) && norm(p.notes) !== norm(d.note)) continue;
+    const gap = p.date && d.first_reported ? daysBetween(d.first_reported, p.date) : null;
+    if (gap == null || gap < 0 || gap > SIBLING_DAYS) continue;
+    return { status, logId: p.logId, partId: p.partId, on: p.date };
+  }
+  return null;
+}
+
 export function planClosuresFromParts(parts, links, defects, { guard = CLOSE_GUARD } = {}) {
   const byId = new Map(defects.map((d) => [d.id, d]));
   const statusSeen = {};
   const dealtWith = new Map();
+  const linksByDefect = new Map();
 
   for (const l of links) {
+    if (!linksByDefect.has(l.defect_id)) linksByDefect.set(l.defect_id, []);
+    linksByDefect.get(l.defect_id).push(l);
     const part = parts.get(`${l.log_id}:${l.part_id}`);
     if (!part) continue;
     const status = (part.status || "").toLowerCase();
@@ -492,9 +569,23 @@ export function planClosuresFromParts(parts, links, defects, { guard = CLOSE_GUA
 
   const candidates = defects.filter((d) => d.source === "motive" && d.state !== "closed");
   const close = [];
+  let bySibling = 0;
   for (const d of candidates) {
-    const hit = dealtWith.get(d.id);
-    if (!hit) continue;
+    let hit = dealtWith.get(d.id);
+    let sibling = null;
+    if (!hit) {
+      const own = linksByDefect.get(d.id) || [];
+      /* Motive has to have finished with this fault's own report before
+         anything elsewhere is allowed to speak for it. */
+      const reportDone = own.some((l) => {
+        const p = parts.get(`${l.log_id}:${l.part_id}`);
+        return p && p.reportStatus === "resolved";
+      });
+      if (reportDone) sibling = sameFaultRepairedElsewhere(parts, d, own);
+      if (!sibling) continue;
+      bySibling += 1;
+      hit = { status: sibling.status, hasMechanic: true, logId: sibling.logId };
+    }
     close.push({
       id: d.id,
       defect_key: d.defect_key,
@@ -502,6 +593,8 @@ export function planClosuresFromParts(parts, links, defects, { guard = CLOSE_GUA
       category: d.category,
       motiveStatus: hit.status,
       logId: hit.logId,
+      /* Which of the two rules closed it, so a dry run can be read. */
+      viaSibling: sibling ? `${sibling.logId}:${sibling.partId} on ${sibling.on}` : null,
       /* Reported separately because they mean different things: a
          repaired one closing is the loop finishing, an open one closing
          means somebody dealt with it outside this system. */
@@ -523,6 +616,9 @@ export function planClosuresFromParts(parts, links, defects, { guard = CLOSE_GUA
     candidates: candidates.length,
     partsSeen: parts.size,
     statusSeen,
+    /* How many came the second way, so the new rule's reach is a number
+       on the dry run rather than something to be taken on trust. */
+    closedBySibling: refuse ? 0 : bySibling,
     refused: refuse,
   };
 }
