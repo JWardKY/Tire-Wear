@@ -177,10 +177,13 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
     }
     return (
       <Body err={err}>
-        <DrivingTab date={date} entries={entries} vehicles={vehicles} codes={codes}
-          busy={busy}
+        <DrivingTab date={date} mechanicId={unlocked.id} entries={entries}
+          vehicles={vehicles} codes={codes} busy={busy}
           onAdd={(e) => run(() => time.addEntry({ ...e, mechanicId: unlocked.id }))}
-          onUpdate={(id, e) => run(() => time.updateEntry(id, e))}
+          onSetCode={(e, costCode) => run(() => time.updateEntry(e.id, {
+            date: e.date, vehId: e.vehId, unitLabel: e.unit, where: e.where,
+            hours: e.hours, costCode, workOrder: e.workOrder, note: e.note,
+          }))}
           onDelete={(id) => run(() => time.deleteEntry(id))} />
       </Body>
     );
