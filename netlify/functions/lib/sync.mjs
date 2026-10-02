@@ -208,6 +208,11 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
     partStatuses: closing.statusSeen,
     wouldClose: closing.close.length,
     wouldCloseRepaired: closing.close.filter((c) => c.wasRepaired).length,
+    /* Closed because the same fault was repaired on another DVIR rather
+       than on its own. A number worth watching: if it ever rivals the
+       straightforward closures, somebody is resolving the wrong
+       write-up in Motive as a matter of habit. */
+    wouldCloseViaSibling: closing.closedBySibling,
     closeCandidates: closing.candidates,
     /* Non-null means the guard tripped and nothing will be closed. It is
        reported on a dry run too, which is the point: you see the refusal
@@ -265,9 +270,17 @@ export async function runDefects({ motiveKey, db }, { write, since }) {
       actor_name: "Motive sync",
       unit_number: c.unit_number,
       summary: `${c.unit_number} — ${c.category || "defect"} closed in Motive`
-        + (c.wasRepaired ? ", after being repaired here" : ", without being repaired here"),
+        + (c.wasRepaired ? ", after being repaired here" : ", without being repaired here")
+        /* Said in the summary, not only the detail: somebody reading the
+           work log should not have to wonder why a fault closed when its
+           own DVIR still reads open in Motive. */
+        + (c.viaSibling ? ` — fixed on another DVIR the same fault was written up on (${c.viaSibling})` : ""),
       detail: { defect_key: c.defect_key, was_repaired: c.wasRepaired,
-                motive_status: c.motiveStatus, log_id: c.logId, since: start },
+                motive_status: c.motiveStatus, log_id: c.logId, since: start,
+                /* On the record, because this one was not resolved on
+                   its own DVIR and an auditor reading the row should
+                   see which one it was resolved on. */
+                via_sibling: c.viaSibling || null },
     });
     /* The log is a record, not a gate: a defect really is closed in
        Motive whether or not we managed to note it. */

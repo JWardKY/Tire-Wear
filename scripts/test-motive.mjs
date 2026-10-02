@@ -465,6 +465,172 @@ const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
     truthy(p.close[0].wasRepaired, "and is reported as the repair loop finishing");
   }
 
+  /* ── The same fault, written up twice, resolved once ────────────
+     DT-866, 2026-09-23. The passenger headlight was written up on the
+     9:24 pre-trip and again on the post-trip that evening. Alex Oswald
+     fixed it — "Had a broken wire, wire has been repaired" — and signed
+     off the POST-TRIP's part. Motive then marked the pre-trip report
+     "resolved" at the report level while leaving its own part "open".
+     Nine days later the truck was fixed, Motive's own screen said
+     Repaired, and our board still showed the job.
+
+     Everything in this block is about closing that without reopening
+     the hole the report status was kept out of the rule to avoid. */
+  {
+    const headlight = (over = {}) => ({
+      status: "open", hasMechanic: false, reportStatus: "resolved",
+      unit: "DT-866", category: "Headlights", notes: "Passenger headlight out",
+      date: "2026-09-23", logId: 2459255763, partId: 5852608352, ...over,
+    });
+    /* The post-trip's part: same truck, same category, actually signed
+       off by a named mechanic. */
+    const fixedElsewhere = (over = {}) => ({
+      status: "repaired", hasMechanic: true, reportStatus: "resolved",
+      unit: "DT-866", category: "Headlights", notes: "Passenger ",
+      date: "2026-09-23", logId: 2459255763, partId: 5856157053, ...over,
+    });
+    const ours = (over = {}) => def({
+      id: "dt866", defect_key: "motive:2459255763:5852608352",
+      unit_number: "DT-866", category: "Headlights", note: "Passenger headlight out",
+      first_reported: "2026-09-23", last_reported: "2026-09-23", ...over,
+    });
+    const both = (a = {}, b = {}) => feed([
+      ["2459255763:5852608352", headlight(a)],
+      ["2459255763:5856157053", fixedElsewhere(b)],
+    ]);
+    const myLink = [link("dt866", 2459255763, 5852608352)];
+
+    {
+      const p = planClosuresFromParts(both(), myLink, [ours()]);
+      is(p.close.length, 1, "a fault fixed on the other DVIR it was written up on closes");
+      is(p.closedBySibling, 1, "and is counted as having come the second way");
+      truthy(/5856157053/.test(p.close[0].viaSibling || ""),
+        "naming the DVIR it was actually fixed on");
+    }
+
+    /* The rule this must not break. HT-1373 report 10954864043 reads
+       "resolved" while its part is open and the check-engine light is
+       still on the truck. Nothing on that truck was repaired by
+       anybody, so there is nothing to corroborate the report status
+       and it stays open. */
+    {
+      const p = planClosuresFromParts(
+        feed([["1:1", { status: "open", hasMechanic: false, reportStatus: "resolved",
+          unit: "HT-1373", category: "Gauges & Warning Lights",
+          notes: "Check engine and wrench light is on", date: "2026-09-11" }]]),
+        [link("d1", 1, 1)],
+        [def({ unit_number: "HT-1373", category: "Gauges & Warning Lights",
+               first_reported: "2026-09-11" })]);
+      is(p.close.length, 0, "a resolved report with nothing repaired anywhere closes nothing");
+      is(p.closedBySibling, 0, "and nothing came the second way");
+    }
+
+    /* Each leg of the rule, removed one at a time. */
+    {
+      const p = planClosuresFromParts(both({ reportStatus: "open" }), myLink, [ours()]);
+      is(p.close.length, 0, "if Motive has not finished with our own report, nothing closes");
+    }
+    {
+      const p = planClosuresFromParts(both({}, { hasMechanic: false }), myLink, [ours()]);
+      is(p.close.length, 0, "a repair with no mechanic on it is not a sign-off");
+    }
+    {
+      const p = planClosuresFromParts(both({}, { status: "open" }), myLink, [ours()]);
+      is(p.close.length, 0, "and a sibling still open is not a repair");
+    }
+    /* A sibling is weaker evidence than a fault's own part, so it is
+       held to a stricter test: an actual repair, not merely a status
+       that is not "open". A headlight inspected and found good on the
+       post-trip says nothing about the one written up that morning,
+       and neither does one marked as needing no repair. */
+    {
+      const p = planClosuresFromParts(both({}, { status: "good" }), myLink, [ours()]);
+      is(p.close.length, 0, "a sibling inspected and found good is not a repair");
+    }
+    {
+      const p = planClosuresFromParts(
+        both({}, { status: "no_repair_needed" }), myLink, [ours()]);
+      is(p.close.length, 0, "nor is one somebody decided needed no repair");
+    }
+    {
+      const p = planClosuresFromParts(
+        both({}, { status: "some_value_nobody_has_seen" }), myLink, [ours()]);
+      is(p.close.length, 0, "nor a status nobody has seen before");
+    }
+    {
+      const p = planClosuresFromParts(both({}, { status: "corrected" }), myLink, [ours()]);
+      is(p.close.length, 1, "a corrected sibling is a repair by another name");
+    }
+    {
+      const p = planClosuresFromParts(both({}, { unit: "DT-867" }), myLink, [ours()]);
+      is(p.close.length, 0, "a repair on another truck is nothing to do with it");
+    }
+    {
+      const p = planClosuresFromParts(both({}, { category: "Mirrors" }), myLink, [ours()]);
+      is(p.close.length, 0, "nor one to another part of the same truck");
+    }
+
+    /* The recurrence. The headlight is fixed in September; it fails
+       again in November and is written up afresh. September's repair
+       must not close November's fault. */
+    {
+      const p = planClosuresFromParts(
+        both({ date: "2026-11-20" }), myLink,
+        [ours({ first_reported: "2026-11-20", last_reported: "2026-11-20" })]);
+      is(p.close.length, 0, "a repair from before the fault was written up closes nothing");
+    }
+    {
+      const p = planClosuresFromParts(
+        both({}, { date: "2026-10-28" }), myLink, [ours()]);
+      is(p.close.length, 0, "nor one more than a month after it");
+    }
+    {
+      const p = planClosuresFromParts(
+        both({}, { date: "2026-10-20" }), myLink, [ours()]);
+      is(p.close.length, 1, "but one inside the month does");
+    }
+
+    /* "Other" is Motive's commonest category and means nothing on its
+       own — the note IS the fault there, which is why planDefects
+       splits on it. DT-871 is the live case: "Check rear end grease"
+       open, "Check fluid and tighten bolts" repaired five days later.
+       Those may be the same job and may not, and merging them would
+       lose a real defect. */
+    {
+      const p = planClosuresFromParts(
+        both({ category: "Other", notes: "Check rear end grease" },
+             { category: "Other", notes: "Check fluid and tighten bolts" }),
+        myLink, [ours({ category: "Other", note: "Check rear end grease" })]);
+      is(p.close.length, 0, "under Other, a different note is a different job");
+    }
+    {
+      const p = planClosuresFromParts(
+        both({ category: "Other", notes: "Check rear end grease" },
+             { category: "Other", notes: "check rear end grease " }),
+        myLink, [ours({ category: "Other", note: "Check rear end grease" })]);
+      is(p.close.length, 1, "…and the same note, however it is spaced, is the same job");
+    }
+
+    /* A defect the shop has already marked repaired still closes this
+       way, and is still reported as the loop finishing rather than as
+       somebody else's doing. */
+    {
+      const p = planClosuresFromParts(both(), myLink, [ours({ state: "repaired" })]);
+      is(p.close.length, 1, "a repaired defect closes on a sibling too");
+      truthy(p.close[0].wasRepaired, "and is still reported as the repair loop finishing");
+    }
+
+    /* The straightforward rule still wins where it applies, and does
+       not get labelled as the new one. */
+    {
+      const p = planClosuresFromParts(
+        both({ status: "repaired", hasMechanic: true }), myLink, [ours()]);
+      is(p.close.length, 1, "a fault resolved on its own DVIR still closes the first way");
+      is(p.closedBySibling, 0, "and is not counted as a sibling closure");
+      is(p.close[0].viaSibling, null, "nor labelled as one");
+    }
+  }
+
   {
     /* One fault, three mornings. Somebody dealt with it on one of them. */
     const p = planClosuresFromParts(

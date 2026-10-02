@@ -83,6 +83,8 @@ const toEntry = (r) => ({
   unit: r.unit || "",
   div: r.division || "",
   jobLocation: r.job_location || "",
+  droveFrom: r.drove_from || "",
+  droveTo: r.drove_to || "",
   pmProgramId: r.pm_program_id,
   where: r.where_worked,
   hours: Number(r.hours),
@@ -190,6 +192,10 @@ export async function addEntry(e) {
       work_performed: e.workPerformed || null,
       job_location: e.jobLocation || null,
       pm_program_id: e.pmProgramId || null,
+      /* Only a driving line ever has these, and they are the one thing
+         a driving line has that no other line does. */
+      drove_from: e.droveFrom || null,
+      drove_to: e.droveTo || null,
     })
     .select("id")
     .single();
@@ -208,6 +214,8 @@ export async function updateEntry(id, e) {
   if (e.workPerformed !== undefined) extra.work_performed = e.workPerformed || null;
   if (e.jobLocation !== undefined) extra.job_location = e.jobLocation || null;
   if (e.pmProgramId !== undefined) extra.pm_program_id = e.pmProgramId || null;
+  if (e.droveFrom !== undefined) extra.drove_from = e.droveFrom || null;
+  if (e.droveTo !== undefined) extra.drove_to = e.droveTo || null;
   check(
     await supabase.from("tw_time_entries")
       .update({
@@ -354,6 +362,10 @@ export async function partsForEntry(entryId) {
 
 const WHERE_LABEL = {
   shop: "Shop", field: "Field", road: "Outside service call", plant: "Plant",
+  /* Driving is its own kind of time, not a service call. Putting it
+     under "road" would have quietly added every shuttle run to the
+     outside-service-call figure on the Now board and in payroll. */
+  driving: "Driving",
 };
 
 export async function payrollLines(from, to) {

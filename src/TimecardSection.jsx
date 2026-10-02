@@ -14,6 +14,7 @@ import * as partsData from "./partsData.js";
 import EquipmentWorked from "./EquipmentWorked.jsx";
 import { readUnlock, writeUnlock, clearUnlock } from "./identity.js";
 import { sayOffline } from "./dbError.js";
+import DrivingTab from "./DrivingTab.jsx";
 
 /* ── The Timecard section ─────────────────────────────────────────
    Your own hours for one day. Behind a PIN, because this is the one
@@ -36,6 +37,7 @@ const WHERE = [
   ["field", "Field"],
   ["road", "Road call"],
   ["plant", "Plant"],
+  ["driving", "Driving"],
 ];
 
 export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFocus }) {
@@ -159,6 +161,27 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
           onStartJob={(j) => go?.("timecard", "today", {
             startJob: { woId: j.id, wo: j.wo, vehId: j.vehId, unit: j.unit, title: j.title },
           })} />
+      </Body>
+    );
+  }
+
+  /* Behind the PIN with the rest of the personal tabs: these are
+     somebody's own hours, and they go to payroll. */
+  if (tab === "driving") {
+    if (!unlocked) {
+      return (
+        <Body err={err}>
+          <Gate who={who} onIn={(u) => { writeUnlock(u); setUnlocked(u); }} />
+        </Body>
+      );
+    }
+    return (
+      <Body err={err}>
+        <DrivingTab date={date} entries={entries} vehicles={vehicles} codes={codes}
+          busy={busy}
+          onAdd={(e) => run(() => time.addEntry({ ...e, mechanicId: unlocked.id }))}
+          onUpdate={(id, e) => run(() => time.updateEntry(id, e))}
+          onDelete={(id) => run(() => time.deleteEntry(id))} />
       </Body>
     );
   }
@@ -861,7 +884,9 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
 
   const running = sh?.open;
   const acc = clock.accountedFor(sh?.clockHours || 0, entries);
-  const segColour = { shop: C.green700, call: C.watch, idle: C.muted };
+  /* Driving has its own colour on the day bar, or every shuttle run
+     would be drawn as shop time with no way to tell. */
+  const segColour = { shop: C.green700, call: C.watch, driving: "#4E9166", idle: C.muted };
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`,

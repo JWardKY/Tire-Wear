@@ -483,7 +483,8 @@ function MechanicTime({ f, roll, from, to }) {
                   {h.codeName && <div style={{ fontFamily: FB, fontSize: 12, color: C.muted }}>{h.codeName}</div>}
                 </td>
                 <td style={{ ...td, color: C.muted }}>
-                  {h.where === "road" ? "Road call" : h.where === "field" ? "Field"
+                  {h.where === "driving" ? "Driving"
+                    : h.where === "road" ? "Road call" : h.where === "field" ? "Field"
                     : h.where === "plant" ? "Plant" : "Shop"}
                   {h.jobLocation && <div style={{ fontSize: 12 }}>{h.jobLocation}</div>}
                 </td>

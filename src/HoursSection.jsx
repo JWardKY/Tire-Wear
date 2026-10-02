@@ -356,6 +356,10 @@ function Detail({ rows }) {
 const SPLIT = [
   ["shop", "Shop", C.green700, ["shop"]],
   ["call", "Outside service call", C.watch, ["road", "field"]],
+  /* Its own slice. Time spent getting somewhere is a different thing
+     from time spent working there, and a shop that wants less of it
+     has to be able to see how much there is. */
+  ["driving", "Driving", "#4E9166", ["driving"]],
   ["indirect", "Shop & indirect", C.muted, ["plant"]],
 ];
 
