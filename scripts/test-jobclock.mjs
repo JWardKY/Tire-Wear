@@ -12,8 +12,8 @@
 
    Needs nothing: no database, no browser.
 */
-import { hms, liveSeconds, quarters, suggestCode, toggle, EMPTY, TIRES, treadEntry }
-  from "../src/jobClock.js";
+import { hms, liveSeconds, realHours, sayLong, SHORTEST, suggestCode, toggle,
+  EMPTY, TIRES, treadEntry } from "../src/jobClock.js";
 
 let bad = 0;
 const ok = (l, v, got) => {
@@ -60,16 +60,50 @@ ok("…so the gap between them is not counted",
 ok("the empty clock is not shared between screens",
   EMPTY.stints.length === 0 && toggle(EMPTY, T0) !== EMPTY);
 
-console.log("\nhours, the way payroll charges them:");
-ok("half an hour", quarters(1800) === 0.5);
-ok("an hour and a quarter", quarters(4500) === 1.25);
-ok("rounded to the nearest quarter", quarters(2000) === 0.5, quarters(2000));
-/* A job that happened is never nought hours. The database refuses a
-   row with nought on it anyway. */
-ok("ten minutes is a quarter, not nothing", quarters(600) === 0.25);
-ok("…and so is two minutes", quarters(120) === 0.25);
-ok("but a clock never started is nought", quarters(0) === 0);
-ok("…and junk is nought", quarters(null) === 0 && quarters("x") === 0);
+console.log("\nhours — real time, not quarters:");
+/* This used to round up to the nearest quarter hour, the way payroll
+   charges, and it meant a four-second press booked fifteen minutes
+   and a twenty-minute walk-around booked thirty. Jason's answer was
+   to book what the clock actually read. */
+ok("five minutes is five minutes", realHours(300) === 0.08, realHours(300));
+ok("…and not a quarter of an hour", realHours(300) !== 0.25);
+ok("twenty minutes is twenty minutes", realHours(1200) === 0.33, realHours(1200));
+ok("…and not half of one", realHours(1200) !== 0.5);
+ok("half an hour", realHours(1800) === 0.5);
+ok("three quarters", realHours(2700) === 0.75);
+ok("an hour and a half", realHours(5400) === 1.5);
+/* tw_time_entries.hours is numeric(5,2) and the payroll export writes
+   it with toFixed(2), so a hundredth of an hour is as fine as this
+   can be. The exact seconds ride along in unit_seconds. */
+ok("a hundredth of an hour is as fine as the column goes",
+  realHours(36) === 0.01, realHours(36));
+/* Under eighteen seconds there is no hundredth to write, and the
+   database refuses nought hours. A clock started and stopped in the
+   same breath is a mis-tap, not a job. */
+ok("a press of start and stop books nothing", realHours(4) === 0, realHours(4));
+ok("…and the line is where SHORTEST says",
+  realHours(SHORTEST - 1) === 0 && realHours(SHORTEST) > 0,
+  [realHours(SHORTEST - 1), realHours(SHORTEST)]);
+ok("a clock never started is nought", realHours(0) === 0);
+ok("…and junk is nought", realHours(null) === 0 && realHours("x") === 0);
+
+console.log("\nthe clock in words, for beside the decimal:");
+/* "0.08" on a card is not a thing anybody recognises. */
+ok("five minutes", sayLong(300) === "5 minutes");
+ok("one minute, singular", sayLong(60) === "1 minute");
+ok("seconds while it is still seconds", sayLong(45) === "45 seconds");
+ok("…and one of those", sayLong(1) === "1 second");
+/* To the nearest minute, not down to it. A minute and fifty seconds
+   reads as two minutes, because that is what it was nearer to —
+   flooring it would tell somebody they worked a minute when they
+   worked nearly two. */
+ok("to the nearest minute", sayLong(110) === "2 minutes", sayLong(110));
+ok("…and not rounded down", sayLong(110) !== "1 minute");
+ok("an hour and a half", sayLong(5400) === "1 hour 30 minutes", sayLong(5400));
+ok("an hour and a bit", sayLong(3700) === "1 hour 2 minutes", sayLong(3700));
+ok("a round hour says no minutes", sayLong(3600) === "1 hour", sayLong(3600));
+ok("two hours", sayLong(7200) === "2 hours");
+ok("nothing is nought seconds", sayLong(0) === "0 seconds");
 
 console.log("\nthe cost code nobody is asked for:");
 const CODES = [
@@ -111,6 +145,10 @@ const e = treadEntry({ vehId: "v1", seconds: 2700, runningAt: null, costCode: "8
   tires: 12, stints: [{ start: "a", stop: "b" }], stoppedAt: T0 }, "2026-10-03");
 ok("it is an ordinary time entry",
   e.hours === 0.75 && e.costCode === "878" && e.date === "2026-10-03", e);
+/* Twenty minutes gauging books twenty minutes, not half an hour. */
+ok("…for the time actually clocked",
+  treadEntry({ seconds: 1200, stoppedAt: T0 }).hours === 0.33,
+  treadEntry({ seconds: 1200, stoppedAt: T0 }).hours);
 ok("…against the truck it was done on", e.vehId === "v1", e);
 ok("…marked as tire work", e.workTypes.join() === TIRES, e.workTypes);
 ok("…in the shop", e.where === "shop", e.where);
@@ -124,9 +162,12 @@ ok("…and says something with no count at all",
   treadEntry({ seconds: 600, stoppedAt: T0 }).workPerformed === "Tread readings");
 ok("the seconds behind the hours are kept", e.unitSeconds === 2700, e.unitSeconds);
 ok("…and so are the stints", e.stints.length === 1, e.stints);
-/* A walk-around that nobody clocked books nothing. */
+/* A walk-around that nobody clocked books nothing, and neither does
+   one somebody mis-tapped. */
 ok("a clock never started books no hours",
   treadEntry({ vehId: "v1", seconds: 0, stoppedAt: T0 }).hours === 0);
+ok("…nor one that ran four seconds",
+  treadEntry({ vehId: "v1", seconds: 4, stoppedAt: T0 }).hours === 0);
 
 console.log(bad ? `\n${bad} failed` : "\nall good");
 process.exit(bad ? 1 : 0);

@@ -22,13 +22,46 @@ export const liveSeconds = (d = {}, now = Date.now()) =>
   (Number(d.seconds) || 0)
   + (d.runningAt ? Math.max(0, (now - new Date(d.runningAt).getTime()) / 1000) : 0);
 
-/* Quarter hours, because that is the unit payroll charges in — and a
-   job that happened is never nought: ten minutes rounds to a quarter
-   rather than to nothing, which the database would refuse anyway. */
-export function quarters(seconds) {
+/* Real time. Five minutes is five minutes.
+
+   This used to round up to the nearest quarter hour, which is how
+   payroll charges — and it meant a four-second press of Start and Stop
+   booked fifteen minutes, and a twenty-minute walk-around booked
+   thirty. Jason's answer was to book what the clock actually read, so
+   that is what it does.
+
+   Two decimal places because that is all tw_time_entries.hours holds:
+   numeric(5,2), and the payroll export writes it with toFixed(2). So
+   the finest this can be is a hundredth of an hour, which is 36
+   seconds. Five minutes lands at 0.08 rather than 0.0833 — the exact
+   seconds are kept on the entry beside it, in unit_seconds, so nothing
+   is actually lost.
+
+   Anything under eighteen seconds rounds to nought all by itself, and
+   nought hours is a row the database refuses. That is the right
+   answer rather than a problem: a clock started and stopped in the
+   same breath is a mis-tap, not a job. SHORTEST names where the
+   rounding lands on zero so the screens can say so plainly instead of
+   failing — it is not a second guard, and test-jobclock holds the two
+   to each other so they cannot drift if the precision ever changes. */
+export const SHORTEST = 18;
+
+export function realHours(seconds) {
   const s = Math.max(0, Number(seconds) || 0);
-  if (s === 0) return 0;
-  return Math.max(0.25, Math.round((s / 3600) * 4) / 4);
+  return Math.round((s / 3600) * 100) / 100;
+}
+
+/* The clock in words, for beside the decimal. "0.08" on a card is not
+   a thing anybody recognises; "5 minutes" is. */
+export function sayLong(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  if (s < 60) return `${s} second${s === 1 ? "" : "s"}`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} minute${m === 1 ? "" : "s"}`;
+  const h = Math.floor(m / 60), rem = m % 60;
+  return rem
+    ? `${h} hour${h === 1 ? "" : "s"} ${rem} minute${rem === 1 ? "" : "s"}`
+    : `${h} hour${h === 1 ? "" : "s"}`;
 }
 
 /* The cost code nobody is asked for. What this mechanic has already
@@ -81,7 +114,7 @@ export function treadEntry(d = {}, date) {
     vehId: d.vehId || "",
     unitLabel: "",
     where: "shop",
-    hours: quarters(secs),
+    hours: realHours(secs),
     costCode: d.costCode,
     workTypes: [TIRES],
     /* So a supervisor reading the hours board can see what the time

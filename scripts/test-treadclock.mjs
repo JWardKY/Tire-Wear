@@ -107,13 +107,16 @@ ok("there is no clock sitting on the screen", !/0:00:0/.test(t), t.slice(0, 400)
 
 console.log("\n── Record tread starts it ──");
 await page.getByRole("button", { name: "Record tread", exact: true }).first().click();
-await page.waitForTimeout(2600);
+/* Long enough to be a real job. Hours are real time now rather than
+   rounded up to a quarter, so a clock that runs four seconds books
+   nothing — which is tested on its own further down. */
+await page.waitForTimeout(12000);
 t = await page.locator("body").innerText();
 /* Pressing Record tread IS starting the job. A clock somebody has to
    remember to start separately is a clock that mostly reads nought. */
 ok("the clock is running already", /on the clock/i.test(t),
   (t.match(/[^\n]*on the clock[^\n]*/i) || [""])[0]);
-ok("…and counting", /0:00:0[1-9]/.test(t), (t.match(/\d:\d\d:\d\d/) || [""])[0]);
+ok("…and counting", /0:00:(0[1-9]|[1-5]\d)/.test(t), (t.match(/\d:\d\d:\d\d/) || [""])[0]);
 const stopBtn = page.getByRole("button", { name: /^STOP$|^START$/ }).first();
 ok("it can be stopped", /STOP/.test(await stopBtn.innerText()), await stopBtn.innerText());
 
@@ -121,7 +124,11 @@ console.log("\n── stop and start again ──");
 await stopBtn.click();
 await page.waitForTimeout(1200);
 t = await page.locator("body").innerText();
-ok("stopping says what would go on the card", /hr to your card/i.test(t),
+ok("stopping says what would go on the card", /to your card/i.test(t),
+  (t.match(/[^\n]*to your card[^\n]*/i) || [""])[0]);
+/* In words, because "0.08" on a card is not a thing anybody
+   recognises. */
+ok("…in seconds or minutes, not a decimal", /\d+ (second|minute)s? to your card/i.test(t),
   (t.match(/[^\n]*to your card[^\n]*/i) || [""])[0]);
 const held = (t.match(/\d:\d\d:\d\d/) || [""])[0];
 await page.waitForTimeout(2000);
@@ -131,7 +138,7 @@ ok("a stopped clock does not keep counting",
   (t.match(/\d:\d\d:\d\d/) || [""])[0] === held,
   `${held} → ${(t.match(/\d:\d\d:\d\d/) || [""])[0]}`);
 await page.getByRole("button", { name: /^START$/ }).first().click();
-await page.waitForTimeout(1600);
+await page.waitForTimeout(11000);
 t = await page.locator("body").innerText();
 ok("…and starting again carries on from where it was",
   /on the clock/i.test(t) && (t.match(/\d:\d\d:\d\d/) || [""])[0] !== "0:00:00",
@@ -164,7 +171,7 @@ ok("nothing is booked on the badge alone",
   writes.filter((w) => w.table === "tw_time_entries").length === 0,
   JSON.stringify(writes.map((w) => w.method + " " + w.table)));
 t = await page.locator("body").innerText();
-ok("it asks for one", /Put 0\.25 hours on a card/i.test(t), t.slice(0, 500));
+ok("it asks for one", /Put \d+ (second|minute)s? on a card/i.test(t), t.slice(0, 500));
 ok("…naming whose hours it thinks they are", /Donald Bradley/.test(t), t.slice(0, 500));
 
 /* A wrong PIN books nothing and does not throw the hour away. */
@@ -225,7 +232,11 @@ console.log("\n── and it says so ──");
 t = await page.locator("body").innerText();
 ok("the screen says the hours went on a card", /went on Donald Bradley/i.test(t),
   (t.match(/[^\n]*timecard[^\n]*/i) || [""])[0]);
-ok("…how many", /0\.25 hour/.test(t), (t.match(/[^\n]*hour[^\n]*card[^\n]*/i) || [""])[0]);
+/* The real clock in words, and the decimal payroll will see. */
+ok("…how long it actually ran", /\d+ seconds went on/i.test(t),
+  (t.match(/[^\n]*went on[^\n]*/i) || [""])[0]);
+ok("…and what that is in hours", /as 0\.0\d hours/.test(t),
+  (t.match(/[^\n]*went on[^\n]*/i) || [""])[0]);
 ok("…and what it charged to", /SHOP-CF/.test(t), t.slice(0, 500));
 ok("the clock is gone once the job is done", !/on the clock/i.test(t), t.slice(0, 400));
 
@@ -233,7 +244,8 @@ console.log("\n── and it does not ask twice ──");
 /* The unlock is the same proof the timecard takes, so a mechanic who
    has just put their PIN in is not asked again two minutes later. */
 await page.getByRole("button", { name: "Record tread", exact: true }).first().click();
-await page.waitForTimeout(2200);
+/* Again long enough to be a real job — see above. */
+await page.waitForTimeout(20000);
 const box2 = page.locator("input[inputmode='decimal'], input[type='number']").nth(1);
 await box2.fill("15");
 await page.waitForTimeout(300);
@@ -247,6 +259,28 @@ ok("…and says so", /went on Donald Bradley/i.test(t),
 ok("…with a second entry written",
   writes.filter((w) => w.table === "tw_time_entries" && w.method === "POST").length === 2,
   JSON.stringify(writes.filter((w) => w.table === "tw_time_entries").length));
+
+console.log("\n── a walk-around too short to be one ──");
+/* Real time means a press of Start and Stop books nothing: under
+   eighteen seconds there is no hundredth of an hour to write, and the
+   database refuses nought hours. Said rather than swallowed. */
+const before2 = writes.filter((w) => w.table === "tw_time_entries").length;
+await page.getByRole("button", { name: "Record tread", exact: true }).first().click();
+await page.waitForTimeout(900);
+await page.getByRole("button", { name: /^STOP$/ }).first().click();
+await page.waitForTimeout(400);
+const box3 = page.locator("input[inputmode='decimal'], input[type='number']").nth(1);
+await box3.fill("14");
+await page.waitForTimeout(300);
+await page.getByRole("button", { name: /^Save \d+ reading/ }).first().click();
+await page.waitForTimeout(1600);
+t = await page.locator("body").innerText();
+ok("a few seconds books nothing",
+  writes.filter((w) => w.table === "tw_time_entries").length === before2,
+  JSON.stringify(writes.filter((w) => w.table === "tw_time_entries").length));
+ok("…and it says why rather than failing quietly",
+  /too short to put on a card/i.test(t), t.slice(0, 600));
+ok("…while the readings still saved", /The readings saved/i.test(t), t.slice(0, 600));
 
 console.log("\n── a walk-around nobody clocked ──");
 /* Cancel throws the clock away. Starting again and saving with the

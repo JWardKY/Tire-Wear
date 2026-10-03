@@ -32,9 +32,10 @@
    that drift apart are three different answers to "how long did that
    take". Re-exported so callers of this module get the whole of what
    a driving line needs from one import. */
-import { liveSeconds, quarters } from "./jobClock.js";
+import { liveSeconds, realHours } from "./jobClock.js";
 
-export { hms, liveSeconds, quarters, suggestCode, toggle, EMPTY } from "./jobClock.js";
+export { hms, liveSeconds, realHours, sayLong, SHORTEST, suggestCode, toggle, EMPTY }
+  from "./jobClock.js";
 
 export const DRIVING = "Driving";
 
@@ -75,7 +76,7 @@ export function entryFrom(d = {}, date) {
        split, the payroll export — and filing driving under it would
        quietly inflate every one of those. */
     where: "driving",
-    hours: quarters(liveSeconds(d, d.stoppedAt ?? Date.now())),
+    hours: realHours(liveSeconds(d, d.stoppedAt ?? Date.now())),
     costCode: d.costCode,
     note: clean(d.note) || null,
     workTypes: [...types, DRIVING],

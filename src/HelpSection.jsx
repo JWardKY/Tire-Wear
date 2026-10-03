@@ -203,8 +203,14 @@ export default function HelpSection() {
           and the time stays where it is.
         </p>
         <p style={p}>
-          Trips are charged in <b>quarter hours</b>, which is how payroll charges
-          everything, so a ten-minute run down the road comes out as a quarter.
+          Hours go on the card to two decimal places, because that is what payroll reads
+          — five minutes shows as <b>0.08</b>. The exact seconds are kept with the entry,
+          so nothing is lost.
+        </p>
+        <p style={p}>
+          <b>You get the time you actually drove.</b> Five minutes is five minutes. A
+          trip of a few seconds books nothing at all and says so — that is a mis-tap, not
+          a trip.
         </p>
         <p style={p}>
           <b>You are not asked for a cost code.</b> It is filled in from whatever you have
@@ -556,7 +562,14 @@ export default function HelpSection() {
           <b>Stop and start it</b> as you like — pulled off for a road call, back again
           afterwards. The gap is not counted. When you <b>save the readings</b> the time
           goes straight onto your own timecard, against that truck, as tire work, and the
-          screen tells you how many hours went on and what they charged to.
+          screen tells you what went on and what it charged to.
+        </p>
+        <p style={p}>
+          <b>You get the time you actually took.</b> Twenty minutes gauging books twenty
+          minutes, not half an hour. It goes on the card to two decimal places because
+          that is what payroll reads, so twenty minutes shows as <b>0.33</b> — the exact
+          seconds are kept with the entry. A clock that ran a few seconds books nothing
+          and says so.
         </p>
         <p style={p}>
           <b>It asks for your PIN before the hours go on.</b> The name at the top of these

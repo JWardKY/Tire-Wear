@@ -31,7 +31,7 @@ import { reasonsFor, keepReason, sayReason, isFailure, DEFAULT_REASON }
 import * as time from "./timeData.js";
 import * as setup from "./setupData.js";
 import { readUnlock, writeUnlock } from "./identity.js";
-import { hms, liveSeconds, quarters, suggestCode, toggle, EMPTY, treadEntry }
+import { hms, liveSeconds, realHours, sayLong, suggestCode, toggle, EMPTY, treadEntry }
   from "./jobClock.js";
 
 /* ────────────────────────────────────────────────────────────────
@@ -249,7 +249,8 @@ export default function TireWear({ who, tab, onBusy }) {
         + "have nothing to charge to.");
       const entry = treadEntry({ ...job, vehId, costCode }, job.date);
       await time.addEntry({ ...entry, mechanicId: m.id });
-      return { hours: entry.hours, name: m.name, costCode };
+      return { hours: entry.hours, said: sayLong(job.secs ?? entry.unitSeconds),
+               name: m.name, costCode };
     },
     deleteReading: (id) => run(() => db.deleteReading(id)),
     logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
@@ -690,7 +691,16 @@ function VehicleDetail(props) {
     const secs = liveSeconds(stopped, Date.now());
     setJob(EMPTY);
     setMode("view");
-    if (secs <= 0) return;
+    /* A clock started and stopped in the same breath is a mis-tap, not
+       a job — and under eighteen seconds there is no hundredth of an
+       hour to write, which the database would refuse anyway. Said
+       rather than swallowed. */
+    if (realHours(secs) === 0) {
+      if (secs > 0) setBookErr(
+        `The readings saved. The clock only ran ${sayLong(secs)}, which is too `
+        + `short to put on a card, so no hours were booked.`);
+      return;
+    }
 
     /* Held rather than booked. These are pay records, so they wait
        for a PIN — see askAndBook. Holding them means a mechanic who
@@ -839,7 +849,7 @@ function VehicleDetail(props) {
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                   {job.runningAt
                     ? "on the clock"
-                    : jobSecs > 0 ? `${nf(quarters(jobSecs), 2)} hr to your card` : "paused"}
+                    : jobSecs > 0 ? `${sayLong(jobSecs)} to your card` : "paused"}
                 </div>
               </div>
               <button onClick={() => setJob(toggle(job))}
@@ -867,8 +877,8 @@ function VehicleDetail(props) {
             fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}
             className="flex flex-wrap items-center justify-between gap-2">
             <span>
-              The readings saved. <b>{nf(quarters(held.secs), 2)} hours</b> are waiting to
-              go on a card — they need a PIN first.
+              The readings saved. <b>{sayLong(held.secs)}</b> on the clock is waiting to
+              go on a card — it needs a PIN first.
             </span>
             <Btn onClick={() => setAskPin(true)}>PUT THE HOURS ON A CARD</Btn>
           </div>
@@ -878,8 +888,8 @@ function VehicleDetail(props) {
           <div style={{ padding: "10px 16px", background: "#EDF7F0",
             borderBottom: `1px solid ${C.green700}33`, borderLeft: `4px solid ${C.green700}`,
             fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>
-            <b>{nf(booked.hours, 2)} hour{booked.hours === 1 ? "" : "s"}</b> went on
-            {" "}{booked.name}&rsquo;s timecard against {v.num}, charged to {booked.costCode}.
+            <b>{booked.said}</b> went on {booked.name}&rsquo;s timecard against {v.num}
+            {" "}as <b>{nf(booked.hours, 2)} hours</b>, charged to {booked.costCode}.
             {" "}
             <span style={{ color: C.muted }}>
               Change the cost code on the card if this one belonged to a different job.
@@ -966,7 +976,7 @@ function VehicleDetail(props) {
           onDeleteReading={(rid) => actions.deleteReading(rid)} />
       )}
       {askPin && held && (
-        <ClockPin hours={quarters(held.secs)} unit={v.num} who={whoAmI}
+        <ClockPin secs={held.secs} unit={v.num} who={whoAmI}
           onClose={() => setAskPin(false)}
           onIn={async (m) => {
             setAskPin(false);
@@ -1006,7 +1016,7 @@ function VehicleDetail(props) {
    two mechanics share a shop tablet and the second one should not
    have to sign the first one out to book their own hour. Whoever is
    on the badge is first in the list, since that is usually right. */
-function ClockPin({ hours, unit, who, onClose, onIn }) {
+function ClockPin({ secs, unit, who, onClose, onIn }) {
   const [roster, setRoster] = useState(null);
   const [picked, setPicked] = useState(null);
   const [buf, setBuf] = useState("");
@@ -1062,7 +1072,7 @@ function ClockPin({ hours, unit, who, onClose, onIn }) {
   };
 
   return (
-    <Modal title={`Put ${nf(hours, 2)} hours on a card`}
+    <Modal title={`Put ${sayLong(secs)} on a card`}
       sub={`${unit} · tread readings`} onClose={onClose}>
       {!picked ? (
         <>
