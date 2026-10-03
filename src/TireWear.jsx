@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
@@ -29,6 +29,8 @@ import { planPrice, sayPlan, idsFor, spendAfter, worthAsking } from "./priceFlow
 import { reasonsFor, keepReason, sayReason, isFailure, DEFAULT_REASON }
   from "./pullReason.js";
 import * as time from "./timeData.js";
+import * as setup from "./setupData.js";
+import { readUnlock, writeUnlock } from "./identity.js";
 import { hms, liveSeconds, quarters, suggestCode, toggle, EMPTY, treadEntry }
   from "./jobClock.js";
 
@@ -229,11 +231,14 @@ export default function TireWear({ who, tab, onBusy }) {
        saved by the time this is called, so an hours failure must come
        back to the screen as its own sentence rather than as "that did
        not save" over a save that did. */
-    bookTireTime: async (vehId, job) => {
-      const m = await time.findMechanic(who);
-      if (!m) throw new Error(
-        `The readings saved, but there is nobody on the roster for ${who}, `
-        + `so the hours have nowhere to go. Add yourself under Setup.`);
+    /* The mechanic is passed in rather than looked up from the badge:
+       these are pay records, and the badge is a line in localStorage
+       that anybody at the tablet can change. What reaches here has
+       been proved with a PIN. */
+    bookTireTime: async (vehId, job, m) => {
+      if (!m?.id) throw new Error(
+        "The readings saved, but nobody was identified, so the hours have "
+        + "nowhere to go.");
       const [codes, today] = await Promise.all([
         time.listCostCodes(),
         time.listDay(m.id, job.date).catch(() => []),
@@ -388,7 +393,7 @@ export default function TireWear({ who, tab, onBusy }) {
           <FleetView
             {...{ filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
               byNum, activeTireAt, tireStats, settings, attention, brands, models,
-              actions, busy, lastOdoFor }}
+              actions, busy, lastOdoFor, who }}
           />
         )}
         {tab === "analysis" && (
@@ -409,7 +414,7 @@ export default function TireWear({ who, tab, onBusy }) {
 function FleetView(props) {
   const { filtered, vehSummary, sel, setSel, q, setQ, divFilter, setDivFilter,
     byNum, activeTireAt, tireStats, settings, attention, brands, models,
-    actions, busy, lastOdoFor } = props;
+    actions, busy, lastOdoFor, who } = props;
 
   /* The divisions actually on the page, in fleet order, rather than a
      list written out by hand — that list said ALL/DT/HT and stayed
@@ -478,7 +483,8 @@ function FleetView(props) {
             <VehicleDetail
               key={sel}
               v={byNum[sel]} summary={vehSummary[sel]}
-              {...{ activeTireAt, tireStats, settings, brands, models, actions, busy, lastOdoFor }}
+              {...{ activeTireAt, tireStats, settings, brands, models, actions, busy,
+                    lastOdoFor, who }}
             />
           ) : (
             <StartHere attention={attention} setSel={setSel} byNum={byNum} />
@@ -567,7 +573,7 @@ function StartHere({ attention, setSel, byNum }) {
 /* ── Vehicle detail ───────────────────────────────────────────── */
 function VehicleDetail(props) {
   const { v, summary, activeTireAt, tireStats, settings, brands, models,
-    actions, busy, lastOdoFor } = props;
+    actions, busy, lastOdoFor, who: whoAmI } = props;
 
   const [mode, setMode] = useState("view"); // view | inspect
   const [openTire, setOpenTire] = useState(null);
@@ -610,6 +616,11 @@ function VehicleDetail(props) {
   const [now, setNow] = useState(Date.now());
   const [booked, setBooked] = useState(null);
   const [bookErr, setBookErr] = useState("");
+  /* Hours that have been worked and not yet booked, because the
+     PIN has not been given. Kept so they can be claimed rather
+     than lost. */
+  const [held, setHeld] = useState(null);
+  const [askPin, setAskPin] = useState(false);
 
   useEffect(() => {
     if (!job.runningAt) return undefined;
@@ -680,11 +691,41 @@ function VehicleDetail(props) {
     setJob(EMPTY);
     setMode("view");
     if (secs <= 0) return;
+
+    /* Held rather than booked. These are pay records, so they wait
+       for a PIN — see askAndBook. Holding them means a mechanic who
+       mistypes, or walks off to find their PIN, does not lose the
+       hour they just worked. */
+    const pending = { ...stopped, date: insDate, tires: entries.length,
+                      stoppedAt: Date.now(), secs };
+    setHeld(pending);
+    askAndBook(pending);
+  }
+
+  /* Booking asks for the PIN of the mechanic doing the work.
+
+     The badge these screens run on is a line in localStorage that
+     anybody at the tablet can change, which is fine for "who
+     gauged this tire" and is not fine for "whose pay is this". So
+     the hours wait for the four digits, and they go to whoever
+     entered them rather than to whoever the badge says.
+
+     Already unlocked this session and it does not ask again: the
+     timecard unlock is the same proof, and asking twice in ten
+     minutes teaches people to resent it. */
+  async function askAndBook(pending) {
+    setBookErr("");
+    const already = readUnlock(whoAmI);
+    if (already?.id) { await book(pending, already); return; }
+    setAskPin(true);
+  }
+
+  async function book(pending, m) {
     try {
-      const b = await actions.bookTireTime(v.id, {
-        ...stopped, date: insDate, tires: entries.length, stoppedAt: Date.now(),
-      });
+      const b = await actions.bookTireTime(v.id, pending, m);
       setBooked(b);
+      setHeld(null);
+      setBookErr("");
     } catch (e) {
       setBookErr(e.message || String(e));
     }
@@ -820,6 +861,19 @@ function VehicleDetail(props) {
           </div>
         )}
 
+        {held && !askPin && (
+          <div style={{ padding: "10px 16px", background: "#FDF6E3",
+            borderBottom: `1px solid ${C.watch}55`, borderLeft: `4px solid ${C.watch}`,
+            fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}
+            className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              The readings saved. <b>{nf(quarters(held.secs), 2)} hours</b> are waiting to
+              go on a card — they need a PIN first.
+            </span>
+            <Btn onClick={() => setAskPin(true)}>PUT THE HOURS ON A CARD</Btn>
+          </div>
+        )}
+
         {booked && (
           <div style={{ padding: "10px 16px", background: "#EDF7F0",
             borderBottom: `1px solid ${C.green700}33`, borderLeft: `4px solid ${C.green700}`,
@@ -911,6 +965,16 @@ function VehicleDetail(props) {
           onSaveNotes={(notes) => actions.setTireNotes(openTire.id, notes)}
           onDeleteReading={(rid) => actions.deleteReading(rid)} />
       )}
+      {askPin && held && (
+        <ClockPin hours={quarters(held.secs)} unit={v.num} who={whoAmI}
+          onClose={() => setAskPin(false)}
+          onIn={async (m) => {
+            setAskPin(false);
+            writeUnlock(m);
+            await book(held, m);
+          }} />
+      )}
+
       {odoOpen && (
         <OdoDialog veh={v.num} lastOdo={lastOdo} busy={busy}
           onClose={() => setOdoOpen(false)}
@@ -931,6 +995,138 @@ function VehicleDetail(props) {
 
    Said as a sentence above the diagram, with both wheels ringed on it.
    The number on its own would make somebody hunt for which pair. */
+/* ── The PIN on a walk-around's hours ─────────────────────────────
+   The tire screens run on a badge, which is a line in localStorage
+   that anybody standing at the tablet can change. That is the right
+   bar for "who gauged this tire" and the wrong one for "whose pay is
+   this", so the hours wait for four digits and go to whoever enters
+   them rather than to whoever the badge says.
+
+   The roster is offered because the badge is not proof of anything:
+   two mechanics share a shop tablet and the second one should not
+   have to sign the first one out to book their own hour. Whoever is
+   on the badge is first in the list, since that is usually right. */
+function ClockPin({ hours, unit, who, onClose, onIn }) {
+  const [roster, setRoster] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [buf, setBuf] = useState("");
+  const [msg, setMsg] = useState("");
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    setup.listRoster()
+      .then((r) => {
+        const live = r.filter((m) => m.active);
+        setRoster(live);
+        /* Straight to the pad for the badge holder, which is the
+           common case by a distance. */
+        const mine = live.find((m) => m.email && m.email === who);
+        if (mine && mine.pinSet) setPicked(mine);
+      })
+      .catch((e) => { setRoster([]); setMsg(e.message || String(e)); });
+  }, [who]);
+
+  /* Four digits is the whole input, so it submits itself. The
+     in-flight guard is a ref and `working` is not a dependency: state
+     the effect both sets and depends on is a loop waiting to happen —
+     the timecard's pad learned that the hard way and locked everybody
+     out. */
+  const busy = useRef(false);
+  useEffect(() => {
+    if (!picked || buf.length !== 4 || busy.current) return undefined;
+    let live = true;
+    busy.current = true;
+    (async () => {
+      setWorking(true);
+      try {
+        const v = await setup.checkPin(picked.id, buf);
+        if (!live) return;
+        if (!v.ok) { setMsg(v.error || "That PIN was not right."); setBuf(""); return; }
+        onIn({ id: picked.id, name: v.name || picked.name,
+               email: picked.email || who, role: v.role || picked.role });
+      } catch (e) {
+        if (live) { setMsg(e.message || String(e)); setBuf(""); }
+      } finally {
+        busy.current = false;
+        setWorking(false);
+      }
+    })();
+    return () => { live = false; };
+  }, [buf, picked, onIn, who]);
+
+  const tap = (k) => {
+    setMsg("");
+    if (k === "clr") return setBuf("");
+    if (k === "del") return setBuf((b) => b.slice(0, -1));
+    return setBuf((b) => (b.length >= 4 ? b : b + k));
+  };
+
+  return (
+    <Modal title={`Put ${nf(hours, 2)} hours on a card`}
+      sub={`${unit} · tread readings`} onClose={onClose}>
+      {!picked ? (
+        <>
+          <p style={{ fontSize: 13.5, color: C.muted, marginTop: 0, lineHeight: 1.55 }}>
+            Whose hours are these?
+          </p>
+          <div style={{ maxHeight: 320, overflowY: "auto", border: `1px solid ${C.lineSoft}`,
+            borderRadius: 6 }}>
+            {(roster || []).map((m, i) => (
+              <button key={m.id} onClick={() => { setPicked(m); setBuf(""); setMsg(""); }}
+                style={{ display: "block", width: "100%", textAlign: "left", font: "inherit",
+                  padding: "12px 14px", minHeight: 48, cursor: "pointer", background: "#fff",
+                  border: 0, borderTop: i ? `1px solid ${C.lineSoft}` : "none" }}>
+                <span style={{ fontWeight: 600, color: C.ink }}>{m.name}</span>
+                {!m.pinSet && (
+                  <span style={{ color: C.muted, fontSize: 12 }}> — no PIN set yet</span>
+                )}
+              </button>
+            ))}
+            {roster && !roster.length && (
+              <div style={{ padding: 18, color: C.muted, fontSize: 13 }}>
+                Nobody on the roster yet.
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 13.5, color: C.ink, marginTop: 0, lineHeight: 1.55 }}>
+            <b>{picked.name}</b> — put your PIN in and the hours go on your card.
+            {" "}
+            <button onClick={() => { setPicked(null); setBuf(""); setMsg(""); }}
+              style={{ ...linkBtn, fontSize: 12.5 }}>Not you?</button>
+          </p>
+          <div className="flex justify-center" style={{ gap: 10, margin: "6px 0 14px" }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} style={{ width: 16, height: 16, borderRadius: 8,
+                background: i < buf.length ? C.green700 : "#fff",
+                border: `2px solid ${i < buf.length ? C.green700 : C.line}` }} />
+            ))}
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"].map((k) => (
+              <button key={k} onClick={() => tap(k)} disabled={working}
+                style={{ fontFamily: FM, fontSize: 22, fontWeight: 600, padding: "16px 0",
+                  borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff",
+                  cursor: "pointer", color: k === "clr" || k === "del" ? C.muted : C.ink }}>
+                {k === "clr" ? "CLR" : k === "del" ? "DEL" : k}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {msg && (
+        <p style={{ fontSize: 13, color: C.pull, fontWeight: 600, margin: "12px 0 0" }}>{msg}</p>
+      )}
+      <p style={{ fontSize: 12, color: C.muted, margin: "12px 0 0", lineHeight: 1.5 }}>
+        The readings are already saved. Closing this leaves the hours waiting rather than
+        throwing them away — put a PIN in whenever you are ready.
+      </p>
+    </Modal>
+  );
+}
+
 function DualMismatch({ list, limit }) {
   return (
     <div style={{ margin: "0 12px 4px", background: "#FDF6E3",

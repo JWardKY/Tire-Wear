@@ -74,7 +74,15 @@ const browser = await chromium.launch({ executablePath: CHROME });
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 1200 } });
 await ctx.addInitScript(new Function(
   `localStorage.setItem("tirewear:who", ${JSON.stringify(WHO)});`));
-const { writes } = await fakeRest(ctx, { rows });
+/* The PIN check, as the database answers it. 1234 is Donald's. */
+const { writes } = await fakeRest(ctx, {
+  rows,
+  rpc: {
+    tw_mechanic_check_pin: (b) => (b?.p_pin === "1234"
+      ? { ok: true, name: "Donald Bradley", role: "mechanic" }
+      : { ok: false, error: "That PIN was not right." }),
+  },
+});
 
 const page = await ctx.newPage();
 const crashes = [], rest400 = [];
@@ -148,16 +156,55 @@ const readings = writes.filter((w) => w.table === "tw_tread_readings");
 ok("the readings saved", readings.length > 0,
   JSON.stringify(writes.map((w) => w.method + " " + w.table)));
 
+console.log("\n── the hours wait for a PIN ──");
+/* The badge these screens run on is a line in localStorage that
+   anybody at the tablet can change. Right for "who gauged this tire",
+   wrong for "whose pay is this". */
+ok("nothing is booked on the badge alone",
+  writes.filter((w) => w.table === "tw_time_entries").length === 0,
+  JSON.stringify(writes.map((w) => w.method + " " + w.table)));
+t = await page.locator("body").innerText();
+ok("it asks for one", /Put 0\.25 hours on a card/i.test(t), t.slice(0, 500));
+ok("…naming whose hours it thinks they are", /Donald Bradley/.test(t), t.slice(0, 500));
+
+/* A wrong PIN books nothing and does not throw the hour away. */
+for (const k of ["9", "9", "9", "9"]) {
+  await page.getByRole("button", { name: k, exact: true }).first().click();
+  await page.waitForTimeout(120);
+}
+await page.waitForTimeout(900);
+t = await page.locator("body").innerText();
+ok("a wrong PIN is refused", /not right/i.test(t), t.slice(0, 500));
+ok("…and books nothing",
+  writes.filter((w) => w.table === "tw_time_entries").length === 0,
+  JSON.stringify(writes.map((w) => w.method + " " + w.table)));
+
+/* Closing it must not lose an hour somebody has worked. */
+/* The modal closes on its backdrop; there is no X. */
+await page.mouse.click(8, 8);
+await page.waitForTimeout(900);
+t = await page.locator("body").innerText();
+ok("closing leaves the hours waiting rather than dropping them",
+  /waiting to\s+go on a card|are waiting/i.test(t.replace(/\s+/g, " ")), t.slice(0, 600));
+await page.getByRole("button", { name: /PUT THE HOURS ON A CARD/i }).first().click();
+await page.waitForTimeout(800);
+
+for (const k of ["1", "2", "3", "4"]) {
+  await page.getByRole("button", { name: k, exact: true }).first().click();
+  await page.waitForTimeout(120);
+}
+await page.waitForTimeout(1600);
+
 const booked = writes.filter((w) => w.table === "tw_time_entries" && w.method === "POST");
 /* The point of the whole thing. */
-ok("and the time went on a timecard", booked.length === 1,
+ok("the right PIN books them", booked.length === 1,
   JSON.stringify(writes.map((w) => w.method + " " + w.table)));
 const body = Array.isArray(booked[0]?.body) ? booked[0].body[0] : booked[0]?.body;
 ok("…as an ordinary time entry", Number(body?.hours) > 0 && !!body?.cost_code,
   JSON.stringify(body));
-/* Against the mechanic signed in on this tablet, without a PIN —
-   the readings are already attributed to them the same way. */
-ok("…on the mechanic who did the walk-around", body?.mechanic_id === "m1",
+/* On whoever put the PIN in, which is the only proof the app has of
+   who was actually standing there. */
+ok("…on the mechanic whose PIN it was", body?.mechanic_id === "m1",
   JSON.stringify(body?.mechanic_id));
 ok("…against the truck it was done on", body?.vehicle_id === V, JSON.stringify(body));
 ok("…marked as tire work", (body?.work_types || []).includes("Tires"),
@@ -181,6 +228,25 @@ ok("the screen says the hours went on a card", /went on Donald Bradley/i.test(t)
 ok("…how many", /0\.25 hour/.test(t), (t.match(/[^\n]*hour[^\n]*card[^\n]*/i) || [""])[0]);
 ok("…and what it charged to", /SHOP-CF/.test(t), t.slice(0, 500));
 ok("the clock is gone once the job is done", !/on the clock/i.test(t), t.slice(0, 400));
+
+console.log("\n── and it does not ask twice ──");
+/* The unlock is the same proof the timecard takes, so a mechanic who
+   has just put their PIN in is not asked again two minutes later. */
+await page.getByRole("button", { name: "Record tread", exact: true }).first().click();
+await page.waitForTimeout(2200);
+const box2 = page.locator("input[inputmode='decimal'], input[type='number']").nth(1);
+await box2.fill("15");
+await page.waitForTimeout(300);
+await page.getByRole("button", { name: /^Save \d+ reading/ }).first().click();
+await page.waitForTimeout(2200);
+t = await page.locator("body").innerText();
+ok("the second walk-around books without asking again",
+  !/Put .* hours on a card/i.test(t), t.slice(0, 500));
+ok("…and says so", /went on Donald Bradley/i.test(t),
+  (t.match(/[^\n]*timecard[^\n]*/i) || [""])[0]);
+ok("…with a second entry written",
+  writes.filter((w) => w.table === "tw_time_entries" && w.method === "POST").length === 2,
+  JSON.stringify(writes.filter((w) => w.table === "tw_time_entries").length));
 
 console.log("\n── a walk-around nobody clocked ──");
 /* Cancel throws the clock away. Starting again and saving with the
