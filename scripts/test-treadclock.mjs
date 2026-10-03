@@ -223,10 +223,14 @@ ok("…with the seconds actually clocked behind it", Number(body?.unit_seconds) 
 /* Two stints, because the clock was stopped and started again. */
 ok("…and both stints that produced them", (body?.stints || []).length === 2,
   JSON.stringify(body?.stints));
-/* Nobody was asked for a cost code; a shop code is the fallback when
-   nothing has been charged yet today. */
-ok("the cost code was filled in rather than asked for",
-  body?.cost_code === "SHOP-CF", body?.cost_code);
+/* Nobody was asked for a cost code, and the one it picks is not a
+   guess: gauging tread is tire work, and the shop books tire work to
+   878 by hand. Charging it to a shop code — which is what the first
+   version did, because it borrowed the Driving tab's "whatever you
+   charged earlier" rule — buried tire time in shop overhead where
+   the fleet could never add it up. */
+ok("tread time charges to the tire code", body?.cost_code === "878", body?.cost_code);
+ok("…not to shop time", body?.cost_code !== "SHOP-CF", body?.cost_code);
 
 console.log("\n── and it says so ──");
 t = await page.locator("body").innerText();
@@ -237,7 +241,7 @@ ok("…how long it actually ran", /\d+ seconds went on/i.test(t),
   (t.match(/[^\n]*went on[^\n]*/i) || [""])[0]);
 ok("…and what that is in hours", /as 0\.0\d hours/.test(t),
   (t.match(/[^\n]*went on[^\n]*/i) || [""])[0]);
-ok("…and what it charged to", /SHOP-CF/.test(t), t.slice(0, 500));
+ok("…and what it charged to, by name", /878 Tire Group/.test(t), t.slice(0, 500));
 ok("the clock is gone once the job is done", !/on the clock/i.test(t), t.slice(0, 400));
 
 console.log("\n── and it does not ask twice ──");

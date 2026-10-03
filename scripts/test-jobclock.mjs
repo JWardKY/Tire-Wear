@@ -12,8 +12,8 @@
 
    Needs nothing: no database, no browser.
 */
-import { hms, liveSeconds, realHours, sayLong, SHORTEST, suggestCode, toggle,
-  EMPTY, TIRES, treadEntry } from "../src/jobClock.js";
+import { hms, liveSeconds, realHours, sayLong, SHORTEST, suggestCode, tireCode,
+  TIRE_CODE, toggle, EMPTY, TIRES, treadEntry } from "../src/jobClock.js";
 
 let bad = 0;
 const ok = (l, v, got) => {
@@ -168,6 +168,57 @@ ok("a clock never started books no hours",
   treadEntry({ vehId: "v1", seconds: 0, stoppedAt: T0 }).hours === 0);
 ok("…nor one that ran four seconds",
   treadEntry({ vehId: "v1", seconds: 4, stoppedAt: T0 }).hours === 0);
+
+/* ── What tire work charges to ───────────────────────────────────
+   Gauging tread is tire work, not shop time. The shop has always
+   booked it to 878 by hand; the clock has to agree with them, or the
+   fleet cannot add up what its tires cost. */
+console.log("\n── the tire code ──");
+const CHART = [
+  { code: "873", name: "Service", group: "Vehicle" },
+  { code: "878", name: "Tire Group", group: "Vehicle" },
+  { code: "SHOP-CF", name: "Clays Ferry Shop", group: "Shop" },
+];
+ok("tire work charges to the tire code", tireCode(CHART) === "878", tireCode(CHART));
+/* 873 sorts first on this fleet and is the one a loose match lands
+   on. It is Service, and it is the wrong answer. */
+ok("…not to Service", tireCode(CHART) !== "873", tireCode(CHART));
+ok("…and not to the shop", tireCode(CHART) !== "SHOP-CF", tireCode(CHART));
+/* The number wins over a name that merely mentions tires. A fleet
+   with a "Tire carrier" line would otherwise book tread time to it
+   because it sorts first. */
+ok("the number is checked before any name",
+  tireCode([{ code: "860", name: "Tire carrier", group: "Vehicle" }].concat(CHART)) === "878",
+  tireCode([{ code: "860", name: "Tire carrier" }].concat(CHART)));
+/* The number is what it is today. A renumbered chart must still find
+   it by name rather than quietly falling back to shop time. */
+ok("a renumbered chart is still found, by name",
+  tireCode([{ code: "SHOP-CF", name: "Clays Ferry Shop", group: "Shop" },
+            { code: "901", name: "Tires", group: "Vehicle" }]) === "901");
+ok("…and one tire, singular, counts too",
+  tireCode([{ code: "901", name: "Tire Group" }]) === "901");
+/* "Tire" inside a longer word is not a tire code. Retired, entire,
+   tired — a substring match would charge tread time to whichever of
+   them sorted first. */
+ok("a word that merely contains 'tire' is not the tire code",
+  tireCode([{ code: "800", name: "Retired equipment" },
+            { code: "805", name: "Entire fleet" }]) === "");
+/* A fleet with no tire code at all: the caller falls back rather
+   than refusing to book hours somebody has worked. */
+ok("a chart with no tire code says so plainly",
+  tireCode([{ code: "SHOP-CF", name: "Clays Ferry Shop", group: "Shop" }]) === "");
+ok("…and an empty chart does not throw", tireCode() === "" && tireCode([]) === "");
+/* The number and the lookup must not drift apart. */
+ok("the constant is the code it looks for",
+  tireCode([{ code: TIRE_CODE, name: "Anything at all" }]) === TIRE_CODE);
+/* The whole point: this is NOT suggestCode. A mechanic who spent the
+   morning on an engine must not have the afternoon's tread check
+   charged to the engine. */
+const MORNING = [{ costCode: "835" }];
+ok("it does not follow what was charged earlier in the day",
+  tireCode(CHART.concat({ code: "835", name: "Engine", group: "Vehicle" })) === "878"
+  && suggestCode(CHART.concat({ code: "835", name: "Engine" }), MORNING) === "835",
+  [tireCode(CHART), suggestCode(CHART, MORNING)]);
 
 console.log(bad ? `\n${bad} failed` : "\nall good");
 process.exit(bad ? 1 : 0);

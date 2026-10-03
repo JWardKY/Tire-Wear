@@ -84,6 +84,30 @@ export function suggestCode(codes = [], entries = []) {
   return (shop || codes[0] || {}).code || "";
 }
 
+/* ── What tire work charges to ────────────────────────────────────
+   Tread walk-arounds are not shop time. Every piece of tire work this
+   shop has ever booked by hand — tread depths, tread checks, airing a
+   tire up, changing a set of drives — went to the tire code, and the
+   clock on the walk-around has to go to the same place or the fleet
+   cannot add up what tires cost it.
+
+   So this is NOT suggestCode: the code is not a guess from what the
+   mechanic happened to charge earlier in the day, it is what the job
+   IS. It still lands on the card where it can be changed, for the
+   walk-around that was really part of a bigger job.
+
+   Looked up by number first, then by name, so the chart of accounts
+   can be renumbered or renamed without this silently falling back to
+   a shop code. Returns "" when the fleet has no tire code at all, and
+   the caller falls back rather than refusing to book the hours. */
+export const TIRE_CODE = "878";
+
+export function tireCode(codes = []) {
+  const hit = codes.find((c) => c.code === TIRE_CODE)
+    || codes.find((c) => /\btires?\b/i.test(String(c.name || "")));
+  return hit ? hit.code : "";
+}
+
 /* Starting and stopping, as one function so the three screens cannot
    disagree about what a stint is. */
 export function toggle(d = {}, at = Date.now()) {
