@@ -28,6 +28,9 @@ import { planPrice, sayPlan, idsFor, spendAfter, worthAsking } from "./priceFlow
    comes off for the same reasons as one pulled on its own. */
 import { reasonsFor, keepReason, sayReason, isFailure, DEFAULT_REASON }
   from "./pullReason.js";
+import * as time from "./timeData.js";
+import { hms, liveSeconds, quarters, suggestCode, toggle, EMPTY, treadEntry }
+  from "./jobClock.js";
 
 /* ────────────────────────────────────────────────────────────────
    THE ALLEN COMPANY · HAUL DIVISION — TIRE WEAR
@@ -216,6 +219,33 @@ export default function TireWear({ who, tab, onBusy }) {
     setTireNotes: (tireId, notes) => run(() => db.setTireNotes(tireId, notes)),
     saveInspection: (vehId, date, odo, entries) =>
       run(() => db.saveInspection(vehId, date, odo, entries, who)),
+
+    /* Gauging twelve wheels is work, and it was the one job in this
+       app that left no trace on anybody's hours. The clock on the
+       walk-around books them here, against the truck they were spent
+       on.
+
+       Deliberately not wrapped in run(): the readings have already
+       saved by the time this is called, so an hours failure must come
+       back to the screen as its own sentence rather than as "that did
+       not save" over a save that did. */
+    bookTireTime: async (vehId, job) => {
+      const m = await time.findMechanic(who);
+      if (!m) throw new Error(
+        `The readings saved, but there is nobody on the roster for ${who}, `
+        + `so the hours have nowhere to go. Add yourself under Setup.`);
+      const [codes, today] = await Promise.all([
+        time.listCostCodes(),
+        time.listDay(m.id, job.date).catch(() => []),
+      ]);
+      const costCode = suggestCode(codes, today);
+      if (!costCode) throw new Error(
+        "The readings saved, but there are no cost codes set up, so the hours "
+        + "have nothing to charge to.");
+      const entry = treadEntry({ ...job, vehId, costCode }, job.date);
+      await time.addEntry({ ...entry, mechanicId: m.id });
+      return { hours: entry.hours, name: m.name, costCode };
+    },
     deleteReading: (id) => run(() => db.deleteReading(id)),
     logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
     updateSettings: (patch) => run(() => db.updateSettings(patch)),
@@ -573,11 +603,42 @@ function VehicleDetail(props) {
   const [insDate, setInsDate] = useState(todayISO());
   const [insOdo, setInsOdo] = useState("");
   const [draft, setDraft] = useState({});
+  /* The walk-around's own clock. Gauging twelve wheels takes what it
+     takes, and until now it was the one job in this app that left no
+     trace on anybody's hours. */
+  const [job, setJob] = useState(EMPTY);
+  const [now, setNow] = useState(Date.now());
+  const [booked, setBooked] = useState(null);
+  const [bookErr, setBookErr] = useState("");
+
+  useEffect(() => {
+    if (!job.runningAt) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [job.runningAt]);
+
+  /* A clock left running when the tab closes is somebody's pay. */
+  useEffect(() => {
+    if (!job.runningAt) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [job.runningAt]);
+
+  const jobSecs = liveSeconds(job, now);
 
   function startInspection() {
     setInsDate(todayISO());
     setInsOdo(lastOdo != null ? String(lastOdo) : "");
     setDraft({});
+    setBooked(null);
+    setBookErr("");
+    /* Started here rather than on a second button. Pressing Record
+       tread IS starting the job, and a clock somebody has to remember
+       to start is a clock that mostly reads nought. It can be stopped
+       and started again, and nothing is booked until the readings
+       are saved. */
+    setJob(toggle(EMPTY));
     setMode("inspect");
   }
 
@@ -611,6 +672,26 @@ function VehicleDetail(props) {
       entries.push({ tireId: t.id, depth: Number(val) });
     });
     await actions.saveInspection(v.id, insDate, odo, entries);
+
+    /* The readings are in. The hours are a separate write and a
+       separate failure: one must never take the other down. */
+    const stopped = job.runningAt ? toggle(job) : job;
+    const secs = liveSeconds(stopped, Date.now());
+    setJob(EMPTY);
+    setMode("view");
+    if (secs <= 0) return;
+    try {
+      const b = await actions.bookTireTime(v.id, {
+        ...stopped, date: insDate, tires: entries.length, stoppedAt: Date.now(),
+      });
+      setBooked(b);
+    } catch (e) {
+      setBookErr(e.message || String(e));
+    }
+  }
+
+  function cancelInspection() {
+    setJob(EMPTY);
     setMode("view");
   }
 
@@ -658,7 +739,7 @@ function VehicleDetail(props) {
             <Btn onClick={() => setOdoOpen(true)} tone="ghost">Log mileage</Btn>
             {mode === "view"
               ? <Btn onClick={startInspection} disabled={mountable === 0}>Record tread</Btn>
-              : <Btn onClick={() => setMode("view")} tone="ghost">Cancel</Btn>}
+              : <Btn onClick={cancelInspection} tone="ghost">Cancel</Btn>}
           </div>
         </div>
 
@@ -705,6 +786,28 @@ function VehicleDetail(props) {
               </div>
             )}
             <div style={{ flex: 1 }} />
+            {/* The clock. It started when Record tread was pressed and
+                what it reads goes on the mechanic's card when the
+                readings are saved. */}
+            <div className="flex items-center" style={{ gap: 10, paddingBottom: 4 }}>
+              <div>
+                <div style={{ fontFamily: FM, fontSize: 22, fontWeight: 600, lineHeight: 1,
+                  color: job.runningAt ? C.green700 : C.green900 }}>
+                  {hms(jobSecs)}
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                  {job.runningAt
+                    ? "on the clock"
+                    : jobSecs > 0 ? `${nf(quarters(jobSecs), 2)} hr to your card` : "paused"}
+                </div>
+              </div>
+              <button onClick={() => setJob(toggle(job))}
+                style={{ fontFamily: FD, fontSize: 12.5, fontWeight: 700, letterSpacing: "0.06em",
+                  padding: "8px 14px", borderRadius: 5, cursor: "pointer", border: "none",
+                  color: "#fff", background: job.runningAt ? C.pull : C.green700 }}>
+                {job.runningAt ? "STOP" : "START"}
+              </button>
+            </div>
             <div style={{ fontFamily: FM, fontSize: 12, color: C.muted, paddingBottom: 8 }}>
               {filled}/{mountable} entered
             </div>
@@ -714,6 +817,26 @@ function VehicleDetail(props) {
                 ? `Save ${filled} anyway`
                 : `Save ${filled > 0 ? `${filled} reading${filled > 1 ? "s" : ""}` : "readings"}`}
             </Btn>
+          </div>
+        )}
+
+        {booked && (
+          <div style={{ padding: "10px 16px", background: "#EDF7F0",
+            borderBottom: `1px solid ${C.green700}33`, borderLeft: `4px solid ${C.green700}`,
+            fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>
+            <b>{nf(booked.hours, 2)} hour{booked.hours === 1 ? "" : "s"}</b> went on
+            {" "}{booked.name}&rsquo;s timecard against {v.num}, charged to {booked.costCode}.
+            {" "}
+            <span style={{ color: C.muted }}>
+              Change the cost code on the card if this one belonged to a different job.
+            </span>
+          </div>
+        )}
+        {bookErr && (
+          <div style={{ padding: "10px 16px", background: "#FDF6E3",
+            borderBottom: `1px solid ${C.watch}55`, borderLeft: `4px solid ${C.watch}`,
+            fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>
+            {bookErr}
           </div>
         )}
 

@@ -28,6 +28,7 @@ const SECTIONS = [
   ["move", "Moving a tire to another wheel"],
   ["why", "Why a tire came off"],
   ["caps", "Retreads — times capped"],
+  ["treadclock", "Clocking a walk-around"],
   ["tread", "A reading that cannot be right"],
   ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
@@ -543,6 +544,30 @@ export default function HelpSection() {
           them. If you know the number, open the tire and use <i>Edit these details</i> —
           it asks there too, but it will not stop you saving if you do not know.
         </p>
+      </Block>
+
+      <Block id="treadclock" title="The clock on a tread walk-around">
+        <p style={p}>
+          Pressing <b>Record tread</b> on a truck starts a clock. Gauging twelve wheels is
+          work, and it used to be the one job in this app that left no trace on anybody's
+          hours.
+        </p>
+        <p style={p}>
+          <b>Stop and start it</b> as you like — pulled off for a road call, back again
+          afterwards. The gap is not counted. When you <b>save the readings</b> the time
+          goes straight onto your own timecard, against that truck, as tire work, and the
+          screen tells you how many hours went on and what they charged to.
+        </p>
+        <p style={p}>
+          You are not asked for a cost code. It comes from whatever you have already
+          charged to today, or a shop code if you have not charged anything yet. Change it
+          on your timecard if that truck belonged to a different job.
+        </p>
+        <Note>
+          Nothing is booked until the readings are saved, so <b>Cancel</b> throws the clock
+          away with everything else. And a walk-around where the clock was stopped the
+          whole time books no hours at all — it never invents them.
+        </Note>
       </Block>
 
       <Block id="tread" title="A reading that cannot be right">
