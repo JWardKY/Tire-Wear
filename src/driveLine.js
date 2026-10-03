@@ -27,6 +27,16 @@
 
    Nothing here touches the database. */
 
+/* The clock itself lives in jobClock.js: the equipment card, this and
+   the tread walk-around all run the same one, because three clocks
+   that drift apart are three different answers to "how long did that
+   take". Re-exported so callers of this module get the whole of what
+   a driving line needs from one import. */
+import { liveSeconds, realHours } from "./jobClock.js";
+
+export { hms, liveSeconds, realHours, sayLong, SHORTEST, suggestCode, toggle, EMPTY }
+  from "./jobClock.js";
+
 export const DRIVING = "Driving";
 
 export const isDriving = (e) =>
@@ -40,42 +50,6 @@ export const notDriving = (entries = []) => entries.filter((e) => !isDriving(e))
 
 export const drivenHours = (entries = []) =>
   drivingOnly(entries).reduce((a, e) => a + (Number(e.hours) || 0), 0);
-
-/* The clock, in the shape the equipment card already uses so the two
-   behave the same way under a thumb. */
-export const hms = (sec) => {
-  const s = Math.max(0, Math.floor(sec));
-  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
-
-export const liveSeconds = (d = {}, now = Date.now()) =>
-  (Number(d.seconds) || 0)
-  + (d.runningAt ? Math.max(0, (now - new Date(d.runningAt).getTime()) / 1000) : 0);
-
-/* Quarter hours, because that is the unit payroll charges in — and a
-   trip that happened is never nought: a ten-minute shuttle rounds to a
-   quarter rather than to nothing, which the database would refuse
-   anyway. */
-export function quarters(seconds) {
-  const s = Math.max(0, Number(seconds) || 0);
-  if (s === 0) return 0;
-  return Math.max(0.25, Math.round((s / 3600) * 4) / 4);
-}
-
-/* The cost code nobody is asked for. What this mechanic has already
-   charged to today is the best guess by a distance — a day is usually
-   spent on one or two jobs — and a shop code is the honest fallback,
-   because a truck being shuttled with nothing else booked is shop
-   time. It lands on the saved line where it can be changed. */
-export function suggestCode(codes = [], entries = []) {
-  const live = entries.filter((e) => e.costCode);
-  for (let i = live.length - 1; i >= 0; i -= 1) {
-    const c = codes.find((x) => x.code === live[i].costCode);
-    if (c) return c.code;
-  }
-  const shop = codes.find((c) => String(c.codeGroup || c.code_group || "").toLowerCase() === "shop");
-  return (shop || codes[0] || {}).code || "";
-}
 
 /* Why this trip cannot go on the card yet, or "". Two things, and one
    of them is filled in for them. */
@@ -102,7 +76,7 @@ export function entryFrom(d = {}, date) {
        split, the payroll export — and filing driving under it would
        quietly inflate every one of those. */
     where: "driving",
-    hours: quarters(liveSeconds(d, d.stoppedAt ?? Date.now())),
+    hours: realHours(liveSeconds(d, d.stoppedAt ?? Date.now())),
     costCode: d.costCode,
     note: clean(d.note) || null,
     workTypes: [...types, DRIVING],

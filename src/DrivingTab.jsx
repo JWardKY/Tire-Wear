@@ -14,7 +14,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { C, FD, FM } from "./theme.js";
 import { Btn, Field, SectionLabel, inp, th, td, tdNum, linkBtn, nf } from "./ui.jsx";
 import UnitPicker from "./UnitPicker.jsx";
-import { drivingOnly, drivenHours, hms, liveSeconds, quarters,
+import { drivingOnly, drivenHours, hms, liveSeconds, realHours, sayLong,
   suggestCode, entryFrom } from "./driveLine.js";
 
 /* A phone throws a backgrounded tab away whenever it likes, and a
@@ -64,6 +64,8 @@ export default function DrivingTab({ date, mechanicId, entries, vehicles, codes,
   /* Stopping puts the trip on the card. There is no Save: "start and
      stop driving" is the whole of what this tab was asked to do, and a
      trip nobody saved would be a trip that did not get paid. */
+  const [tooShort, setTooShort] = useState("");
+
   const stop = useCallback(async () => {
     const stoppedAt = Date.now();
     const trip = {
@@ -74,7 +76,18 @@ export default function DrivingTab({ date, mechanicId, entries, vehicles, codes,
       costCode: suggestCode(codes, entries),
       stoppedAt,
     };
-    await onAdd(entryFrom(trip, date));
+    const entry = entryFrom(trip, date);
+    /* Under eighteen seconds there is no hundredth of an hour to
+       write, and the database refuses nought hours. A clock started
+       and stopped in the same breath is a mis-tap, not a trip. */
+    if (!entry.hours) {
+      setTooShort(`That was only ${sayLong(liveSeconds(trip, stoppedAt))} — too short to `
+        + `put on your card, so nothing was booked.`);
+      setD({ ...empty, vehId: d.vehId });
+      return;
+    }
+    setTooShort("");
+    await onAdd(entry);
     /* The truck stays picked: the next thing a mechanic does is
        usually drive it back. */
     setD({ ...empty, vehId: d.vehId });
@@ -132,7 +145,7 @@ export default function DrivingTab({ date, mechanicId, entries, vehicles, codes,
             </div>
             <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>
               {running ? `Driving ${veh ? veh.num : ""} — the clock is running`
-                : secs > 0 ? `${nf(quarters(secs), 2)} hours, ready to go on the card`
+                : secs > 0 ? `${sayLong(secs)} — ${nf(realHours(secs), 2)} hr to the card`
                 : "Pick the truck, then press Start"}
             </div>
           </div>
@@ -146,6 +159,11 @@ export default function DrivingTab({ date, mechanicId, entries, vehicles, codes,
             {running ? "STOP" : "START"}
           </button>
         </div>
+
+        {tooShort && (
+          <p style={{ fontSize: 12.5, color: C.watch, fontWeight: 600,
+                      margin: "12px 0 0", lineHeight: 1.5 }}>{tooShort}</p>
+        )}
 
         {running && (
           <p style={{ fontSize: 12.5, color: C.muted, margin: "12px 0 0", lineHeight: 1.5 }}>

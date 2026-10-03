@@ -15,7 +15,7 @@
    Needs nothing: no database, no browser.
 */
 import { DRIVING, isDriving, drivingOnly, notDriving, drivenHours,
-  hms, liveSeconds, quarters, suggestCode, whyNotReady, ready, entryFrom }
+  hms, liveSeconds, realHours, sayLong, suggestCode, whyNotReady, ready, entryFrom }
   from "../src/driveLine.js";
 
 let bad = 0;
@@ -68,17 +68,13 @@ ok("a running one counts on from where it started",
 ok("a clock that reads backwards never subtracts",
   liveSeconds({ seconds: 900, runningAt: "2026-10-02T13:10:00Z" }, T0) === 900);
 
-console.log("\nhours, the way payroll charges them:");
-ok("half an hour", quarters(1800) === 0.5);
-ok("an hour and a quarter", quarters(4500) === 1.25);
-ok("rounded to the nearest quarter", quarters(2000) === 0.5, quarters(2000));
-/* The one that matters: a trip that happened is never nought hours.
-   Ten minutes down the road is a quarter, and the database refuses a
-   row with nought hours on it anyway. */
-ok("a ten-minute shuttle is a quarter, not nothing", quarters(600) === 0.25, quarters(600));
-ok("…and so is two minutes", quarters(120) === 0.25, quarters(120));
-ok("but a clock never started is nought", quarters(0) === 0);
-ok("…and junk is nought", quarters(null) === 0 && quarters("x") === 0);
+console.log("\nhours — real time, not quarters:");
+/* A ten-minute shuttle books ten minutes. It used to book fifteen. */
+ok("ten minutes is ten minutes", realHours(600) === 0.17, realHours(600));
+ok("…and not a quarter of an hour", realHours(600) !== 0.25);
+ok("half an hour", realHours(1800) === 0.5);
+ok("a mis-tap books nothing", realHours(4) === 0);
+ok("a clock never started is nought", realHours(0) === 0);
 
 console.log("\nthe cost code nobody is asked for:");
 /* What they have already charged today is the best guess by a
@@ -115,6 +111,10 @@ ok("Driving is on it", e.workTypes.includes(DRIVING), e.workTypes);
    shape addEntry already writes. */
 ok("it is an ordinary time entry",
   e.hours === 0.5 && e.costCode === "880" && e.date === "2026-10-02", e);
+/* Five minutes on the road books five minutes. */
+ok("…for the time actually driven",
+  entryFrom({ vehId: "v1", seconds: 300, costCode: "880", stoppedAt: T0 }).hours === 0.08,
+  entryFrom({ vehId: "v1", seconds: 300, costCode: "880", stoppedAt: T0 }).hours);
 ok("…booked as driving, not as a road call", e.where === "driving", e.where);
 ok("…and specifically not as a road call", e.where !== "road");
 ok("the truck is on it", e.vehId === "v1" && !e.unitLabel, e);

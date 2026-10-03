@@ -180,12 +180,15 @@ await unit.press("Enter");
 await page.waitForTimeout(500);
 ok("picking a truck arms it", !(await go.isDisabled()));
 await go.click();
-await page.waitForTimeout(2600);
+/* Long enough to be a real trip. Hours are real time now rather than
+   rounded up to a quarter, so a clock that runs four seconds books
+   nothing — which is tested on its own further down. */
+await page.waitForTimeout(20000);
 t = await page.locator("body").innerText();
 ok("the clock is running", /the clock is running/i.test(t),
   (t.match(/[^\n]*clock is running[^\n]*/i) || [""])[0]);
 ok("…against the truck picked", /DT-898/.test(t), t.slice(0, 500));
-ok("…and it is counting", /0:00:0[1-9]/.test(t), (t.match(/\d:\d\d:\d\d/) || [""])[0]);
+ok("…and it is counting", /0:00:(0[1-9]|[1-5]\d)/.test(t), (t.match(/\d:\d\d:\d\d/) || [""])[0]);
 ok("the button now says Stop",
   /STOP/.test(await page.getByRole("button", { name: /^START$|^STOP$/ }).first().innerText()));
 /* Started on the wrong truck. Putting it right must not cost the
@@ -201,7 +204,7 @@ await page.waitForTimeout(700);
 t = await page.locator("body").innerText();
 ok("…and the trip follows the truck that was really driven",
   /DT-889/.test(t), t.slice(0, 600));
-ok("…without the clock being reset", /0:00:0[1-9]|0:00:1\d/.test(t),
+ok("…without the clock being reset", /0:00:(0[1-9]|[1-5]\d)/.test(t),
   [ran, (t.match(/\d:\d\d:\d\d/) || [])[0]].join(" → "));
 /* Back to the one this test books against. */
 await page.getByLabel("Equipment").first().fill("898");
@@ -232,10 +235,10 @@ ok("…marked as driving", (body?.work_types || []).includes("Driving"),
 ok("…against the truck that was driven", body?.vehicle_id === "v1", JSON.stringify(body));
 ok("…booked as driving, not as a road call",
   body?.where_worked === "driving", body?.where_worked);
-/* A three-second shuttle is still a quarter hour: payroll charges in
-   quarters and the database refuses a row with nought hours. */
-ok("…for a quarter of an hour, the smallest payroll charges",
-  Number(body?.hours) === 0.25, body?.hours);
+/* Real time, not a quarter hour. Twenty seconds books a hundredth of
+   an hour, which is as fine as tw_time_entries.hours goes. */
+ok("…for the time actually driven, not a rounded-up quarter",
+  Number(body?.hours) > 0 && Number(body?.hours) < 0.25, body?.hours);
 /* So a supervisor can see a clock was really run rather than a figure
    typed in afterwards. */
 ok("…with the seconds actually run kept behind it",
@@ -250,11 +253,27 @@ ok("the cost code was filled in rather than asked for",
 console.log("\n── and after ──");
 t = await page.locator("body").innerText();
 ok("the trip is on the list", /DT-898/.test(t), t.slice(0, 700));
-ok("…and counted at the top", /0\.25 hours driving/i.test(t),
+ok("…and counted at the top", /0\.0\d hours driving/i.test(t),
   (t.match(/[^\n]*hours driving[^\n]*/i) || [""])[0]);
 ok("the clock is back to nothing", /0:00:00/.test(t), t.slice(0, 700));
 /* The next thing a mechanic does is usually drive it back. */
 ok("…but the truck stays picked", /DT-898/.test(t), t.slice(0, 700));
+
+console.log("\n── a trip too short to be one ──");
+/* Real time means a press of Start and Stop books nothing: under
+   eighteen seconds there is no hundredth of an hour to write and the
+   database refuses nought hours. */
+const beforeShort = writes.filter((w) => w.table === "tw_time_entries").length;
+await page.getByRole("button", { name: /^START$/ }).first().click();
+await page.waitForTimeout(900);
+await page.getByRole("button", { name: /^STOP$/ }).first().click();
+await page.waitForTimeout(1300);
+t = await page.locator("body").innerText();
+ok("a few seconds books nothing",
+  writes.filter((w) => w.table === "tw_time_entries").length === beforeShort,
+  JSON.stringify(writes.filter((w) => w.table === "tw_time_entries").length));
+ok("…and it says why rather than failing quietly",
+  /too short to put on your card/i.test(t), t.slice(0, 700));
 
 console.log("\n── changing where it charges ──");
 /* Asked for after the fact, on the finished line, rather than put in
@@ -272,7 +291,9 @@ ok("…and it saves", patched.some((w) => w.body?.cost_code === "SHOP-CF"),
 await page.getByRole("button", { name: "Today", exact: true }).first().click();
 await page.waitForTimeout(1600);
 t = await page.locator("body").innerText();
-ok("the driving hours are on the timecard itself", /3\.25/.test(t),
+/* Three hours of shop work already on the card, plus the trip just
+   clocked — real time, so a hundredth rather than a quarter. */
+ok("the driving hours are on the timecard itself", /3\.0\d hours on/.test(t),
   (t.match(/[^\n]*hours on[^\n]*/i) || [""])[0]);
 ok("…added to the shop hours already there, not instead of them",
   /Gearbox out/.test(t), t.slice(0, 900));

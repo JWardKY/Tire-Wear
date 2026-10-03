@@ -28,6 +28,7 @@ const SECTIONS = [
   ["move", "Moving a tire to another wheel"],
   ["why", "Why a tire came off"],
   ["caps", "Retreads — times capped"],
+  ["treadclock", "Clocking a walk-around"],
   ["tread", "A reading that cannot be right"],
   ["duals", "Duals that do not match"],
   ["truck", "One truck's file"],
@@ -202,8 +203,14 @@ export default function HelpSection() {
           and the time stays where it is.
         </p>
         <p style={p}>
-          Trips are charged in <b>quarter hours</b>, which is how payroll charges
-          everything, so a ten-minute run down the road comes out as a quarter.
+          Hours go on the card to two decimal places, because that is what payroll reads
+          — five minutes shows as <b>0.08</b>. The exact seconds are kept with the entry,
+          so nothing is lost.
+        </p>
+        <p style={p}>
+          <b>You get the time you actually drove.</b> Five minutes is five minutes. A
+          trip of a few seconds books nothing at all and says so — that is a mis-tap, not
+          a trip.
         </p>
         <p style={p}>
           <b>You are not asked for a cost code.</b> It is filled in from whatever you have
@@ -543,6 +550,48 @@ export default function HelpSection() {
           them. If you know the number, open the tire and use <i>Edit these details</i> —
           it asks there too, but it will not stop you saving if you do not know.
         </p>
+      </Block>
+
+      <Block id="treadclock" title="The clock on a tread walk-around">
+        <p style={p}>
+          Pressing <b>Record tread</b> on a truck starts a clock. Gauging twelve wheels is
+          work, and it used to be the one job in this app that left no trace on anybody's
+          hours.
+        </p>
+        <p style={p}>
+          <b>Stop and start it</b> as you like — pulled off for a road call, back again
+          afterwards. The gap is not counted. When you <b>save the readings</b> the time
+          goes straight onto your own timecard, against that truck, as tire work, and the
+          screen tells you what went on and what it charged to.
+        </p>
+        <p style={p}>
+          <b>You get the time you actually took.</b> Twenty minutes gauging books twenty
+          minutes, not half an hour. It goes on the card to two decimal places because
+          that is what payroll reads, so twenty minutes shows as <b>0.33</b> — the exact
+          seconds are kept with the entry. A clock that ran a few seconds books nothing
+          and says so.
+        </p>
+        <p style={p}>
+          <b>It asks for your PIN before the hours go on.</b> The name at the top of these
+          screens is only a badge — anyone standing at the tablet can switch it — so it is
+          fine for saying who gauged a tire and not good enough for somebody&rsquo;s pay.
+          The hours go to whoever puts the PIN in, not to whoever the badge says. If you
+          have already put your PIN in this session it does not ask again.
+        </p>
+        <p style={p}>
+          You are not asked for a cost code. It comes from whatever you have already
+          charged to today, or a shop code if you have not charged anything yet. Change it
+          on your timecard if that truck belonged to a different job.
+        </p>
+        <Note>
+          Nothing is booked until the readings are saved, so <b>Cancel</b> throws the clock
+          away with everything else. And a walk-around where the clock was stopped the
+          whole time books no hours at all — it never invents them.
+          <br /><br />
+          If you close the PIN pad without putting one in, <b>the hours are not lost</b>.
+          The readings are already saved and the time sits at the top of the truck with a
+          button to put it on a card whenever you are ready.
+        </Note>
       </Block>
 
       <Block id="tread" title="A reading that cannot be right">
