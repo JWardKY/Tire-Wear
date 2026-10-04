@@ -239,13 +239,42 @@ t = await page.locator("body").innerText();
 ok("the form says whose card it is", /Joshua Sawyers['’]s card/i.test(t),
   (t.match(/[^\n]*card — every hour[^\n]*/i) || [""])[0]);
 
-await page.getByLabel("Truck").first().selectOption("v2");
-await page.waitForTimeout(200);
+/* Typed, not chosen from a list. A supervisor looking at a <select>
+   labelled "Truck" holding 276 units could not find the piece of
+   equipment they meant, and the equipment card and the Driving tab
+   had both already replaced that control. */
+const unit = page.getByLabel("Equipment").first();
+ok("the unit is typed in, the way it is on the equipment card",
+  (await unit.evaluate((el) => el.tagName)) === "INPUT",
+  await unit.evaluate((el) => el.tagName));
+await unit.click();
+await unit.fill("1800");
+await page.waitForTimeout(500);
+ok("…and typing part of the number finds it",
+  /DT-1800/.test(await page.locator("body").innerText()));
+await unit.press("Enter");
+await page.waitForTimeout(400);
 await page.getByLabel("Cost code").first().selectOption("873");
 await page.waitForTimeout(200);
 await page.getByLabel("Hours").first().fill("3.37");
 await page.waitForTimeout(200);
-await page.getByRole("button", { name: /^Add hours$/ }).first().click();
+/* The form says what it is about to write. It said "Save changes",
+   which left somebody looking for the button that books the hours;
+   then it said "Book 3.37 hr to DT-1800", which read as though it
+   were about to sweep the whole gap onto that one truck. It only
+   ever writes the figure in the Hours box, as one line. */
+t = await page.locator("body").innerText();
+ok("it says it is adding one line", /adds one line/i.test(t),
+  (t.match(/[^\n]*one line[^\n]*/i) || [""])[0]);
+ok("…for the hours typed, against the unit picked",
+  /3\.37 hr on DT-1800/.test(t), (t.match(/[^\n]*hr on[^\n]*/i) || [""])[0]);
+ok("…and what it charges to", /charged to 873 — Service/.test(t),
+  (t.match(/[^\n]*charged to[^\n]*/i) || [""])[0]);
+/* The sentence somebody needed before they would press it. */
+ok("…and that the rest of the day is left alone",
+  /Nothing else on the day changes/i.test(t),
+  (t.match(/[^\n]*Nothing else[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Add this line$/i }).first().click();
 await page.waitForTimeout(1800);
 
 ok("the hours are written", entryWrites("POST").length === 1,
@@ -276,7 +305,11 @@ await page.getByRole("button", { name: "Edit", exact: true }).first().click();
 await page.waitForTimeout(1000);
 await page.getByLabel("Hours").first().fill("1.50");
 await page.waitForTimeout(200);
-await page.getByRole("button", { name: /^Save changes$/ }).first().click();
+t = await page.locator("body").innerText();
+ok("an edit says it is changing one line, not the day",
+  /changes one line to/i.test(t) && /Nothing else on the day changes/i.test(t),
+  (t.match(/[^\n]*one line[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Save this line$/i }).first().click();
 await page.waitForTimeout(1600);
 ok("the correction is written", entryWrites("PATCH").length === 1,
   JSON.stringify(writes.map((w) => w.method + " " + w.table)));

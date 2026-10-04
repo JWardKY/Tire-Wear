@@ -12,6 +12,7 @@ import MyJobs from "./MyJobsSection.jsx";
 import * as shop from "./shopData.js";
 import * as partsData from "./partsData.js";
 import EquipmentWorked from "./EquipmentWorked.jsx";
+import UnitPicker from "./UnitPicker.jsx";
 import { readUnlock, writeUnlock, clearUnlock } from "./identity.js";
 import { sayOffline } from "./dbError.js";
 import DrivingTab from "./DrivingTab.jsx";
@@ -680,6 +681,9 @@ export function EntryDialog({ entry, vehicles, codes, busy, forMechanic, onClose
 
   const againstTruck = !!f.vehId;
   const hours = Number(f.hours);
+  const unitName = (vehicles.find((v) => v.id === f.vehId) || {}).num
+    || f.unitLabel.trim();
+  const codeName = (codes.find((c) => c.code === f.costCode) || {}).name || "";
   const ok = f.costCode && hours > 0 && hours <= 24
     && (againstTruck || f.unitLabel.trim());
 
@@ -699,13 +703,22 @@ export function EntryDialog({ entry, vehicles, codes, busy, forMechanic, onClose
         : "Every hour needs a home and a cost code"}
       onClose={onClose} width={580}>
       <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <Field label="Truck">
-          <select value={f.vehId} onChange={set("vehId")} style={inp}>
-            <option value="">Not against a truck…</option>
-            {vehicles.map((v) => (
-              <option key={v.id} value={v.id}>{v.num} — {v.make} {v.model}</option>
-            ))}
-          </select>
+        {/* Typed, not chosen from a list. This was a <select> holding
+            the whole fleet, which on a phone is a spinning wheel of
+            276 units with no way to jump to one — the control the
+            equipment card and the Driving tab both already replaced.
+            Called Equipment rather than Truck because half of what it
+            holds is not a truck: pavers, rollers, yard equipment. */}
+        <Field label="Equipment">
+          <UnitPicker value={f.vehId} vehicles={vehicles}
+            placeholder="Type the unit number…"
+            onPick={(v) => setF((p) => ({ ...p,
+              vehId: v || "",
+              /* A unit and a typed label are the same field wearing two
+                 hats, and the database takes one or the other. Picking
+                 a unit has to clear the label or the row carries both
+                 and reads as whichever the view happens to prefer. */
+              unitLabel: v ? "" : p.unitLabel }))} />
         </Field>
         {againstTruck ? (
           <Field label="Where">
@@ -758,10 +771,31 @@ export function EntryDialog({ entry, vehicles, codes, busy, forMechanic, onClose
         </p>
       )}
 
+      {/* What this button is about to write, in a sentence.
+
+          The form said "Save changes", which left somebody looking for
+          the button that books the hours. Then it said "Book 3.37 hr to
+          DT-1800", which read as though it were about to sweep the
+          whole day — the whole GAP — onto that one truck. It never
+          was: it writes one line for the figure in the Hours box and
+          leaves the rest of the card alone. Both readings were the
+          label's fault, so the label stops trying to carry it and the
+          sentence says it instead. */}
+      {ok && (
+        <p style={{ fontSize: 12.5, color: C.muted, marginTop: 12, lineHeight: 1.55 }}>
+          {entry.id ? "This changes one line to " : "This adds one line: "}
+          <b style={{ color: C.ink }}>
+            {nf(hours, 2)} hr on {unitName}
+          </b>, charged to {f.costCode}
+          {codeName ? ` — ${codeName}` : ""}.
+          {" "}Nothing else on the day changes.
+        </p>
+      )}
+
       <div className="flex justify-end mt-4" style={{ gap: 8 }}>
         <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
         <Btn disabled={busy || !ok} onClick={() => onSave(f)}>
-          {entry.id ? "Save changes" : "Add hours"}
+          {entry.id ? "Save this line" : "Add this line"}
         </Btn>
       </div>
     </Modal>
