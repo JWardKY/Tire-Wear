@@ -258,13 +258,23 @@ await page.getByLabel("Cost code").first().selectOption("873");
 await page.waitForTimeout(200);
 await page.getByLabel("Hours").first().fill("3.37");
 await page.waitForTimeout(200);
-/* The button says what it does. "Save changes" over a form that is
-   booking hours against a unit left somebody looking for the button
-   that books them. */
+/* The form says what it is about to write. It said "Save changes",
+   which left somebody looking for the button that books the hours;
+   then it said "Book 3.37 hr to DT-1800", which read as though it
+   were about to sweep the whole gap onto that one truck. It only
+   ever writes the figure in the Hours box, as one line. */
 t = await page.locator("body").innerText();
-ok("the button names the unit and the hours",
-  /Book 3\.37 hr to DT-1800/i.test(t), (t.match(/Book[^\n]*/i) || [""])[0]);
-await page.getByRole("button", { name: /^Book 3\.37 hr to DT-1800$/i }).first().click();
+ok("it says it is adding one line", /adds one line/i.test(t),
+  (t.match(/[^\n]*one line[^\n]*/i) || [""])[0]);
+ok("…for the hours typed, against the unit picked",
+  /3\.37 hr on DT-1800/.test(t), (t.match(/[^\n]*hr on[^\n]*/i) || [""])[0]);
+ok("…and what it charges to", /charged to 873 — Service/.test(t),
+  (t.match(/[^\n]*charged to[^\n]*/i) || [""])[0]);
+/* The sentence somebody needed before they would press it. */
+ok("…and that the rest of the day is left alone",
+  /Nothing else on the day changes/i.test(t),
+  (t.match(/[^\n]*Nothing else[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Add this line$/i }).first().click();
 await page.waitForTimeout(1800);
 
 ok("the hours are written", entryWrites("POST").length === 1,
@@ -295,7 +305,11 @@ await page.getByRole("button", { name: "Edit", exact: true }).first().click();
 await page.waitForTimeout(1000);
 await page.getByLabel("Hours").first().fill("1.50");
 await page.waitForTimeout(200);
-await page.getByRole("button", { name: /^Book 1\.50 hr to DT-861$/i }).first().click();
+t = await page.locator("body").innerText();
+ok("an edit says it is changing one line, not the day",
+  /changes one line to/i.test(t) && /Nothing else on the day changes/i.test(t),
+  (t.match(/[^\n]*one line[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Save this line$/i }).first().click();
 await page.waitForTimeout(1600);
 ok("the correction is written", entryWrites("PATCH").length === 1,
   JSON.stringify(writes.map((w) => w.method + " " + w.table)));

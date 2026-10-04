@@ -683,6 +683,7 @@ export function EntryDialog({ entry, vehicles, codes, busy, forMechanic, onClose
   const hours = Number(f.hours);
   const unitName = (vehicles.find((v) => v.id === f.vehId) || {}).num
     || f.unitLabel.trim();
+  const codeName = (codes.find((c) => c.code === f.costCode) || {}).name || "";
   const ok = f.costCode && hours > 0 && hours <= 24
     && (againstTruck || f.unitLabel.trim());
 
@@ -770,13 +771,31 @@ export function EntryDialog({ entry, vehicles, codes, busy, forMechanic, onClose
         </p>
       )}
 
+      {/* What this button is about to write, in a sentence.
+
+          The form said "Save changes", which left somebody looking for
+          the button that books the hours. Then it said "Book 3.37 hr to
+          DT-1800", which read as though it were about to sweep the
+          whole day — the whole GAP — onto that one truck. It never
+          was: it writes one line for the figure in the Hours box and
+          leaves the rest of the card alone. Both readings were the
+          label's fault, so the label stops trying to carry it and the
+          sentence says it instead. */}
+      {ok && (
+        <p style={{ fontSize: 12.5, color: C.muted, marginTop: 12, lineHeight: 1.55 }}>
+          {entry.id ? "This changes one line to " : "This adds one line: "}
+          <b style={{ color: C.ink }}>
+            {nf(hours, 2)} hr on {unitName}
+          </b>, charged to {f.costCode}
+          {codeName ? ` — ${codeName}` : ""}.
+          {" "}Nothing else on the day changes.
+        </p>
+      )}
+
       <div className="flex justify-end mt-4" style={{ gap: 8 }}>
         <Btn tone="ghost" onClick={onClose}>Cancel</Btn>
-        {/* Named for what it does. "Save changes" over a form that is
-            booking hours against a unit left somebody looking for the
-            button that books them. */}
         <Btn disabled={busy || !ok} onClick={() => onSave(f)}>
-          {ok ? `Book ${nf(hours, 2)} hr to ${unitName}` : "Book these hours"}
+          {entry.id ? "Save this line" : "Add this line"}
         </Btn>
       </div>
     </Modal>
