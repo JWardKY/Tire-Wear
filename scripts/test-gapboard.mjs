@@ -239,13 +239,32 @@ t = await page.locator("body").innerText();
 ok("the form says whose card it is", /Joshua Sawyers['’]s card/i.test(t),
   (t.match(/[^\n]*card — every hour[^\n]*/i) || [""])[0]);
 
-await page.getByLabel("Truck").first().selectOption("v2");
-await page.waitForTimeout(200);
+/* Typed, not chosen from a list. A supervisor looking at a <select>
+   labelled "Truck" holding 276 units could not find the piece of
+   equipment they meant, and the equipment card and the Driving tab
+   had both already replaced that control. */
+const unit = page.getByLabel("Equipment").first();
+ok("the unit is typed in, the way it is on the equipment card",
+  (await unit.evaluate((el) => el.tagName)) === "INPUT",
+  await unit.evaluate((el) => el.tagName));
+await unit.click();
+await unit.fill("1800");
+await page.waitForTimeout(500);
+ok("…and typing part of the number finds it",
+  /DT-1800/.test(await page.locator("body").innerText()));
+await unit.press("Enter");
+await page.waitForTimeout(400);
 await page.getByLabel("Cost code").first().selectOption("873");
 await page.waitForTimeout(200);
 await page.getByLabel("Hours").first().fill("3.37");
 await page.waitForTimeout(200);
-await page.getByRole("button", { name: /^Add hours$/ }).first().click();
+/* The button says what it does. "Save changes" over a form that is
+   booking hours against a unit left somebody looking for the button
+   that books them. */
+t = await page.locator("body").innerText();
+ok("the button names the unit and the hours",
+  /Book 3\.37 hr to DT-1800/i.test(t), (t.match(/Book[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Book 3\.37 hr to DT-1800$/i }).first().click();
 await page.waitForTimeout(1800);
 
 ok("the hours are written", entryWrites("POST").length === 1,
@@ -276,7 +295,7 @@ await page.getByRole("button", { name: "Edit", exact: true }).first().click();
 await page.waitForTimeout(1000);
 await page.getByLabel("Hours").first().fill("1.50");
 await page.waitForTimeout(200);
-await page.getByRole("button", { name: /^Save changes$/ }).first().click();
+await page.getByRole("button", { name: /^Book 1\.50 hr to DT-861$/i }).first().click();
 await page.waitForTimeout(1600);
 ok("the correction is written", entryWrites("PATCH").length === 1,
   JSON.stringify(writes.map((w) => w.method + " " + w.table)));
