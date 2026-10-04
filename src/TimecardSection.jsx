@@ -660,7 +660,12 @@ function PinSettings({ who, unlocked, onLock }) {
 
 /* ── One line of the day ──────────────────────────────────────── */
 
-function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
+/* Exported because the supervisor's Timecards dialog edits lines too,
+   and two forms for "an hour on a card" would drift apart on the first
+   field either one gained. `forMechanic` is the only difference: a
+   supervisor must be able to see, without looking away, whose pay they
+   are changing. */
+export function EntryDialog({ entry, vehicles, codes, busy, forMechanic, onClose, onSave }) {
   const [f, setF] = useState({
     vehId: entry.vehId || "",
     unitLabel: entry.vehId ? "" : (entry.unit || ""),
@@ -689,7 +694,10 @@ function EntryDialog({ entry, vehicles, codes, busy, onClose, onSave }) {
 
   return (
     <Modal title={entry.id ? "Edit these hours" : "Add hours"}
-      sub="Every hour needs a home and a cost code" onClose={onClose} width={580}>
+      sub={forMechanic
+        ? `${forMechanic}'s card — every hour needs a home and a cost code`
+        : "Every hour needs a home and a cost code"}
+      onClose={onClose} width={580}>
       <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <Field label="Truck">
           <select value={f.vehId} onChange={set("vehId")} style={inp}>

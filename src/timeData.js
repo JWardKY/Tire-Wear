@@ -1,6 +1,7 @@
 import { supabase } from "./supabase.js";
 import { fetchAll } from "./data.js";
 import * as parts from "./partsData.js";
+import * as cardEdit from "./cardEdit.js";
 
 /* The payroll column order and the two costing paths live in their own
    file so a test can load them without a database. Re-exported here
@@ -521,6 +522,88 @@ export async function unapproveCard(d, reason, actor) {
 
   check(await supabase.from("tw_timecard_approvals").delete()
     .eq("mechanic_id", d.mechanicId).eq("work_date", d.date));
+}
+
+/* ── A supervisor changing somebody else's card ───────────────────
+   The punches on the Timecards dialog have always been editable; the
+   booked lines were not, so the half of the gap that is "paid time
+   nobody charged out" had no fix in the app. These are that half.
+
+   Each one logs BEFORE or alongside the write and carries the
+   supervisor's name. addEntry/updateEntry/deleteEntry stay exactly as
+   they are — a mechanic editing their own card is not this, and does
+   not need a supervisor's audit trail on every keystroke. */
+
+const lineFor = (day, e) => ({
+  ...e, unit: e.unit ?? null, date: e.date ?? day.date,
+});
+
+export async function addLineFor(day, line, actor) {
+  if (!actor) throw new Error("Hours can only be added by a named person.");
+  const id = await addEntry({ ...line, mechanicId: day.mechanicId });
+  const { log } = await import("./logData.js");
+  await log({
+    type: "timecard_line_added",
+    mechanicId: day.mechanicId,
+    actor,
+    unit: lineFor(day, line).unit,
+    summary: cardEdit.sayAdded(day.mechanic, lineFor(day, line)),
+    detail: { work_date: line.date || day.date, mechanic: day.mechanic,
+              entry: id, line },
+  });
+  return id;
+}
+
+export async function editLineFor(day, before, after, actor) {
+  if (!actor) throw new Error("Hours can only be corrected by a named person.");
+  await updateEntry(before.id, after);
+  const { log } = await import("./logData.js");
+  await log({
+    type: "timecard_line_edited",
+    mechanicId: day.mechanicId,
+    actor,
+    unit: before.unit || null,
+    summary: cardEdit.sayEdited(day.mechanic, before, lineFor(day, after)),
+    detail: { work_date: after.date || day.date, mechanic: day.mechanic,
+              entry: before.id,
+              changes: cardEdit.changesBetween(before, lineFor(day, after)),
+              before, after },
+  });
+}
+
+/* Removal is the one that cannot be seen afterwards by reading the
+   card, so it takes a reason and the log write is strict: if the trail
+   cannot be written, the hours stay.
+
+   It also pulls the approval. The view works out whether a card is
+   still approved by comparing approved_at against the newest edit on
+   it — which works for an add and for a correction, and does NOT work
+   for a removal: taking the most recently edited line off a day makes
+   that newest edit OLDER, and a card somebody signed can quietly lose
+   hours and go on reading as approved. So an approved card that loses
+   a line is un-approved outright, in the same breath and by the same
+   mechanism a supervisor would use by hand. */
+export async function removeLineFor(day, entry, reason, actor) {
+  const why = String(reason || "").trim();
+  if (why.length < 4) throw new Error("A reason is required to take hours off a card.");
+  if (!actor) throw new Error("Hours can only be removed by a named person.");
+
+  const { logStrict } = await import("./logData.js");
+  await logStrict({
+    type: "timecard_line_removed",
+    mechanicId: day.mechanicId,
+    actor,
+    unit: entry.unit || null,
+    summary: cardEdit.sayRemoved(day.mechanic, entry, why),
+    detail: { reason: why, work_date: entry.date || day.date,
+              mechanic: day.mechanic, entry },
+  });
+
+  await deleteEntry(entry.id);
+
+  if (day.approved) {
+    await unapproveCard(day, `a line was removed — ${why}`, actor);
+  }
 }
 
 /* The gate. Asked of the database rather than of whatever the screen

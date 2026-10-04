@@ -8,11 +8,17 @@ import * as clock from "./nowData.js";
 import { todayISO } from "./day.js";
 import { sayOffline } from "./dbError.js";
 import { summarise } from "./cardLists.js";
+import * as cardEdit from "./cardEdit.js";
+import * as shop from "./shopData.js";
+import { EntryDialog } from "./TimecardSection.jsx";
 
 /* ── The Hours section ────────────────────────────────────────────
-   Where the hours went, for the office. Read only: hours are entered
-   on a mechanic's own timecard behind their PIN, and nothing here
-   edits them.
+   Where the hours went, for the office. Mostly read-only: hours are
+   entered on a mechanic's own timecard behind their PIN. The one
+   exception is the card dialog on the Timecards tab, where a
+   supervisor can correct the punches and the booked lines of somebody
+   else's day — every change signed with their name and written to the
+   work log, because that is one person changing another person's pay.
 
    Three ways of cutting the same range, because three different
    questions get asked of it: who worked, what got worked on, and what
@@ -1050,6 +1056,13 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
   const [shifts, setShifts] = useState(null);
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
+  /* Only loaded when a supervisor actually opens the line form. The
+     fleet and the chart of accounts are two more round trips, and
+     most cards are opened to be read rather than changed. */
+  const [picks, setPicks] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [removing, setRemoving] = useState(null);
+  const [why, setWhy] = useState("");
 
   /* The punches, not just the total. "Clocked 9, booked 6" invites the
      question "when did they clock in and out", and a dialog that cannot
@@ -1069,6 +1082,63 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
       .catch((e) => onErr?.(e.message || String(e)));
     return () => { live = false; };
   }, [day, onErr]);
+
+  const reloadEntries = useCallback(async () => {
+    setEntries(await time.listDay(day.mechanicId, day.date));
+    await onEdited?.();
+  }, [day.mechanicId, day.date, onEdited]);
+
+  /* The gap the dialog shows is worked out from the lines it is
+     holding rather than from the row it was opened with, so it falls
+     as the supervisor works and does not wait for a re-read. */
+  const gap = entries ? cardEdit.gapOf(day.clockHours, entries) : day.difference;
+
+  const openLine = async (entry) => {
+    try {
+      if (!picks) {
+        const [vehicles, codes] = await Promise.all([
+          shop.listVehicles(), time.listCostCodes(),
+        ]);
+        setPicks({ vehicles, codes });
+      }
+      setEditing(entry || { date: day.date });
+    } catch (e) { onErr?.(e.message || String(e)); }
+  };
+
+  const saveLine = async (raw) => {
+    /* The form hands back a vehicle id; the log sentence has to name
+       the truck. Resolved here, where the fleet is already loaded,
+       rather than making the write path go and look it up — a log line
+       reading "3.37 hr on — to 873" is no record of anything. */
+    const f = { ...raw,
+      unit: picks?.vehicles.find((v) => v.id === raw.vehId)?.num
+            || raw.unitLabel || "" };
+    const stop = cardEdit.whyNotSaveable(f) || cardEdit.whyNotAllowed(who);
+    if (stop) { onErr?.(`That line was not saved — ${stop}.`); return; }
+    setBusy(true);
+    try {
+      if (editing?.id) await time.editLineFor(day, editing, f, who);
+      else await time.addLineFor(day, f, who);
+      setEditing(null);
+      await reloadEntries();
+      onErr?.(null);
+    } catch (e) {
+      onErr?.(sayOffline(e) || `That line was not saved — ${e.message || e}`);
+    } finally { setBusy(false); }
+  };
+
+  const removeLine = async () => {
+    setBusy(true);
+    try {
+      await time.removeLineFor(day, removing, why, who);
+      setRemoving(null);
+      setWhy("");
+      await reloadEntries();
+      onErr?.(null);
+    } catch (e) {
+      onErr?.(sayOffline(e) || `Those hours were not removed — ${e.message || e}`);
+    } finally { setBusy(false); }
+  };
 
   const remove = async () => {
     setBusy(true);
@@ -1092,6 +1162,19 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
           onChanged={async () => { await reloadShifts(); await onEdited?.(); }} />
       )}
 
+      {/* The number the supervisor came here to close. Worked out from
+          the lines on screen, so it falls as they go. */}
+      {entries && (
+        <div style={{ padding: "9px 12px", marginBottom: 12, borderRadius: 6,
+          background: Math.abs(gap) < cardEdit.SETTLED ? "#EDF7F0" : "#FDF6E3",
+          borderLeft: `4px solid ${Math.abs(gap) < cardEdit.SETTLED ? C.green700 : C.watch}`,
+          fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>
+          {/* sayGap carries the figure already — printing it twice
+              reads as two different numbers at a glance. */}
+          {cardEdit.sayGap(gap)}
+        </div>
+      )}
+
       {!entries ? (
         <div style={{ color: C.muted }}>Loading the card…</div>
       ) : entries.length === 0 ? (
@@ -1104,9 +1187,12 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
             <thead>
               <tr>
-                {["Unit", "Cost code", "Type of work", "Work order", "Hours"].map((h, i) => (
-                  <th key={h} style={{ ...th, textAlign: i === 4 ? "right" : "left" }}>{h}</th>
-                ))}
+                {["Unit", "Cost code", "Type of work", "Work order", "Hours", ""]
+                  .map((h, i) => (
+                    <th key={h || i} style={{ ...th, textAlign: i >= 4 ? "right" : "left" }}>
+                      {h}
+                    </th>
+                  ))}
               </tr>
             </thead>
             <tbody>
@@ -1124,11 +1210,69 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
                   </td>
                   <td style={{ ...td, fontFamily: FM, color: C.muted }}>{e.workOrder || "—"}</td>
                   <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button disabled={busy} onClick={() => openLine(e)}
+                      style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
+                    <span style={{ color: C.line }}> · </span>
+                    <button disabled={busy} onClick={() => { setRemoving(e); setWhy(""); }}
+                      style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+                  </td>
                 </tr>
               ))}
+              <tr style={{ borderTop: `2px solid ${C.line}`, background: C.paper }}>
+                <td style={{ ...td, fontWeight: 700 }} colSpan={4}>Booked</td>
+                <td style={{ ...td, ...tdNum, fontWeight: 700 }}>
+                  {nf(cardEdit.bookedOf(entries), 2)}
+                </td>
+                <td style={td} />
+              </tr>
             </tbody>
           </table>
         </div>
+      )}
+
+      {entries && (
+        <div style={{ marginTop: 12 }}>
+          <Btn tone="ghost" disabled={busy} onClick={() => openLine(null)}>
+            Add a line
+          </Btn>
+          <span style={{ fontSize: 12.5, color: C.muted, marginLeft: 10 }}>
+            Signed with your name and written to the work log.
+          </span>
+        </div>
+      )}
+
+      {editing && picks && (
+        <EntryDialog entry={editing} vehicles={picks.vehicles} codes={picks.codes}
+          busy={busy} forMechanic={day.mechanic}
+          onClose={() => setEditing(null)} onSave={saveLine} />
+      )}
+
+      {removing && (
+        <Modal title="Take these hours off the card"
+          sub={cardEdit.sayLine(removing)}
+          onClose={() => setRemoving(null)} width={520}>
+          <Field label="Why are these hours coming off?">
+            <input value={why} onChange={(e) => setWhy(e.target.value)}
+              placeholder="Booked twice, wrong mechanic, wrong day…" style={inp} autoFocus />
+          </Field>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: "8px 0 0", lineHeight: 1.55 }}>
+            The line and this reason go to the work log first, and that log cannot be
+            edited or deleted by anyone. Once the row is gone the reason is the only
+            record of it, which is why it is asked for.
+            {day.approved && (
+              <span style={{ display: "block", color: C.watch, fontWeight: 600, marginTop: 5 }}>
+                This card is approved. Taking a line off it withdraws that approval —
+                it will need signing again.
+              </span>
+            )}
+          </p>
+          <div className="flex justify-end mt-4" style={{ gap: 8 }}>
+            <Btn tone="ghost" onClick={() => setRemoving(null)}>Cancel</Btn>
+            <Btn tone="danger" disabled={busy || !!cardEdit.whyNotRemovable(why)}
+              onClick={removeLine}>Remove these hours</Btn>
+          </div>
+        </Modal>
       )}
 
       {entries?.length > 0 && (
