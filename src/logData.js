@@ -22,6 +22,13 @@ const KINDS = new Set([
      approval back is unwinding a sign-off on somebody's pay. Both
      belong in the one table nobody can edit. */
   "timecard_approved", "timecard_unapproved",
+  /* A supervisor adding, correcting or removing a booked line on
+     somebody else's day. The gap on the Timecards board could only
+     ever be half fixed without these, and a supervisor changing
+     another person's pay is the clearest case there is for a line in
+     the table nobody can edit. The removal is logged strictly: once
+     the row is gone, the reason is the only record it existed. */
+  "timecard_line_added", "timecard_line_edited", "timecard_line_removed",
   /* Clocked hours are a pay figure, so a corrected punch is written
      down with who changed it and what it was before — whether that was
      the mechanic fixing their own missed punch-out or a supervisor
@@ -54,11 +61,22 @@ export const EVENT_LABEL = {
   tire_moved: "Tire moved",
   timecard_approved: "Timecard approved",
   timecard_unapproved: "Approval taken back",
+  timecard_line_added: "Hours added by a supervisor",
+  timecard_line_edited: "Hours corrected by a supervisor",
+  timecard_line_removed: "Hours removed by a supervisor",
   shift_corrected: "Punch corrected",
   work_order_assigned: "Work assigned",
   work_order_completed: "Work order completed",
   part_issued: "Parts issued",
 };
+
+/* These names are also a CHECK constraint on tw_work_log.event_type,
+   and the two had drifted: shift_corrected, tire_edited and tire_moved
+   were allowed here and refused by the database, so every one of those
+   writes failed and was swallowed by the catch below. A corrected
+   punch on somebody's pay left no trace for months. The migration
+   work_log_event_types_supervisor_line_edits put the lists back in
+   step — add to BOTH, or the new one silently writes nothing. */
 
 /* A log write must never take down the thing it is recording. The work
    happened; failing to note it is worth a console line, not an error in
