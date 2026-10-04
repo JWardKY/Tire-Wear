@@ -31,7 +31,7 @@ import { reasonsFor, keepReason, sayReason, isFailure, DEFAULT_REASON }
 import * as time from "./timeData.js";
 import * as setup from "./setupData.js";
 import { readUnlock, writeUnlock } from "./identity.js";
-import { hms, liveSeconds, realHours, sayLong, suggestCode, toggle, EMPTY, treadEntry }
+import { hms, liveSeconds, realHours, sayLong, suggestCode, tireCode, toggle, EMPTY, treadEntry }
   from "./jobClock.js";
 
 /* ────────────────────────────────────────────────────────────────
@@ -243,14 +243,19 @@ export default function TireWear({ who, tab, onBusy }) {
         time.listCostCodes(),
         time.listDay(m.id, job.date).catch(() => []),
       ]);
-      const costCode = suggestCode(codes, today);
+      /* The tire code, not whatever this mechanic charged to earlier in
+         the day: gauging tread is tire work by definition, and the shop
+         books it that way by hand. suggestCode is only the fallback for
+         a fleet with no tire code on its chart at all. */
+      const costCode = tireCode(codes) || suggestCode(codes, today);
       if (!costCode) throw new Error(
         "The readings saved, but there are no cost codes set up, so the hours "
         + "have nothing to charge to.");
       const entry = treadEntry({ ...job, vehId, costCode }, job.date);
       await time.addEntry({ ...entry, mechanicId: m.id });
       return { hours: entry.hours, said: sayLong(job.secs ?? entry.unitSeconds),
-               name: m.name, costCode };
+               name: m.name, costCode,
+               codeName: (codes.find((c) => c.code === costCode) || {}).name || "" };
     },
     deleteReading: (id) => run(() => db.deleteReading(id)),
     logOdometer: (vehId, date, odo) => run(() => db.logOdometer(vehId, date, odo, who)),
@@ -670,7 +675,12 @@ function VehicleDetail(props) {
      and says what it is about to record, rather than one press and a
      shrug. */
   const [okAnyway, setOkAnyway] = useState(false);
-  useEffect(() => { setOkAnyway(false); }, [typedBad.length]);
+  /* Re-armed by WHICH readings are wrong, not how many. Keyed on the
+     count, correcting an impossible 14 to an impossible 13 left the
+     confirm already given, so the second number went in on one press
+     having never been questioned. */
+  const badKey = typedBad.map(({ pos, bad }) => `${pos}:${bad.typed}`).join(",");
+  useEffect(() => { setOkAnyway(false); }, [badKey]);
 
   async function saveInspection() {
     const odo = Number(insOdo);
@@ -811,9 +821,19 @@ function VehicleDetail(props) {
                 <span style={{ color: C.muted }}> — {sayTyped(bad)}</span>
               </div>
             ))}
-            <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 0", lineHeight: 1.5 }}>
-              Check the wheel and the gauge. If the reading is right, then the older
-              figure is the wrong one — save anyway and fix that instead.
+            {/* The first press of Save is swallowed on purpose, and until
+                now the only sign of it was the button changing colour.
+                Somebody who does not notice that reads a press that did
+                nothing as a save that happened. Say it. */}
+            <p style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.5,
+              color: okAnyway ? C.ink : C.muted,
+              fontWeight: okAnyway ? 600 : 400 }}>
+              {okAnyway
+                ? `Nothing has been saved yet. Check the wheel and the gauge — then if
+                   the reading really is right, press Save again and ${typedBad.length === 1
+                     ? "it goes in" : "they go in"} as typed.`
+                : `Check the wheel and the gauge. If the reading is right, then the older
+                   figure is the wrong one — save anyway and fix that instead.`}
             </p>
           </div>
         )}
@@ -889,7 +909,8 @@ function VehicleDetail(props) {
             borderBottom: `1px solid ${C.green700}33`, borderLeft: `4px solid ${C.green700}`,
             fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>
             <b>{booked.said}</b> went on {booked.name}&rsquo;s timecard against {v.num}
-            {" "}as <b>{nf(booked.hours, 2)} hours</b>, charged to {booked.costCode}.
+            {" "}as <b>{nf(booked.hours, 2)} hours</b>, charged to{" "}
+            <b>{booked.costCode}{booked.codeName ? ` ${booked.codeName}` : ""}</b>.
             {" "}
             <span style={{ color: C.muted }}>
               Change the cost code on the card if this one belonged to a different job.

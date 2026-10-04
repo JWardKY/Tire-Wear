@@ -214,6 +214,28 @@ ok("the first press does not save it", writes.length === 0, `${writes.length}`);
 ok("…it asks again, and says so", /Save 1 anyway/i.test(t),
    (t.match(/Save[^\n]*/) || [""])[0]);
 
+/* A press that did nothing looks exactly like a press that saved,
+   unless the screen says otherwise. */
+ok("…and says nothing has been saved yet", /Nothing has been saved yet/i.test(t),
+   (t.match(/Nothing has been saved[^\n]*/) || ["(nothing)"])[0]);
+
+/* Corrected to a DIFFERENT impossible number. The confirm was given
+   for the old one, so it must be asked for again rather than letting
+   a number nobody ever questioned through on a single press. */
+await target.fill("13");
+await page.waitForTimeout(600);
+t = await page.locator("body").innerText();
+ok("changing the figure asks again rather than riding the last confirm",
+   /Save 1 reading/i.test(t) && !/Save 1 anyway/i.test(t),
+   (t.match(/Save[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Save 1 reading$/ }).click();
+await page.waitForTimeout(600);
+ok("…and that press saves nothing either", writes.length === 0, `${writes.length}`);
+await target.fill("14");
+await page.waitForTimeout(600);
+await page.getByRole("button", { name: /^Save 1 reading$/ }).click();
+await page.waitForTimeout(600);
+
 await page.getByRole("button", { name: /Save 1 anyway/ }).click();
 await page.waitForTimeout(1800);
 const saved = writes.filter((w) => w.table === "tw_tread_readings");
