@@ -9,6 +9,7 @@ import { todayISO } from "./day.js";
 import { sayOffline } from "./dbError.js";
 import { summarise } from "./cardLists.js";
 import * as cardEdit from "./cardEdit.js";
+import * as dbl from "./doublePunch.js";
 import * as shop from "./shopData.js";
 import { EntryDialog } from "./TimecardSection.jsx";
 
@@ -938,6 +939,14 @@ const LUNCHES = [0, 15, 30, 45, 60];
 function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
   const [adding, setAdding] = useState(false);
   const [add, setAdd] = useState({ start: "", stop: "", lunch: 30 });
+  const [dropping, setDropping] = useState(null);
+  const [why, setWhy] = useState("");
+
+  /* The worst doubled pair on the day. One pair at a time on purpose:
+     three punches for one shift is the same mistake made twice, and
+     the next pair surfaces the moment this one is dealt with. */
+  const pair = useMemo(() => dbl.doublesIn(shifts)[0] || null, [shifts]);
+  const suspect = pair ? dbl.whichToDrop(pair) : null;
 
   const run = async (fn) => {
     setBusy(true);
@@ -956,6 +965,14 @@ function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
     edit(sh, { [field]: v });
   };
 
+  const askDrop = (sh, reason) => { setDropping(sh); setWhy(reason || ""); };
+  const drop = () => run(async () => {
+    await clock.removeShift({ ...dropping, mechanicId: day.mechanicId,
+      mechanic: day.mechanic }, why, who);
+    setDropping(null);
+    setWhy("");
+  });
+
   return (
     <div style={{ marginBottom: 14, paddingBottom: 12,
       borderBottom: `1px solid ${C.lineSoft}` }}>
@@ -969,6 +986,30 @@ function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
           Changes save when you click away, with your name on them
         </div>
       </div>
+
+      {/* Said on the PUNCHES, because that is where the fault is. A
+          doubled day used to show up only as "20.11 on the clock
+          against 10.04 booked", which reads as though the hours were
+          entered twice — and a day's work got deleted on the strength
+          of it. */}
+      {pair && (
+        <div style={{ background: "#FDF6E3", borderLeft: `4px solid ${C.watch}`,
+          borderRadius: 4, padding: "9px 12px", margin: "2px 0 10px",
+          fontSize: 13, color: C.ink, lineHeight: 1.55 }}>
+          {dbl.sayDouble(pair)}
+          {suspect && (
+            <div style={{ marginTop: 7 }}>
+              <Btn tone="danger" disabled={busy}
+                onClick={() => askDrop(suspect, "clocked in twice — this one was typed in")}>
+                Take off the {dbl.sayShift(suspect)} punch
+              </Btn>
+              <span style={{ fontSize: 12.5, color: C.muted, marginLeft: 9 }}>
+                leaves {nf(dbl.clockAfterDropping(shifts, suspect.id), 2)} hr on the clock
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {shifts.length === 0 && !adding && (
         <div style={{ fontSize: 13, color: C.muted }}>
@@ -1009,9 +1050,46 @@ function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
             ) : (
               <span style={{ fontFamily: FM, fontWeight: 600 }}>{nf(sh.clockHours, 2)} hr</span>
             )}
+            {shifts.length > 1 && (
+              <>
+                <span style={{ color: C.line }}> · </span>
+                <button disabled={busy} onClick={() => askDrop(sh, "")}
+                  style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+              </>
+            )}
           </div>
         </div>
       ))}
+
+      {dropping && (
+        <Modal title="Take this punch off the day"
+          sub={`${dbl.sayShift(dropping)} · ${nf(dropping.clockHours, 2)} hr`}
+          onClose={() => setDropping(null)} width={520}>
+          <Field label="Why is this punch coming off?">
+            <input value={why} onChange={(e) => setWhy(e.target.value)}
+              placeholder="Clocked in twice, wrong mechanic, …" style={inp} autoFocus />
+          </Field>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: "8px 0 0", lineHeight: 1.55 }}>
+            This changes the clocked hours only. The{" "}
+            <b>{nf(day.bookedHours, 2)} hr</b> booked on this card are not touched —
+            a doubled punch is not doubled work.
+            {" "}The punch and this reason go to the work log first, and that log
+            cannot be edited or deleted by anyone.
+          </p>
+          <div style={{ fontSize: 13, color: C.ink, marginTop: 10 }}>
+            On the clock afterwards:{" "}
+            <b style={{ fontFamily: FM }}>
+              {nf(dbl.clockAfterDropping(shifts, dropping.id), 2)} hr
+            </b>
+          </div>
+          <div className="flex justify-end mt-4" style={{ gap: 8 }}>
+            <Btn tone="ghost" onClick={() => setDropping(null)}>Cancel</Btn>
+            <Btn tone="danger" disabled={busy || why.trim().length < 4} onClick={drop}>
+              Take this punch off
+            </Btn>
+          </div>
+        </Modal>
+      )}
 
       {adding && (
         <div className="flex flex-wrap items-end" style={{ gap: 10 }}>

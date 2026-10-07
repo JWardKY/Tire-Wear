@@ -39,13 +39,29 @@ const ok = (l, v, d) => { if (!v) bad++; console.log(`${v ? " ok " : " !! "} ${l
 const BADGE = "jason_ward@theallen.com";
 const BOSS = { id: "s1", name: "Jason Ward" };
 const MECH = { id: "m1", name: "Joshua Sawyers", email: "joshua@theallen.com" };
-const DATE = "2026-10-03";
+/* Today, not a fixed day. The board opens on "this week", so a
+   fixture pinned to a date goes out of range the moment the week
+   rolls over and the whole test fails on an empty board. */
+const DATE = new Date().toISOString().slice(0, 10);
 
 /* 4.60 on the clock. */
 const SHIFT = { id: "sh1", mechanic_id: MECH.id, work_date: DATE,
   started_at: `${DATE}T11:00:00.000Z`, ended_at: `${DATE}T16:06:00.000Z`,
   lunch_minutes: 30, clock_hours: 4.6, open: false,
   created_at: DATE, updated_at: `${DATE}T16:06:00.000Z` };
+
+/* A doubled day: one punch clocked, one typed in on top of it ten
+   hours later. This is Joshua's 10/05 in miniature. */
+const DOUBLED = [
+  { id: "sh-real", mechanic_id: "m3", work_date: DATE,
+    started_at: `${DATE}T11:00:00.000Z`, ended_at: `${DATE}T21:00:00.000Z`,
+    lunch_minutes: 30, clock_hours: 9.5, open: false,
+    created_at: `${DATE}T11:00:00.000Z`, updated_at: `${DATE}T21:00:00.000Z` },
+  { id: "sh-typed", mechanic_id: "m3", work_date: DATE,
+    started_at: `${DATE}T11:00:00.000Z`, ended_at: `${DATE}T21:01:00.000Z`,
+    lunch_minutes: 30, clock_hours: 9.52, open: false,
+    created_at: `${DATE}T21:00:30.000Z`, updated_at: `${DATE}T21:01:00.000Z` },
+];
 
 const entry = (o) => ({
   id: o.id, mechanic_id: MECH.id, work_date: DATE, vehicle_id: o.veh || null,
@@ -72,13 +88,15 @@ const rows = {
       active: true, pin_set: true, role: "supervisor" },
     { id: "m2", name: "Tyler Coffey", email: "tyler@theallen.com", emp_no: "6340",
       active: true, pin_set: true },
+    { id: "m3", name: "Shade Means", email: "shade@theallen.com", emp_no: "24120",
+      active: true, pin_set: true },
   ],
   tw_cost_codes: [
     { code: "873", name: "Service", active: true, group: "Vehicle", code_group: "Vehicle" },
     { code: "878", name: "Tire Group", active: true, group: "Vehicle", code_group: "Vehicle" },
     { code: "SHOP-CF", name: "Clays Ferry Shop", active: true, group: "Shop", code_group: "Shop" },
   ],
-  tw_shifts: [SHIFT], tw_shift_days: [SHIFT], tw_on_clock: [],
+  tw_shifts: [SHIFT, ...DOUBLED], tw_shift_days: [SHIFT, ...DOUBLED], tw_on_clock: [],
   tw_time_entries: [
     entry({ id: "e1", veh: "v1", hours: 1.23, code: "878",
       did: "Air up tires, 4LO and 4RO", types: ["Tires"] }),
@@ -384,6 +402,58 @@ const pulled = logs().map(bodyOf).find((b) => b?.event_type === "timecard_unappr
 ok("…and that is logged too, with why", /a line was removed/i.test(pulled?.summary || ""),
   pulled?.summary);
 ok("…under the supervisor's name", pulled?.actor_name === BOSS.name, pulled?.actor_name);
+
+console.log("\n-- a day somebody clocked in on twice --");
+await page.mouse.click(8, 8);
+await page.waitForTimeout(1000);
+const shadeRow = page.locator("tr").filter({ hasText: "Shade Means" }).first();
+await shadeRow.getByRole("button", { name: "Open", exact: true }).first().click();
+await page.waitForTimeout(1400);
+t = await page.locator("body").innerText();
+ok("the double is called out", /Two punches on this day cover the same shift/i.test(t),
+  t.slice(0, 700));
+/* The times render in the tablet's own zone, so the shape is what is
+   asserted rather than the hour: two punches a minute apart. */
+ok("...naming both", /\d\d:00.\d\d:00 and \d\d:00.\d\d:01/.test(t),
+  (t.match(/[^\n]*same shift[^\n]*/i) || [""])[0]);
+ok("...and which one was typed rather than clocked",
+  /typed in rather than clocked/i.test(t),
+  (t.match(/[^\n]*typed in[^\n]*/i) || [""])[0]);
+ok("...and that the booked hours are not the problem",
+  /leaves the hours below alone/i.test(t),
+  (t.match(/[^\n]*hours below[^\n]*/i) || [""])[0]);
+
+const takeOff = page.getByRole("button", { name: /Take off the .* punch/i }).first();
+ok("there is one button to fix it", (await takeOff.count()) > 0,
+  (await page.getByRole("button").allTextContents()).join(" | ").slice(0, 400));
+ok("...which says what the clock will read after", /leaves 9\.50 hr on the clock/i.test(t),
+  (t.match(/[^\n]*leaves[^\n]*/i) || [""])[0]);
+
+const shiftDeletes = () => writes.filter((w) =>
+  w.table === "tw_shifts" && w.method === "DELETE").length;
+const before2 = shiftDeletes();
+const entryDeletes = () => writes.filter((w) =>
+  w.table === "tw_time_entries" && w.method === "DELETE").length;
+const entriesGoneBefore = entryDeletes();
+await takeOff.click();
+await page.waitForTimeout(900);
+t = await page.locator("body").innerText();
+ok("it asks why, with the reason already filled in",
+  /Why is this punch coming off/i.test(t), t.slice(0, 600));
+ok("...and says the booked hours are untouched",
+  /are not touched/i.test(t) && /doubled punch is not doubled work/i.test(t),
+  (t.match(/[^\n]*not touched[^\n]*/i) || [""])[0]);
+await page.getByRole("button", { name: /^Take this punch off$/i }).first().click();
+await page.waitForTimeout(1800);
+
+ok("the punch comes off", shiftDeletes() > before2,
+  JSON.stringify(writes.map((w) => w.method + " " + w.table)));
+ok("...and not one booked line goes with it",
+  entryDeletes() === entriesGoneBefore, entryDeletes() - entriesGoneBefore);
+const punchLog = logs().map(bodyOf).find((b) => b?.event_type === "shift_removed");
+ok("...and it is logged, with the reason",
+  /clocked in twice/i.test(punchLog?.summary || ""), punchLog?.summary);
+ok("...under the supervisor's name", punchLog?.actor_name === BOSS.name, punchLog?.actor_name);
 
 ok("nothing threw", crashes.length === 0, crashes.join(" | "));
 ok("no rejected requests at all", rest400.length === 0, rest400.join("\n    "));

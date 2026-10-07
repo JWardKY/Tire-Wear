@@ -44,6 +44,7 @@ const SUITES = [
   ["test-driveline", "driving time on a timecard — needs no key"],
   ["test-jobclock", "the clock the job screens share — needs no key"],
   ["test-cardedit", "a supervisor changing somebody else's hours — needs no key"],
+  ["test-doublepunch", "two punches for one shift — needs no key"],
   ["test-nowboard", "the Now board in a real browser — needs the app served"],
   ["test-punchboard", "fixing a missed punch in a real browser — needs the app served"],
   ["test-truckboard", "the truck file in a real browser — needs the app served"],

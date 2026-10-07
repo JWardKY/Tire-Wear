@@ -37,23 +37,29 @@ const day = (o) => ({
   units: o.units, cost_codes: o.codes,
 });
 
+/* Today, not a fixed day. The board opens on "this week", so a
+   fixture pinned to a date silently goes out of range the moment the
+   week rolls over — this test passed for weeks and then failed one
+   morning with nothing changed but the calendar. */
+const DATE = new Date().toISOString().slice(0, 10);
+
 const DAYS = [
   /* Six lines over five trucks — one truck was touched twice, which
      is why the list is shorter than the line count. */
-  day({ id: "m1", who: "Donald Bradley", emp: "5565", date: "2026-09-29",
+  day({ id: "m1", who: "Donald Bradley", emp: "5565", date: DATE,
         clock: 9.33, booked: 9.33, lines: 6,
         units: ["DT-808", "Shop cleanup / housekeeping", "DT-885", "DT-887", "DT-896"],
         codes: ["885", "SHOP-CB", "835", "SHOP-CF"] }),
   /* Two lines, both shop, one code. */
-  day({ id: "m2", who: "Nick Shifflet", emp: "37243", date: "2026-09-29",
+  day({ id: "m2", who: "Nick Shifflet", emp: "37243", date: DATE,
         clock: 8.85, booked: 8.85, lines: 2,
         units: ["Other shop time", "Parts run / pickup"], codes: ["SHOP-CF"] }),
   /* One truck, one code — the ordinary row. */
-  day({ id: "m3", who: "Stevie Winkler", emp: "43810", date: "2026-09-29",
+  day({ id: "m3", who: "Stevie Winkler", emp: "43810", date: DATE,
         clock: 1.25, booked: 1.25, lines: 1,
         units: ["DT-890"], codes: ["830"] }),
   /* Still on the clock, nothing booked. The cells have to be a dash. */
-  day({ id: "m4", who: "Tyler Coffey", emp: "6340", date: "2026-09-29",
+  day({ id: "m4", who: "Tyler Coffey", emp: "6340", date: DATE,
         clock: 0, booked: 0, lines: 0, open: true, units: [], codes: [] }),
 ];
 

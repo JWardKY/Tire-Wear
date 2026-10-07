@@ -280,6 +280,11 @@ export async function shiftsForDay(mechanicId, dateISO) {
     lunch: Number(r.lunch_minutes),
     clockHours: Number(r.clock_hours),
     open: !!r.open,
+    /* When the ROW was made, as against when the shift claims to have
+       started. The two agree on a punch somebody actually clocked and
+       disagree by hours on one typed in afterwards, which is how a
+       double punch can be told apart without asking anybody. */
+    createdAt: r.created_at,
   }));
 }
 
@@ -424,6 +429,42 @@ export async function addShift(mechanicId, dateISO, { start, stop, lunch }, who)
                                 lunch_minutes: added.lunch, clock_hours: added.clockHours } },
   });
   return added;
+}
+
+/* ── Taking a punch off ───────────────────────────────────────────
+   A second punch laid on top of one already there doubles a day's
+   clocked hours, and until now there was no way to remove it: the
+   punches could be corrected but not deleted. What happened instead
+   was that somebody deleted the BOOKED HOURS — seven lines, a whole
+   day's work — because the card looked entered twice. The fault was
+   never in the hours.
+
+   Strict logging, like removing a booked line: clocked hours are a
+   pay figure, and once the row is gone the log is the only record it
+   was ever there. If the trail will not write, the punch stays. */
+export async function removeShift(sh, reason, who) {
+  const why = String(reason || "").trim();
+  if (why.length < 4) throw new Error("A reason is required to take a punch off.");
+  if (!who) throw new Error("A punch can only be removed by a named person.");
+  if (!sh?.id) throw new Error("There is no punch to remove.");
+
+  const { logStrict } = await import("./logData.js");
+  await logStrict({
+    type: "shift_removed",
+    mechanicId: sh.mechanicId || null,
+    actor: who,
+    summary: `${sh.mechanic || "A"} punch on ${sh.date} removed — `
+      + `${hm(sh.startedAt) || "—"}–${sh.endedAt ? hm(sh.endedAt) : "still on"}`
+      + `${sh.lunch ? ` less ${sh.lunch}` : ""} (${Number(sh.clockHours) || 0} hr) — ${why}`,
+    detail: { reason: why, work_date: sh.date, mechanic: sh.mechanic || null,
+              shift: sh.id,
+              removed: { started_at: sh.startedAt, ended_at: sh.endedAt,
+                         lunch_minutes: sh.lunch, clock_hours: sh.clockHours,
+                         created_at: sh.createdAt } },
+  });
+
+  const { error } = await supabase.from("tw_shifts").delete().eq("id", sh.id);
+  if (error) throw error;
 }
 
 /* The shift somebody is still on, with the day it belongs to.
