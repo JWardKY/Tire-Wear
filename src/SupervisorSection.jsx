@@ -16,7 +16,7 @@ import SetupSection from "./SetupSection.jsx";
    undifferentiated row and the two gated ones were a surprise every
    time. Grouping them says what they are before anybody taps. */
 
-const HOURS_TABS = new Set(["rollup", "detail", "cards", "day", "log"]);
+const HOURS_TABS = new Set(["rollup", "detail", "cards", "log"]);
 
 export default function SupervisorSection(props) {
   const Screen = HOURS_TABS.has(props.tab) ? HoursSection : SetupSection;
