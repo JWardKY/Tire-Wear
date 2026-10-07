@@ -246,6 +246,8 @@ export default function HoursSection({ who, tab, onBusy, supervisor }) {
 
         {tab === "cards" ? (
           <Cards from={from} to={to} q={q} who={supervisor?.name || who} onErr={setErr} />
+        ) : tab === "day" ? (
+          <DayWriteUp who={supervisor?.name || who} onErr={setErr} />
         ) : tab === "log" ? (
           <WorkLog from={from} to={to} q={q} onErr={setErr} />
         ) : rows.length === 0 ? (
@@ -1549,6 +1551,109 @@ function Kpi({ items }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/* ── The day, written up ──────────────────────────────────────────
+   The cards hold everything about a day except its shape: that eleven
+   of the twenty-three hours went on one rear differential, that the
+   truck is still down on a backordered nut, that a transmission looks
+   finished and nothing says it was road-tested.
+
+   Written on request rather than on a schedule, because a shift might
+   be eight hours or twenty minutes and only somebody looking at it
+   knows when it is worth reading. Written once and kept: everybody
+   should read the same words, and a second press costs another call,
+   so asking again is its own button.
+
+   The daySummary module decides what the write-up is given. This only
+   decides when to ask and how to show it. */
+function DayWriteUp({ who, onErr }) {
+  const [date, setDate] = useState(todayStr());
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [writing, setWriting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setSummary(null);
+    try { setSummary(await time.daySummary(date)); }
+    catch (e) { onErr?.(e.message || String(e)); }
+    finally { setLoading(false); }
+  }, [date, onErr]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const write = async (again) => {
+    setWriting(true);
+    try {
+      const r = await time.writeDaySummary(date, who, { again });
+      setSummary(r.summary);
+      onErr?.(null);
+    } catch (e) { onErr?.(e.message || String(e)); }
+    finally { setWriting(false); }
+  };
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+      overflow: "hidden" }}>
+      <div className="flex flex-wrap items-end justify-between"
+        style={{ gap: 10, padding: "11px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+        <Field label="Day">
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+            style={{ ...inp, width: 165 }} />
+        </Field>
+        <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
+          {summary && (
+            <Btn tone="ghost" disabled={writing} onClick={() => write(true)}>
+              {writing ? "Writing…" : "Write it again"}
+            </Btn>
+          )}
+          {!summary && !loading && (
+            <Btn disabled={writing} onClick={() => write(false)}>
+              {writing ? "Writing…" : "Write up this day"}
+            </Btn>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: "16px 18px 22px" }}>
+        {loading ? (
+          <div style={{ color: C.muted, fontSize: 14 }}>Looking…</div>
+        ) : !summary ? (
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, maxWidth: 640 }}>
+            Nothing written for this day yet. It reads every entry on the card —
+            who, which unit, how long, and what the mechanic wrote — and puts the
+            day back together. Anything it is not sure of goes at the end under
+            <b> Worth checking</b>, as a question rather than a finding.
+          </p>
+        ) : (
+          <>
+            {/* Said plainly. A write-up that reads like a foreman wrote it
+                should not be mistaken for one. */}
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12,
+              paddingBottom: 10, borderBottom: `1px solid ${C.lineSoft}` }}>
+              Written from the cards{summary.written_by ? ` for ${summary.written_by}` : ""}
+              {summary.written_at
+                ? ` on ${new Date(summary.written_at).toLocaleString()}` : ""}
+              {summary.entries != null
+                ? ` · ${nf(summary.hours || 0, 2)} hr over ${summary.entries} `
+                  + `entr${summary.entries === 1 ? "y" : "ies"}` : ""}
+              {summary.model ? ` · ${summary.model}` : ""}
+              <div style={{ marginTop: 3 }}>
+                The figures come from the cards. The wording does not — read it as
+                a summary, not as a record.
+              </div>
+            </div>
+            <div style={{ fontSize: 14.5, lineHeight: 1.65, color: C.ink,
+              whiteSpace: "pre-wrap", maxWidth: 820 }}>
+              {summary.body}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

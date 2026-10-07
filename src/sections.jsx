@@ -120,11 +120,13 @@ export const SECTIONS = [
       : tab === "equipment" ? "Anything Motive does not know about — rentals, customer trucks, one-offs"
       : tab === "cards" ? "Every card, clocked hours against booked hours"
       : tab === "log" ? "The audit trail — append only, and nothing here can edit it"
+      : tab === "day" ? "The day written up — what the cards say, read back as a shift"
       : "Where the shop's hours went, by mechanic, by unit and by cost code",
     subTabs: [
       ["rollup", "Totals"],
       ["detail", "Every entry"],
       ["cards", "Timecards"],
+      ["day", "Day summary"],
       ["log", "Work log"],
       ["roster", "Mechanics"],
       ["codes", "Cost codes"],

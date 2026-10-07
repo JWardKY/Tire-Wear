@@ -658,3 +658,33 @@ export async function deleteCard(mechanicId, date, reason, actor) {
     .eq("mechanic_id", mechanicId).eq("work_date", date));
   return entries.length;
 }
+
+/* ── The day, written up ──────────────────────────────────────────
+   The writing happens in a Netlify function, because it needs the
+   Anthropic key and that cannot sit in a page anybody can view source
+   on. This is the read side plus the ask.
+
+   `again` is a deliberate second door: the first press returns what
+   was written before — same words for everybody, no second charge —
+   and only an explicit "write it again" spends another call. */
+export async function daySummary(date) {
+  const { data, error } = await supabase.from("tw_day_summary")
+    .select("*").eq("work_date", date).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+export async function writeDaySummary(date, who, { again = false } = {}) {
+  const r = await fetch("/.netlify/functions/day-summary", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ date, who, again }),
+  });
+  let body = null;
+  try { body = await r.json(); } catch { /* a proxy page, not our JSON */ }
+  if (!r.ok) {
+    throw new Error(body?.error
+      || `The day could not be written up (${r.status}).`);
+  }
+  return body;
+}
