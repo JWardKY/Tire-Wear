@@ -128,17 +128,18 @@ export default function AppShell({ who, onSwitchUser }) {
      section's name as an eyebrow; without, the section itself. */
   const subLabel = section.subTabs?.find(([k]) => k === tab)?.[1];
   const title = showSubTabs && subLabel ? subLabel : section.label;
-  const eyebrow = showSubTabs && subLabel ? section.label : null;
+  // No eyebrow when it would only repeat the title ("Work orders" over "Work orders").
+  const eyebrow = showSubTabs && subLabel && subLabel !== section.label ? section.label : null;
   const blurb = typeof section.blurb === "function" ? section.blurb(tab) : section.blurb;
 
-  const barTab = (s) => {
+  const barTab = (s, className) => {
     const active = s.key === section.key;
     return (
-      <button key={s.key} onClick={() => open(s.key)}
+      <button key={s.key} onClick={() => open(s.key)} className={className}
         aria-current={active ? "page" : undefined}
         style={{
           fontFamily: FD, fontSize: 17, fontWeight: 700, letterSpacing: "0.05em",
-          textTransform: "uppercase", padding: "0 15px", minHeight: 52,
+          textTransform: "uppercase", padding: "0 13px", minHeight: 52,
           background: "transparent", color: active ? C.yellowHi : "#E9F0EB",
           border: "none", borderBottom: `4px solid ${active ? C.yellow : "transparent"}`,
           borderTop: "4px solid transparent", cursor: "pointer",
@@ -159,7 +160,7 @@ export default function AppShell({ who, onSwitchUser }) {
       <div className="no-print">
         <div style={{ background: C.green900, borderBottom: `3px solid ${C.yellow}` }}>
           <div className="mx-auto w-full flex flex-wrap items-stretch"
-            style={{ maxWidth: WIDTH, padding: "0 16px", columnGap: 28, rowGap: 0 }}>
+            style={{ maxWidth: WIDTH, padding: "0 16px", columnGap: 20, rowGap: 0 }}>
             <div className="flex items-center" style={{ gap: 12, minHeight: 64 }}>
               <span style={{ color: C.yellow }}>
                 <AllenLogo variant="compact" height={36} />
@@ -173,9 +174,15 @@ export default function AppShell({ who, onSwitchUser }) {
             {/* Below 1024px the tabs drop under the logo row (shell-nav in
                 index.css) so the ? and the badge stay up beside the mark. */}
             <nav aria-label="Sections" className="shell-nav flex flex-wrap items-stretch" style={{ flex: "1 1 auto" }}>
-              {barTabs.map(barTab)}
+              {barTabs.map((s) => barTab(s))}
+              {/* On a screen wide enough for all of them, the office pages
+                  are ordinary tabs and More is not drawn — a menu hiding
+                  three pages is only worth its extra tap where the room
+                  is not there. Both are always rendered; index.css picks
+                  one by width. */}
+              {moreTabs.map((s) => barTab(s, "office-inline"))}
 
-              <div ref={moreRef} style={{ position: "relative", display: "flex", alignItems: "center", marginLeft: 6 }}>
+              <div ref={moreRef} className="office-more" style={{ position: "relative", display: "flex", alignItems: "center", marginLeft: 6 }}>
                 <button onClick={() => { setMoreOpen((v) => !v); setMeOpen(false); }}
                   aria-haspopup="menu" aria-expanded={moreOpen}
                   style={{

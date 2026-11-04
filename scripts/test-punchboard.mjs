@@ -258,9 +258,15 @@ console.log("\n── a supervisor fixes it on the timecard ──");
   const { ctx, page, writes, errors, rest400 } = await session(
     new Function(`${badge(SUP.email)};${supervisor(SUP)}`));
 
-  /* The office pages sit behind More since the header was regrouped. */
-  await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Supervisor", exact: true }).click();
+  /* A tab on a wide screen, behind More on a narrower one. */
+  {
+    const tabBtn = page.getByRole("button", { name: "Supervisor", exact: true });
+    if (await tabBtn.first().isVisible()) await tabBtn.first().click();
+    else {
+      await page.getByRole("button", { name: "More", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Supervisor", exact: true }).click();
+    }
+  }
   await page.waitForTimeout(1200);
   await page.getByRole("button", { name: "Timecards", exact: true }).first().click();
   await page.waitForTimeout(1500);

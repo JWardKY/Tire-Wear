@@ -38,8 +38,11 @@ export default function SetupSection({ who, tab, onBusy, supervisor }) {
     finally { onBusy?.(false); }
   };
 
+  /* The same centred column every section sits in, so the page lines
+     up under the header and its title rather than starting at the
+     window's edge. */
   return (
-    <div>
+    <div className="mx-auto w-full" style={{ maxWidth: 1400, padding: "20px 16px 60px" }}>
       {err && <div style={banner(C.pull)}>{err}</div>}
       {note && <div style={banner(C.good)}>{note}</div>}
       {tab === "codes" ? <Codes codes={codes} run={run} />

@@ -41,8 +41,11 @@ export default function WorkSection({ who, tab, onBusy, focus, onClearFocus }) {
     finally { onBusy?.(false); }
   }, [onBusy]);
 
+  /* The same centred column every section sits in, so the page lines
+     up under the header and its title rather than starting at the
+     window's edge. */
   return (
-    <div>
+    <div className="mx-auto w-full" style={{ maxWidth: 1400, padding: "20px 16px 60px" }}>
       {err && <div style={{ background: C.pull, color: "#fff", padding: "8px 12px",
                             borderRadius: 4, marginBottom: 12, fontSize: 13 }}>{err}</div>}
       {tab === "history"
