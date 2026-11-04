@@ -339,6 +339,11 @@ create table if not exists tw_work_orders (
 );
 
 
+-- Where a driving line went from and to. Only filled in on
+-- where_worked = 'driving'.
+alter table tw_time_entries add column if not exists drove_from text;
+alter table tw_time_entries add column if not exists drove_to text;
+
 -- ── Constraints ─────────────────────────────────────────────
 -- Each is guarded by an existence check rather than an exception
 -- handler: a duplicate PRIMARY KEY raises invalid_table_definition,
@@ -689,12 +694,10 @@ do $do$ begin
     alter table tw_time_entries add constraint tw_time_entries_unit_seconds_ck CHECK ((unit_seconds >= 0));
   end if;
 end $do$;
-do $do$ begin
-  if not exists (select 1 from pg_constraint
-                  where conname = 'tw_time_entries_where_worked_check' and conrelid = 'tw_time_entries'::regclass) then
-    alter table tw_time_entries add constraint tw_time_entries_where_worked_check CHECK ((where_worked = ANY (ARRAY['shop'::text, 'field'::text, 'road'::text, 'plant'::text])));
-  end if;
-end $do$;
+-- Dropped and re-added rather than added once: the list has grown since
+-- the table was made, and an if-not-exists would leave an old list alone.
+alter table tw_time_entries drop constraint if exists tw_time_entries_where_worked_check;
+alter table tw_time_entries add constraint tw_time_entries_where_worked_check CHECK ((where_worked = ANY (ARRAY['shop'::text, 'field'::text, 'road'::text, 'plant'::text, 'driving'::text])));
 do $do$ begin
   if not exists (select 1 from pg_constraint
                   where conname = 'tw_time_needs_a_home' and conrelid = 'tw_time_entries'::regclass) then
@@ -731,16 +734,10 @@ do $do$ begin
     alter table tw_vendors add constraint tw_vendors_pkey PRIMARY KEY (id);
   end if;
 end $do$;
-do $do$ begin
-  if not exists (select 1 from pg_constraint
-                  where conname = 'tw_work_log_event_type_check' and conrelid = 'tw_work_log'::regclass) then
-    -- timecard_approved / timecard_unapproved gate payroll and unwind a
-    -- sign-off on somebody's pay. defect_resolved_in_motive was being
-    -- written by the Motive write-back and refused here — a warn rather
-    -- than a throw, so it failed silently.
-    alter table tw_work_log add constraint tw_work_log_event_type_check CHECK ((event_type = ANY (ARRAY['timecard_saved'::text, 'timecard_deleted'::text, 'timecard_approved'::text, 'timecard_unapproved'::text, 'defect_repaired'::text, 'defect_reopened'::text, 'defect_closed'::text, 'defect_resolved_in_motive'::text, 'pm_completed'::text, 'tire_reading'::text, 'tire_mounted'::text, 'tire_pulled'::text, 'work_order_assigned'::text, 'work_order_completed'::text, 'part_issued'::text])));
-  end if;
-end $do$;
+-- Dropped and re-added rather than added once: the list has grown since
+-- the table was made, and an if-not-exists would leave an old list alone.
+alter table tw_work_log drop constraint if exists tw_work_log_event_type_check;
+alter table tw_work_log add constraint tw_work_log_event_type_check CHECK ((event_type = ANY (ARRAY['timecard_saved'::text, 'timecard_deleted'::text, 'timecard_approved'::text, 'timecard_unapproved'::text, 'timecard_line_added'::text, 'timecard_line_edited'::text, 'timecard_line_removed'::text, 'shift_corrected'::text, 'shift_removed'::text, 'defect_repaired'::text, 'defect_reopened'::text, 'defect_closed'::text, 'defect_resolved_in_motive'::text, 'pm_completed'::text, 'tire_reading'::text, 'tire_mounted'::text, 'tire_pulled'::text, 'tire_edited'::text, 'tire_moved'::text, 'work_order_assigned'::text, 'work_order_completed'::text, 'part_issued'::text])));
 do $do$ begin
   if not exists (select 1 from pg_constraint
                   where conname = 'tw_work_log_pkey' and conrelid = 'tw_work_log'::regclass) then
@@ -2009,9 +2006,15 @@ SELECT s.id,
     (s.ended_at IS NULL) AS open,
     s.note,
     s.updated_at,
-    -- Appended: CREATE OR REPLACE VIEW only adds columns at the end.
-    s.in_lat, s.in_lng, s.in_accuracy_m, s.in_geo_note,
-    s.out_lat, s.out_lng, s.out_accuracy_m, s.out_geo_note
+    s.created_at,
+    s.in_lat,
+    s.in_lng,
+    s.in_accuracy_m,
+    s.in_geo_note,
+    s.out_lat,
+    s.out_lng,
+    s.out_accuracy_m,
+    s.out_geo_note
    FROM (tw_shifts s
      JOIN tw_mechanics m ON ((m.id = s.mechanic_id)));
 
@@ -2037,11 +2040,9 @@ SELECT t.id,
     t.stints,
     t.work_performed,
     t.created_at,
-    -- Appended, not inserted: CREATE OR REPLACE VIEW can only add
-    -- columns at the end. It was missing entirely, so a screen reading
-    -- this view could say somebody was on an outside service call and
-    -- not be able to say where.
-    t.job_location
+    t.job_location,
+    t.drove_from,
+    t.drove_to
    FROM (((tw_time_entries t
      JOIN tw_mechanics m ON ((m.id = t.mechanic_id)))
      LEFT JOIN tw_cost_codes c ON ((c.code = t.cost_code)))
@@ -2109,129 +2110,11 @@ SELECT id,
    FROM tw_parts p
   WHERE active;
 
-create or replace view tw_payroll_lines as
-SELECT t.work_date,
-    m.emp_no,
-    m.name AS mechanic,
-    t.cost_code,
-    c.name AS cost_code_name,
-    COALESCE(v.number, t.unit_label) AS unit,
-    t.where_worked,
-    t.job_location,
-    t.hours,
-    round(((t.unit_seconds)::numeric / 3600.0), 2) AS true_hours,
-    jsonb_array_length(t.stints) AS segments,
-    t.work_order,
-    array_to_string(t.work_types, ' · '::text) AS work_types,
-        CASE
-            WHEN (d.id IS NULL) THEN NULL::text
-            ELSE (d.category || COALESCE((' — '::text || d.note), ''::text))
-        END AS dvir,
-    p.name AS pm_service,
-    COALESCE(( SELECT string_agg(((trim_scale(ep.qty) || 'x '::text) || ep.part_number), '; '::text ORDER BY ep.part_number) AS string_agg
-           FROM tw_time_entry_parts ep
-          WHERE (ep.time_entry_id = t.id)), ''::text) AS parts_used,
-    t.work_performed,
-    t.id AS entry_id,
-    m.id AS mechanic_id
-   FROM (((((tw_time_entries t
-     JOIN tw_mechanics m ON ((m.id = t.mechanic_id)))
-     LEFT JOIN tw_cost_codes c ON ((c.code = t.cost_code)))
-     LEFT JOIN tw_vehicles v ON ((v.id = t.vehicle_id)))
-     LEFT JOIN tw_defects d ON ((d.id = t.defect_id)))
-     LEFT JOIN tw_pm_programs p ON ((p.id = t.pm_program_id)));
+-- tw_payroll_lines is defined at the end of this file: it reads columns and a
+-- function added further down.
 
-create or replace view tw_pm_due as
-WITH base AS (
-         SELECT v.id AS vehicle_id,
-            v.number AS truck,
-            v.division,
-            p.id AS program_id,
-            p.name AS program,
-            p.category,
-            p.interval_miles,
-            p.interval_months,
-            p.est_hours,
-            COALESCE(p.lead_miles, (ceil(((p.interval_miles)::numeric * 0.1)))::integer) AS lead_miles,
-            COALESCE(p.lead_days, 30) AS lead_days,
-            c_1.done_date AS last_date,
-            c_1.done_odometer AS last_odometer,
-            c_1.done_by AS last_by,
-            m.current_odometer,
-            m.odometer_date
-           FROM (((tw_vehicles v
-             CROSS JOIN tw_pm_programs p)
-             LEFT JOIN LATERAL ( SELECT tw_pm_completions.done_date,
-                    tw_pm_completions.done_odometer,
-                    tw_pm_completions.done_by
-                   FROM tw_pm_completions
-                  WHERE ((tw_pm_completions.vehicle_id = v.id) AND (tw_pm_completions.program_id = p.id))
-                  ORDER BY tw_pm_completions.done_date DESC, tw_pm_completions.done_odometer DESC NULLS LAST
-                 LIMIT 1) c_1 ON (true))
-             LEFT JOIN tw_vehicle_meter m ON ((m.vehicle_id = v.id)))
-          WHERE (v.active AND p.active AND ((p.applies_to IS NULL) OR (p.applies_to = v.division)))
-        ), calc AS (
-         SELECT b.vehicle_id,
-            b.truck,
-            b.division,
-            b.program_id,
-            b.program,
-            b.category,
-            b.interval_miles,
-            b.interval_months,
-            b.est_hours,
-            b.lead_miles,
-            b.lead_days,
-            b.last_date,
-            b.last_odometer,
-            b.last_by,
-            b.current_odometer,
-            b.odometer_date,
-                CASE
-                    WHEN ((b.interval_miles IS NOT NULL) AND (b.last_odometer IS NOT NULL)) THEN (b.last_odometer + b.interval_miles)
-                    ELSE NULL::integer
-                END AS due_at_odometer,
-                CASE
-                    WHEN ((b.interval_miles IS NOT NULL) AND (b.last_odometer IS NOT NULL) AND (b.current_odometer IS NOT NULL)) THEN ((b.last_odometer + b.interval_miles) - b.current_odometer)
-                    ELSE NULL::integer
-                END AS miles_remaining,
-                CASE
-                    WHEN ((b.interval_months IS NOT NULL) AND (b.last_date IS NOT NULL)) THEN ((b.last_date + ((b.interval_months || ' months'::text))::interval))::date
-                    ELSE NULL::date
-                END AS due_date,
-                CASE
-                    WHEN ((b.interval_months IS NOT NULL) AND (b.last_date IS NOT NULL)) THEN (((b.last_date + ((b.interval_months || ' months'::text))::interval))::date - CURRENT_DATE)
-                    ELSE NULL::integer
-                END AS days_remaining
-           FROM base b
-        )
- SELECT vehicle_id,
-    truck,
-    division,
-    program_id,
-    program,
-    category,
-    interval_miles,
-    interval_months,
-    est_hours,
-    lead_miles,
-    lead_days,
-    last_date,
-    last_odometer,
-    last_by,
-    current_odometer,
-    odometer_date,
-    due_at_odometer,
-    miles_remaining,
-    due_date,
-    days_remaining,
-        CASE
-            WHEN (last_date IS NULL) THEN 'nobaseline'::text
-            WHEN ((COALESCE((miles_remaining)::numeric, '1000000000'::numeric) <= (0)::numeric) OR (COALESCE((days_remaining)::numeric, '1000000000'::numeric) <= (0)::numeric)) THEN 'over'::text
-            WHEN ((COALESCE((miles_remaining)::numeric, '1000000000'::numeric) <= (lead_miles)::numeric) OR (COALESCE((days_remaining)::numeric, '1000000000'::numeric) <= (lead_days)::numeric)) THEN 'soon'::text
-            ELSE 'ok'::text
-        END AS level
-   FROM calc c;
+-- tw_pm_due is defined at the end of this file: it reads columns and a
+-- function added further down.
 
 create or replace view tw_timecard_days as
 WITH booked AS (
@@ -2263,6 +2146,31 @@ WITH booked AS (
          SELECT clocked.mechanic_id,
             clocked.work_date
            FROM clocked
+        ), worked AS (
+         SELECT x.mechanic_id,
+            x.work_date,
+            array_agg(x.unit ORDER BY x.hrs DESC, x.unit) AS units
+           FROM ( SELECT e.mechanic_id,
+                    e.work_date,
+                    COALESCE(v.number, e.unit_label) AS unit,
+                    sum(e.hours) AS hrs
+                   FROM (tw_time_entries e
+                     LEFT JOIN tw_vehicles v ON ((v.id = e.vehicle_id)))
+                  WHERE (COALESCE(v.number, e.unit_label) IS NOT NULL)
+                  GROUP BY e.mechanic_id, e.work_date, COALESCE(v.number, e.unit_label)) x
+          GROUP BY x.mechanic_id, x.work_date
+        ), charged AS (
+         SELECT x.mechanic_id,
+            x.work_date,
+            array_agg(x.cost_code ORDER BY x.hrs DESC, x.cost_code) AS cost_codes
+           FROM ( SELECT e.mechanic_id,
+                    e.work_date,
+                    e.cost_code,
+                    sum(e.hours) AS hrs
+                   FROM tw_time_entries e
+                  WHERE (e.cost_code IS NOT NULL)
+                  GROUP BY e.mechanic_id, e.work_date, e.cost_code) x
+          GROUP BY x.mechanic_id, x.work_date
         )
  SELECT d.mechanic_id,
     m.name AS mechanic,
@@ -2280,21 +2188,18 @@ WITH booked AS (
     COALESCE(k.still_open, false) AS still_open,
     a.approved_by,
     a.approved_at,
-    -- The newest change to anything the card is made of.
-    greatest(b.last_entry_edit, k.last_shift_edit) AS last_edit,
-    -- Approved AND untouched since. This is the column payroll is gated
-    -- on, so nothing has to remember to check both halves.
-    (a.approved_at IS NOT NULL
-      AND (greatest(b.last_entry_edit, k.last_shift_edit) IS NULL
-           OR a.approved_at >= greatest(b.last_entry_edit, k.last_shift_edit))) AS approved,
-    (a.approved_at IS NOT NULL
-      AND greatest(b.last_entry_edit, k.last_shift_edit) IS NOT NULL
-      AND a.approved_at < greatest(b.last_entry_edit, k.last_shift_edit)) AS changed_since_approved
-   FROM ((((days d
+    GREATEST(b.last_entry_edit, k.last_shift_edit) AS last_edit,
+    ((a.approved_at IS NOT NULL) AND ((GREATEST(b.last_entry_edit, k.last_shift_edit) IS NULL) OR (a.approved_at >= GREATEST(b.last_entry_edit, k.last_shift_edit)))) AS approved,
+    ((a.approved_at IS NOT NULL) AND (GREATEST(b.last_entry_edit, k.last_shift_edit) IS NOT NULL) AND (a.approved_at < GREATEST(b.last_entry_edit, k.last_shift_edit))) AS changed_since_approved,
+    COALESCE(w.units, ARRAY[]::text[]) AS units,
+    COALESCE(c.cost_codes, ARRAY[]::text[]) AS cost_codes
+   FROM ((((((days d
      JOIN tw_mechanics m ON ((m.id = d.mechanic_id)))
      LEFT JOIN booked b ON (((b.mechanic_id = d.mechanic_id) AND (b.work_date = d.work_date))))
      LEFT JOIN clocked k ON (((k.mechanic_id = d.mechanic_id) AND (k.work_date = d.work_date))))
-     LEFT JOIN tw_timecard_approvals a ON (((a.mechanic_id = d.mechanic_id) AND (a.work_date = d.work_date))));
+     LEFT JOIN tw_timecard_approvals a ON (((a.mechanic_id = d.mechanic_id) AND (a.work_date = d.work_date))))
+     LEFT JOIN worked w ON (((w.mechanic_id = d.mechanic_id) AND (w.work_date = d.work_date))))
+     LEFT JOIN charged c ON (((c.mechanic_id = d.mechanic_id) AND (c.work_date = d.work_date))));
 
 create or replace view tw_work_history as
 SELECT d.created_at AS at,
@@ -2403,26 +2308,16 @@ UNION ALL
     o.id AS source_id
    FROM tw_purchase_orders o
 UNION ALL
-/* A tire going on and coming off. Derived from tw_tires rather than
-   written anywhere, so it covers every tire already on the fleet —
-   hundreds of mounts that had never appeared in any history.
-
-   Dated by mounted_date and removed_date, not created_at. Those are
-   dates the shop recorded on purpose; created_at is when somebody
-   happened to type it, and on a backfilled fleet the two are months
-   apart. A timeline that files a tire mounted in June under today is
-   wrong in a way people notice. Cast through Eastern so a date does
-   not land on the evening before. */
- SELECT ((t.mounted_date)::timestamp AT TIME ZONE 'America/New_York'::text) AS at,
+ SELECT ((t.mounted_date)::timestamp without time zone AT TIME ZONE 'America/New_York'::text) AS at,
     'tires'::text AS kind,
     'Tire mounted'::text AS what,
     v.number AS unit,
     t.vehicle_id,
-    ((((COALESCE(NULLIF(t.brand, ''::text), 'Unbranded'::text) ||
-        COALESCE((' '::text || NULLIF(t.model, ''::text)), ''::text)) ||
-        ' on '::text) || t."position") ||
-        CASE WHEN (t.tire_type = 'retread'::text) THEN ' · retread'::text ELSE ''::text END ||
-        COALESCE(((' at '::text || t.mounted_odometer) || ' miles'::text), ''::text)) AS summary,
+    (((((COALESCE(NULLIF(t.brand, ''::text), 'Unbranded'::text) || COALESCE((' '::text || NULLIF(t.model, ''::text)), ''::text)) || ' on '::text) || t."position") ||
+        CASE
+            WHEN (t.tire_type = 'retread'::text) THEN ' · retread'::text
+            ELSE ''::text
+        END) || COALESCE(((' at '::text || t.mounted_odometer) || ' miles'::text), ''::text)) AS summary,
     t.created_by AS who,
     NULL::text AS work_order,
     NULL::numeric AS hours,
@@ -2430,16 +2325,16 @@ UNION ALL
    FROM (tw_tires t
      LEFT JOIN tw_vehicles v ON ((v.id = t.vehicle_id)))
 UNION ALL
- SELECT ((t.removed_date)::timestamp AT TIME ZONE 'America/New_York'::text) AS at,
+ SELECT ((t.removed_date)::timestamp without time zone AT TIME ZONE 'America/New_York'::text) AS at,
     'tires'::text AS kind,
     'Tire pulled'::text AS what,
     v.number AS unit,
     t.vehicle_id,
-    (((COALESCE(NULLIF(t.brand, ''::text), 'Unbranded'::text) || ' off '::text) || t."position") ||
-        COALESCE((' — '::text || NULLIF(t.removed_reason, ''::text)), ''::text) ||
-        CASE WHEN (t.removed_odometer IS NOT NULL AND t.mounted_odometer IS NOT NULL)
-             THEN ((' · '::text || (t.removed_odometer - t.mounted_odometer)) || ' miles run'::text)
-             ELSE ''::text END) AS summary,
+    ((((COALESCE(NULLIF(t.brand, ''::text), 'Unbranded'::text) || ' off '::text) || t."position") || COALESCE((' — '::text || NULLIF(t.removed_reason, ''::text)), ''::text)) ||
+        CASE
+            WHEN ((t.removed_odometer IS NOT NULL) AND (t.mounted_odometer IS NOT NULL)) THEN ((' · '::text || (t.removed_odometer - t.mounted_odometer)) || ' miles run'::text)
+            ELSE ''::text
+        END) AS summary,
     NULL::text AS who,
     NULL::text AS work_order,
     NULL::numeric AS hours,
@@ -2454,8 +2349,6 @@ alter view tw_hours set (security_invoker = true);
 alter view tw_on_clock set (security_invoker = true);
 alter view tw_part_vendor set (security_invoker = true);
 alter view tw_parts_reorder set (security_invoker = true);
-alter view tw_payroll_lines set (security_invoker = true);
-alter view tw_pm_due set (security_invoker = true);
 alter view tw_timecard_days set (security_invoker = true);
 alter view tw_work_history set (security_invoker = true);
 
@@ -2560,6 +2453,13 @@ create policy "tw_work_orders_anon_all" on tw_work_orders for all to anon using 
 drop policy if exists "tw_work_orders_auth_all" on tw_work_orders;
 create policy "tw_work_orders_auth_all" on tw_work_orders for all to authenticated using (true) with check (true);
 
+-- The mechanic as Motive knows them. Optional: without it the write-back
+-- sends the name alone, which is right but less precise. Deliberately
+-- not matched on name automatically — Dylan/Dillon and Isaah/Isiaih are
+-- the same people spelled two ways, and a fuzzy match that got one
+-- wrong would put the wrong name on a federal record.
+alter table tw_mechanics add column if not exists motive_user_id bigint;
+
 -- ── Column grants ───────────────────────────────────────────
 -- tw_mechanics is the one table the browser must not see whole. RLS
 -- alone would not do it: policies work by row, and pin_hash, the
@@ -2623,12 +2523,6 @@ create policy "tw_defect_dvirs_anon_all" on tw_defect_dvirs for all to anon usin
 drop policy if exists "tw_defect_dvirs_auth_all" on tw_defect_dvirs;
 create policy "tw_defect_dvirs_auth_all" on tw_defect_dvirs for all to authenticated using (true) with check (true);
 
--- The mechanic as Motive knows them. Optional: without it the write-back
--- sends the name alone, which is right but less precise. Deliberately
--- not matched on name automatically — Dylan/Dillon and Isaah/Isiaih are
--- the same people spelled two ways, and a fuzzy match that got one
--- wrong would put the wrong name on a federal record.
-alter table tw_mechanics add column if not exists motive_user_id bigint;
 
 -- Re-runnable backfill for a database that already holds defects.
 insert into tw_defect_dvirs (defect_id, log_id, part_id, unit_number, reported_on)
@@ -2862,6 +2756,48 @@ $fn$;
 -- the same name.
 drop function if exists public.tw_mechanic_update(uuid, text, text, text, text);
 
+CREATE OR REPLACE FUNCTION public.tw_mechanic_update(p_id uuid, p_name text, p_email text, p_emp_no text, p_cell text DEFAULT NULL::text, p_class text DEFAULT NULL::text, p_class_name text DEFAULT NULL::text, p_group text DEFAULT NULL::text, p_job text DEFAULT NULL::text, p_job_name text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare n integer; e text; nm text;
+begin
+  nm := nullif(btrim(coalesce(p_name, '')), '');
+  if nm is null then
+    return jsonb_build_object('ok', false, 'error', 'A mechanic needs a name.');
+  end if;
+
+  e := nullif(btrim(coalesce(p_email, '')), '');
+  if e is not null and e not like '%@%' then
+    return jsonb_build_object('ok', false, 'error', 'That is not an email address.');
+  end if;
+
+  if e is not null and exists (
+       select 1 from tw_mechanics
+        where lower(email) = lower(e) and id <> p_id) then
+    return jsonb_build_object('ok', false, 'error',
+      'Somebody else on the roster already has that email.');
+  end if;
+
+  update tw_mechanics
+     set name   = nm,
+         email  = e,
+         emp_no = nullif(btrim(coalesce(p_emp_no, '')), ''),
+         cell_phone = nullif(btrim(coalesce(p_cell, '')), ''),
+         pay_class = nullif(btrim(coalesce(p_class, '')), ''),
+         pay_class_name = nullif(btrim(coalesce(p_class_name, '')), ''),
+         pay_group = nullif(btrim(coalesce(p_group, '')), ''),
+         pay_job = nullif(btrim(coalesce(p_job, '')), ''),
+         pay_job_name = nullif(btrim(coalesce(p_job_name, '')), '')
+   where id = p_id;
+  get diagnostics n = row_count;
+  if n = 0 then return jsonb_build_object('ok', false, 'error', 'No such mechanic.'); end if;
+  return jsonb_build_object('ok', true);
+end;
+$function$;
+
 update tw_cost_codes set job_number = '100710.', job_name = 'Clay''s Ferry Shop'
  where code = 'SHOP-CF' and job_number is null;
 update tw_cost_codes set job_number = '100740.', job_name = 'Nicholasville Shop'
@@ -2898,3 +2834,179 @@ end $do$;
 -- than sitting beside last_odometer where it belongs: CREATE OR REPLACE
 -- VIEW refuses to rename a column, and slotting one into the middle is
 -- exactly that.
+
+create or replace view tw_pm_due as
+WITH base AS (
+         SELECT v.id AS vehicle_id,
+            v.number AS truck,
+            v.division,
+            p.id AS program_id,
+            p.name AS program,
+            p.category,
+            p.interval_miles,
+            p.interval_months,
+            p.est_hours,
+            COALESCE(p.lead_miles, (ceil(((p.interval_miles)::numeric * 0.1)))::integer) AS lead_miles,
+            COALESCE(p.lead_days, 30) AS lead_days,
+            c_1.done_date AS last_date,
+            c_1.done_odometer AS last_odometer,
+            c_1.engine_hours AS last_engine_hours,
+            c_1.done_by AS last_by,
+            m.current_odometer,
+            m.odometer_date
+           FROM (((tw_vehicles v
+             CROSS JOIN tw_pm_programs p)
+             LEFT JOIN LATERAL ( SELECT tw_pm_completions.done_date,
+                    tw_pm_completions.done_odometer,
+                    tw_pm_completions.engine_hours,
+                    tw_pm_completions.done_by
+                   FROM tw_pm_completions
+                  WHERE ((tw_pm_completions.vehicle_id = v.id) AND (tw_pm_completions.program_id = p.id))
+                  ORDER BY tw_pm_completions.done_date DESC, tw_pm_completions.done_odometer DESC NULLS LAST
+                 LIMIT 1) c_1 ON (true))
+             LEFT JOIN tw_vehicle_meter m ON ((m.vehicle_id = v.id)))
+          WHERE (v.active AND p.active AND ((p.applies_to IS NULL) OR (p.applies_to = v.division)))
+        ), calc AS (
+         SELECT b.vehicle_id,
+            b.truck,
+            b.division,
+            b.program_id,
+            b.program,
+            b.category,
+            b.interval_miles,
+            b.interval_months,
+            b.est_hours,
+            b.lead_miles,
+            b.lead_days,
+            b.last_date,
+            b.last_odometer,
+            b.last_engine_hours,
+            b.last_by,
+            b.current_odometer,
+            b.odometer_date,
+                CASE
+                    WHEN ((b.interval_miles IS NOT NULL) AND (b.last_odometer IS NOT NULL)) THEN (b.last_odometer + b.interval_miles)
+                    ELSE NULL::integer
+                END AS due_at_odometer,
+                CASE
+                    WHEN ((b.interval_miles IS NOT NULL) AND (b.last_odometer IS NOT NULL) AND (b.current_odometer IS NOT NULL)) THEN ((b.last_odometer + b.interval_miles) - b.current_odometer)
+                    ELSE NULL::integer
+                END AS miles_remaining,
+                CASE
+                    WHEN ((b.interval_months IS NOT NULL) AND (b.last_date IS NOT NULL)) THEN ((b.last_date + ((b.interval_months || ' months'::text))::interval))::date
+                    ELSE NULL::date
+                END AS due_date,
+                CASE
+                    WHEN ((b.interval_months IS NOT NULL) AND (b.last_date IS NOT NULL)) THEN (((b.last_date + ((b.interval_months || ' months'::text))::interval))::date - CURRENT_DATE)
+                    ELSE NULL::integer
+                END AS days_remaining
+           FROM base b
+        )
+ SELECT vehicle_id,
+    truck,
+    division,
+    program_id,
+    program,
+    category,
+    interval_miles,
+    interval_months,
+    est_hours,
+    lead_miles,
+    lead_days,
+    last_date,
+    last_odometer,
+    last_by,
+    current_odometer,
+    odometer_date,
+    due_at_odometer,
+    miles_remaining,
+    due_date,
+    days_remaining,
+        CASE
+            WHEN (last_date IS NULL) THEN 'nobaseline'::text
+            WHEN ((COALESCE((miles_remaining)::numeric, '1000000000'::numeric) <= (0)::numeric) OR (COALESCE((days_remaining)::numeric, '1000000000'::numeric) <= (0)::numeric)) THEN 'over'::text
+            WHEN ((COALESCE((miles_remaining)::numeric, '1000000000'::numeric) <= (lead_miles)::numeric) OR (COALESCE((days_remaining)::numeric, '1000000000'::numeric) <= (lead_days)::numeric)) THEN 'soon'::text
+            ELSE 'ok'::text
+        END AS level,
+    last_engine_hours
+   FROM calc c;
+alter view tw_pm_due set (security_invoker = true);
+
+-- ── The payroll export, as the live database has it ────────────
+-- Last, because it reads tw_equipment_number and the pay columns on
+-- tw_mechanics and tw_cost_codes, all added above.
+create or replace view tw_payroll_lines as
+SELECT t.work_date,
+    m.emp_no,
+    m.name AS mechanic,
+    t.cost_code,
+    c.name AS cost_code_name,
+    COALESCE(v.number, t.unit_label) AS unit,
+    t.where_worked,
+    t.job_location,
+    t.hours,
+    round(((t.unit_seconds)::numeric / 3600.0), 2) AS true_hours,
+    jsonb_array_length(t.stints) AS segments,
+    t.work_order,
+    array_to_string(t.work_types, ' · '::text) AS work_types,
+        CASE
+            WHEN (d.id IS NULL) THEN NULL::text
+            ELSE (d.category || COALESCE((' — '::text || d.note), ''::text))
+        END AS dvir,
+    p.name AS pm_service,
+    COALESCE(( SELECT string_agg(((trim_scale(ep.qty) || 'x '::text) || ep.part_number), '; '::text ORDER BY ep.part_number) AS string_agg
+           FROM tw_time_entry_parts ep
+          WHERE (ep.time_entry_id = t.id)), ''::text) AS parts_used,
+    t.work_performed,
+    t.id AS entry_id,
+    m.id AS mechanic_id,
+    m.pay_group,
+    m.pay_class,
+    m.pay_class_name,
+    COALESCE(c.job_number, m.pay_job) AS job_number,
+        CASE
+            WHEN (v.number IS NULL) THEN COALESCE(c.job_name, m.pay_job_name)
+            ELSE NULL::text
+        END AS job_name,
+        CASE
+            WHEN (v.number IS NULL) THEN '700300. .'::text
+            ELSE NULL::text
+        END AS phase,
+        CASE
+            WHEN (v.number IS NULL) THEN 'Shop Work'::text
+            ELSE NULL::text
+        END AS phase_name,
+        CASE
+            WHEN (v.number IS NOT NULL) THEN tw_equipment_number(v.number)
+            ELSE NULL::text
+        END AS equipment,
+    v.number AS eq_description
+   FROM (((((tw_time_entries t
+     JOIN tw_mechanics m ON ((m.id = t.mechanic_id)))
+     LEFT JOIN tw_cost_codes c ON ((c.code = t.cost_code)))
+     LEFT JOIN tw_vehicles v ON ((v.id = t.vehicle_id)))
+     LEFT JOIN tw_defects d ON ((d.id = t.defect_id)))
+     LEFT JOIN tw_pm_programs p ON ((p.id = t.pm_program_id)));
+alter view tw_payroll_lines set (security_invoker = true);
+
+-- ── A written summary of a day ─────────────────────────────────
+-- One row per work date. Nothing in this repo writes it; it was made
+-- in the live database and is recorded here so a rebuild has it.
+create table if not exists tw_day_summary (
+  work_date   date primary key,
+  body        text not null,
+  facts       jsonb not null default '{}'::jsonb,
+  model       text,
+  hours       numeric(6,2),
+  entries     integer,
+  mechanics   integer,
+  written_by  text,
+  written_at  timestamptz not null default now()
+);
+alter table tw_day_summary enable row level security;
+drop policy if exists "tw_day_summary_read" on tw_day_summary;
+create policy "tw_day_summary_read" on tw_day_summary for select to anon using (true);
+drop policy if exists "tw_day_summary_write" on tw_day_summary;
+create policy "tw_day_summary_write" on tw_day_summary for insert to anon with check (true);
+drop policy if exists "tw_day_summary_update" on tw_day_summary;
+create policy "tw_day_summary_update" on tw_day_summary for update to anon using (true) with check (true);
