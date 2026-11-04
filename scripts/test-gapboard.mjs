@@ -39,7 +39,11 @@ const ok = (l, v, d) => { if (!v) bad++; console.log(`${v ? " ok " : " !! "} ${l
 const BADGE = "jason_ward@theallen.com";
 const BOSS = { id: "s1", name: "Jason Ward" };
 const MECH = { id: "m1", name: "Joshua Sawyers", email: "joshua@theallen.com" };
-const DATE = "2026-10-03";
+/* Today in the shop's timezone: the Timecards tab opens on "This
+   week" (Monday through today), and a fixed date falls out of it. */
+const isoOf = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
+  year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+const DATE = isoOf(new Date());
 
 /* 4.60 on the clock. */
 const SHIFT = { id: "sh1", mechanic_id: MECH.id, work_date: DATE,
