@@ -6,6 +6,8 @@ import {
 } from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as clock from "./nowData.js";
+import { whereAmI } from "./geo.js";
+import PunchPlace from "./PunchPlace.jsx";
 import * as setup from "./setupData.js";
 import * as buy from "./purchasingData.js";
 import MyJobs from "./MyJobsSection.jsx";
@@ -890,6 +892,7 @@ const LUNCH = [0, 15, 30, 45, 60];
 function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSaved }) {
   const [sh, setSh] = React.useState(null);
   const [, tick] = React.useState(0);
+  const [locating, setLocating] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try { setSh(await clock.shiftForDay(mechanicId, date)); }
@@ -947,13 +950,22 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
             {running ? "On the clock now"
               : "Punching in shows you on the shop board. It does not book hours."}
+            {" "}Where you clock in and out is recorded with the time.
           </div>
         </div>
         <Btn tone={running ? "ghost" : "solid"}
-          onClick={() => go(() => running
-            ? clock.punchOut(mechanicId)
-            : clock.punchIn(mechanicId))}>
-          {running ? "Clock out" : "Clock in"}
+          disabled={locating}
+          onClick={() => go(async () => {
+            /* The position is asked for first and never fails the
+               punch — see geo.js. The wait is shown on the button so a
+               slow GPS fix does not read as a dead button. */
+            setLocating(true);
+            let g;
+            try { g = await whereAmI(); } finally { setLocating(false); }
+            return running ? clock.punchOut(mechanicId, g)
+                           : clock.punchIn(mechanicId, null, g);
+          })}>
+          {locating ? "Getting location…" : running ? "Clock out" : "Clock in"}
         </Btn>
       </div>
 
@@ -981,6 +993,13 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
               </select>
             </Field>
           </div>
+          {(sh.inPlace?.lat != null || sh.inPlace?.note
+            || sh.outPlace?.lat != null || sh.outPlace?.note) && (
+            <div className="flex flex-wrap" style={{ gap: 14, margin: "2px 0 4px" }}>
+              <PunchPlace label="In:" place={sh.inPlace} />
+              {!sh.open && <PunchPlace label="Out:" place={sh.outPlace} />}
+            </div>
+          )}
           <p style={{ fontSize: 11.5, color: C.muted, margin: "2px 0 0" }}>
             The clock fills these in. Type over them if you forgot to punch —
             the change saves when you click away, and is noted with your name on it.

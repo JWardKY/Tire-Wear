@@ -5,6 +5,7 @@ import { fmtDate, nf, toCSV, Btn, Field, SectionLabel, inp, th, td, tdNum, linkB
 import * as time from "./timeData.js";
 import * as wlog from "./logData.js";
 import * as clock from "./nowData.js";
+import PunchPlace from "./PunchPlace.jsx";
 import { todayISO } from "./day.js";
 import { sayOffline } from "./dbError.js";
 import { summarise } from "./cardLists.js";
@@ -1009,6 +1010,13 @@ function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
             ) : (
               <span style={{ fontFamily: FM, fontWeight: 600 }}>{nf(sh.clockHours, 2)} hr</span>
             )}
+          </div>
+          {/* Where the device said it was at each tap. Edits to the
+              times above do not move these: a corrected time is a
+              correction, not a punch, and it was not made anywhere. */}
+          <div className="flex flex-wrap" style={{ gap: 14, paddingBottom: 9, width: "100%" }}>
+            <PunchPlace label="In:" place={sh.inPlace} />
+            {!sh.open && <PunchPlace label="Out:" place={sh.outPlace} />}
           </div>
         </div>
       ))}

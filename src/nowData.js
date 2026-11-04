@@ -1,6 +1,7 @@
 import { supabase } from "./supabase.js";
 import { fetchAll } from "./data.js";
 import { hm, shiftTimes, shiftHours } from "./shiftMath.js";
+import { geoCols, punchPlace } from "./geo.js";
 
 /* Re-exported so every screen keeps reaching for the clock through one
    module. The arithmetic itself lives in shiftMath.js, which has no
@@ -34,6 +35,7 @@ export async function listOnClock() {
     startedOn: r.started_on,
     stale: !!r.stale,
     note: r.note || "",
+    inPlace: punchPlace(r, "in"),
   }));
 }
 
@@ -150,15 +152,23 @@ export async function openShift(mechanicId) {
    somebody presses the button again. The unique index refuses the
    second one; this turns that refusal into "you are already on the
    clock" rather than a database error on a wall-mounted screen. */
-export async function punchIn(mechanicId, note) {
-  const { error } = await supabase.from("tw_shifts")
-    .insert({ mechanic_id: mechanicId, note: note || null });
+export async function punchIn(mechanicId, note, geo) {
+  const row = { mechanic_id: mechanicId, note: note || null };
+  let { error } = await supabase.from("tw_shifts")
+    .insert(geo ? { ...row, ...geoCols("in", geo) } : row);
+  /* A page deployed ahead of the location columns still has to punch.
+     Losing the pin is a shame; losing the punch is a missing day's pay. */
+  if (error && geo && noSuchColumn(error)) {
+    ({ error } = await supabase.from("tw_shifts").insert(row));
+  }
   if (error) {
     if (error.code === "23505") return { ok: false, error: "Already on the clock." };
     throw error;
   }
   return { ok: true };
 }
+
+const noSuchColumn = (e) => e?.code === "PGRST204" || e?.code === "42703";
 
 /* The server stamps the punch, not the tablet.
    punchIn takes started_at from the column default, so it is already the
@@ -168,9 +178,25 @@ export async function punchIn(mechanicId, note) {
    a raw database error while trying to clock out.
    The quieter problem was worse: a tablet ten minutes slow would have
    booked every punch-out ten minutes early and nobody would have known. */
-export async function punchOut(mechanicId) {
+export async function punchOut(mechanicId, geo) {
   const open = await openShift(mechanicId);
-  const r = await rpc("tw_punch_out", { p_mechanic: mechanicId });
+  const args = { p_mechanic: mechanicId };
+  if (geo) {
+    Object.assign(args, {
+      p_lat: geo.lat ?? null, p_lng: geo.lng ?? null,
+      p_accuracy_m: geo.accuracyM ?? null,
+      p_geo_note: geo.lat != null ? null : (geo.note || null),
+    });
+  }
+  let r;
+  try {
+    r = await rpc("tw_punch_out", args);
+  } catch (e) {
+    /* Same as punchIn: a database still on the one-argument function
+       answers PGRST202 to the new arguments. Clock out without them. */
+    if (!geo || e?.code !== "PGRST202") throw e;
+    r = await rpc("tw_punch_out", { p_mechanic: mechanicId });
+  }
   if (r && r.ok === false) return r;
   return { ok: true, startedAt: open?.started_at };
 }
@@ -280,6 +306,7 @@ export async function shiftsForDay(mechanicId, dateISO) {
     lunch: Number(r.lunch_minutes),
     clockHours: Number(r.clock_hours),
     open: !!r.open,
+    inPlace: punchPlace(r, "in"), outPlace: punchPlace(r, "out"),
   }));
 }
 
@@ -302,6 +329,7 @@ export async function shiftForDay(mechanicId, dateISO) {
     lunch: Number(data_.lunch_minutes),
     clockHours: Number(data_.clock_hours),
     open: !!data_.open,
+    inPlace: punchPlace(data_, "in"), outPlace: punchPlace(data_, "out"),
   };
 }
 
@@ -319,6 +347,7 @@ export async function shiftById(id) {
     lunch: Number(data.lunch_minutes),
     clockHours: Number(data.clock_hours),
     open: !!data.open,
+    inPlace: punchPlace(data, "in"), outPlace: punchPlace(data, "out"),
   };
 }
 
@@ -444,6 +473,7 @@ export async function openShiftFor(mechanicId) {
     id: r.id, date: r.work_date, mechanicId: r.mechanic_id, mechanic: r.mechanic,
     startedAt: r.started_at, endedAt: r.ended_at,
     lunch: Number(r.lunch_minutes), clockHours: Number(r.clock_hours), open: true,
+    inPlace: punchPlace(r, "in"), outPlace: punchPlace(r, "out"),
   };
 }
 

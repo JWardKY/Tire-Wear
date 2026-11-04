@@ -257,6 +257,29 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### Where a punch happened
+
+Clock in and Clock out ask the phone or tablet for its position and store it on the
+shift: `in_lat` / `in_lng` / `in_accuracy_m` and the same for `out_`. A supervisor sees
+a map pin beside each punch in the card dialog on Hours, the mechanic sees their own on
+the Timecard clock, and the Now board shows where each person on the clock punched in.
+
+**A location never stops a punch.** If the device refuses, has location off, or cannot
+get a fix within eight seconds, the punch goes through and `in_geo_note` /
+`out_geo_note` says why (`denied`, `unavailable`, `timeout`, `unsupported`). A clock that
+will not clock is one people stop using. `src/geo.js` is the only place that asks.
+
+Two things to know when reading a pin:
+
+- **It is where the device was, not proof of where the person was.** The accuracy is
+  the device's own estimate — indoors on wifi it can be a few hundred feet. It is the
+  same honour system as the email at sign-in.
+- **Typing over a time does not move the pin.** A correction is not a punch, and a
+  punch added by hand on Hours has no location at all.
+
+Browsers only give a position over HTTPS, which Netlify serves; `npm run dev` on
+`localhost` counts as secure too.
+
 ### Work orders, and the history
 
 A work order is keyed on `(kind, source_key)` and opened **idempotently**. That is the
