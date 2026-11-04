@@ -5,7 +5,8 @@
 -- and seed-shop.sql. This one has to go first — schema-shop.sql
 -- references tw_vehicles.
 --
--- Applied to the shared Allen project (allen-qc). Tables are
+-- First applied to the shared Allen project (allen-qc); the live app now
+-- runs on its own project — see HANDOFF.md. Tables are
 -- namespaced tw_ so they sit alongside the other apps already in
 -- that database, which follow the same convention: hct_ for the
 -- Haul Cycle Tracker, bid_ for the bid history, po_ for purchasing.
@@ -33,29 +34,17 @@ create extension if not exists "pgcrypto";
 --
 -- Adding one here means adding it to CONFIGS in src/TireWear.jsx as
 -- well; the diagram, the dropdown and the reports all read that.
--- OT is equipment entered by hand rather than synced from Motive — a
--- rental, a customer's truck in for a service. Added after the first
--- deploy, so it alters the live table as well as the create above.
-alter table tw_vehicles drop constraint if exists tw_vehicles_division_check;
-alter table tw_vehicles add constraint tw_vehicles_division_check
-  check (division in ('DT','HT','OT'));
-
-alter table tw_vehicles drop constraint if exists tw_vehicles_axle_config_check;
-alter table tw_vehicles add constraint tw_vehicles_axle_config_check
-  check (axle_config in ('dump12','dualpush14','quad14','tandem10',
-                         'single6','light4','trailer8'));
-
 create table if not exists tw_vehicles (
   id                uuid primary key default gen_random_uuid(),
   number            text not null unique,           -- 'DT-882'
   make              text,
   model             text,
   model_year        text,
-  division          text not null check (division in ('DT','HT','OT')),
+  division          text not null check (division in ('DT','HT','LT','EQ','OT')),
   axle_config       text not null default 'dump12'
                       check (axle_config in ('dump12','dualpush14','quad14',
                                              'tandem10','single6','light4',
-                                             'trailer8')),
+                                             'trailer8','notires')),
   motive_vehicle_id bigint unique,                  -- for odometer sync
   active            boolean not null default true,
   notes             text,
@@ -64,6 +53,33 @@ create table if not exists tw_vehicles (
 );
 
 create index if not exists tw_vehicles_division_idx on tw_vehicles (division) where active;
+
+-- OT is equipment entered by hand rather than synced from Motive — a
+-- rental, a customer's truck in for a service. LT (light trucks) and EQ
+-- (equipment) came later, as did 'notires' for a unit with no tires to
+-- track. Added after the first deploy, so these alter the live table as
+-- well as the create just above.
+alter table tw_vehicles drop constraint if exists tw_vehicles_division_check;
+alter table tw_vehicles add constraint tw_vehicles_division_check
+  check (division in ('DT','HT','LT','EQ','OT'));
+
+alter table tw_vehicles drop constraint if exists tw_vehicles_axle_config_check;
+alter table tw_vehicles add constraint tw_vehicles_axle_config_check
+  check (axle_config in ('dump12','dualpush14','quad14','tandem10',
+                         'single6','light4','trailer8','notires'));
+
+-- Motive has two kinds of id: a vehicle (anything with an ELD) and an
+-- asset (trailers, equipment). A unit is one or the other, never both,
+-- and each id belongs to one unit.
+alter table tw_vehicles add column if not exists motive_asset_id bigint;
+create unique index if not exists tw_vehicles_motive_asset_id_key
+  on tw_vehicles (motive_asset_id) where (motive_asset_id is not null);
+do $$ begin
+  alter table tw_vehicles add constraint tw_vehicles_one_motive_id
+    check (motive_vehicle_id is null or motive_asset_id is null);
+exception when duplicate_object then null;
+end $$;
+
 
 
 create table if not exists tw_tire_brands (
@@ -106,7 +122,7 @@ create table if not exists tw_tires (
      what is obviously a typo, because a database that rejects a real
      fifth cap teaches somebody to enter a lie instead. */
   retread_count    smallint,
-  wheel_material   text check (wheel_material in ('aluminum','steel')),
+  wheel_material   text,
   casing_id        text,                            -- serial, follows a casing through retreads
   mounted_date     date not null,
   mounted_odometer integer not null check (mounted_odometer >= 0),
@@ -132,8 +148,9 @@ create table if not exists tw_tires (
 -- already out there as well as created above. Null means nobody recorded
 -- it, which is every tire mounted before this column existed.
 alter table tw_tires add column if not exists wheel_material text;
+-- Named to match the live database, where it was created inline.
 do $$ begin
-  alter table tw_tires add constraint tw_wheel_material_known
+  alter table tw_tires add constraint tw_tires_wheel_material_check
     check (wheel_material in ('aluminum','steel'));
 exception when duplicate_object then null;
 end $$;
@@ -300,11 +317,17 @@ create table if not exists tw_settings (
   -- the pair is flagged. Duals only share a load if they are close to
   -- the same size; four 32nds is what the industry uses. Zero means
   -- "flag any difference at all".
-  dual_match_32nds   numeric(4,1) not null default 4 check (dual_match_32nds >= 0),
+  dual_match_32nds   numeric(4,1) not null default 4,
   updated_at         timestamptz not null default now()
 );
 
 insert into tw_settings (id) values (true) on conflict do nothing;
+
+do $$ begin
+  alter table tw_settings add constraint tw_dual_match_not_negative
+    check (dual_match_32nds >= 0);
+exception when duplicate_object then null;
+end $$;
 
 -- Who hears about a tire that has reached its pull depth. Deliberately
 -- not derived from the roster: the people who want to know are not
@@ -328,6 +351,48 @@ create table if not exists tw_tire_alerts (
 );
 
 create index if not exists tw_tire_alerts_sent_idx on tw_tire_alerts (sent_at desc);
+
+-- ── The tire catalog ────────────────────────────────────────
+-- One row per brand / model / size / type the shop buys, with what it
+-- costs and how deep it comes. A tire mounted from the catalog points
+-- at its row through model_id, so a price change reaches it.
+--
+-- The two unique indexes are on a normalised key — letters and digits
+-- only, upper-cased — so "Bridgestone M726" and "BRIDGESTONE m-726"
+-- are one row. The second compares sizes by digits alone, so
+-- "11R22.5" and "11 R 22.5" are too.
+create table if not exists tw_tire_models (
+  id               uuid primary key default gen_random_uuid(),
+  brand            text not null,
+  model            text not null default '',
+  size             text not null default '',
+  tire_type        text not null check (tire_type in ('virgin','retread')),
+  new_depth_32nds  numeric check (new_depth_32nds is null
+                                  or (new_depth_32nds > 0 and new_depth_32nds <= 40)),
+  cost             numeric check (cost is null or cost >= 0),
+  active           boolean not null default true,
+  notes            text,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+create unique index if not exists tw_tire_models_key on tw_tire_models (
+  upper(regexp_replace(brand, '[^a-zA-Z0-9]', '', 'g')),
+  upper(regexp_replace(model, '[^a-zA-Z0-9]', '', 'g')),
+  upper(regexp_replace(size,  '[^a-zA-Z0-9]', '', 'g')),
+  tire_type);
+create unique index if not exists tw_tire_models_key2 on tw_tire_models (
+  upper(regexp_replace(brand, '[^a-zA-Z0-9]', '', 'g')),
+  upper(regexp_replace(model, '[^a-zA-Z0-9]', '', 'g')),
+  regexp_replace(size, '[^0-9]', '', 'g'),
+  tire_type);
+
+alter table tw_tires add column if not exists model_id uuid;
+do $$ begin
+  alter table tw_tires add constraint tw_tires_model_id_fkey
+    foreign key (model_id) references tw_tire_models(id) on delete set null;
+exception when duplicate_object then null;
+end $$;
 
 -- Federal minimums are 4/32 steer and 2/32 all other positions
 -- (49 CFR 393.75). Defaults above pull earlier than that on purpose.
@@ -383,22 +448,6 @@ select distinct
 from bounds b;
 
 
--- Every mounted tire at or below the depth it should be pulled at, with
--- what a person needs to act on it. The alert sender reads this rather
--- than rebuilding the threshold rule, so the rule stays in one place.
-create or replace view tw_tires_due_out as
-select
-  a.tire_id, a.truck, a.vehicle_id, a.position, a.division,
-  a.brand, a.model, a.size, a.tire_type,
-  a.current_depth, a.pull_depth,
-  a.miles_run, a.miles_per_32nd,
-  al.sent_at as alerted_at
-from tw_active_tires a
-left join tw_tire_alerts al on al.tire_id = a.tire_id
-where a.current_depth is not null
-  and a.current_depth <= a.pull_depth;
-
-
 -- Everything a screen needs about a currently mounted tire.
 create or replace view tw_active_tires as
 select
@@ -435,6 +484,22 @@ join tw_settings s on s.id = true
 left join tw_tire_wear w on w.tire_id = t.id
 where t.removed_date is null;
 
+-- Every mounted tire at or below the depth it should be pulled at, with
+-- what a person needs to act on it. The alert sender reads this rather
+-- than rebuilding the threshold rule, so the rule stays in one place.
+create or replace view tw_tires_due_out as
+select
+  a.tire_id, a.truck, a.vehicle_id, a.position, a.division,
+  a.brand, a.model, a.size, a.tire_type,
+  a.current_depth, a.pull_depth,
+  a.miles_run, a.miles_per_32nd,
+  al.sent_at as alerted_at
+from tw_active_tires a
+left join tw_tire_alerts al on al.tire_id = a.tire_id
+where a.current_depth is not null
+  and a.current_depth <= a.pull_depth;
+
+
 -- Views run with the caller's rights, not the owner's. Without this a
 -- view is a hole straight through the row level security below: anon
 -- could read every tire by selecting the view instead of the table.
@@ -463,18 +528,28 @@ alter table tw_tread_readings enable row level security;
 alter table tw_odometer_log   enable row level security;
 alter table tw_settings       enable row level security;
 alter table tw_tire_alerts    enable row level security;
+alter table tw_tire_models    enable row level security;
 
 do $$
 declare t text;
 begin
   foreach t in array array['tw_vehicles','tw_tire_brands','tw_tires',
                            'tw_tread_readings','tw_odometer_log','tw_settings',
-                           'tw_tire_alerts']
+                           'tw_tire_alerts','tw_tire_models']
   loop
-    execute format('drop policy if exists %I on %I', t || '_authenticated_all', t);
-    execute format(
-      'create policy %I on %I for all to authenticated using (true) with check (true)',
-      t || '_authenticated_all', t);
+    -- tw_tire_alerts' policy for logged-in users is named _auth_all in
+    -- the live database; everything else is _authenticated_all.
+    if t = 'tw_tire_alerts' then
+      execute format('drop policy if exists %I on %I', t || '_auth_all', t);
+      execute format(
+        'create policy %I on %I for all to authenticated using (true) with check (true)',
+        t || '_auth_all', t);
+    else
+      execute format('drop policy if exists %I on %I', t || '_authenticated_all', t);
+      execute format(
+        'create policy %I on %I for all to authenticated using (true) with check (true)',
+        t || '_authenticated_all', t);
+    end if;
 
     execute format('drop policy if exists %I on %I', t || '_anon_all', t);
     execute format(

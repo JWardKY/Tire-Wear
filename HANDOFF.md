@@ -66,7 +66,7 @@ new to learn and nothing new to pay for:
 | Layer | Choice |
 |---|---|
 | Frontend | React + Vite |
-| Database | Supabase (Postgres), project `allen-qc` |
+| Database | Supabase (Postgres), project `qgsdpbgpftktaqncwdch` |
 | Access | None. The app asks for an Allen email and takes your word for it — see below |
 | Hosting | Netlify, deploys from `main` on push |
 | Charts | Recharts |
@@ -143,6 +143,17 @@ seed-shop.sql     cost codes and PM programs
 `schema.sql` goes first because `schema-shop.sql` references `tw_vehicles`. All four
 are re-runnable.
 
+**Last checked against the live database on 11/04/2026.** It had drifted: the tire
+catalog (`tw_tire_models`), Motive asset ids, driving lines, the payroll export columns,
+the unit and cost-code lists on a timecard day and `tw_day_summary` had all been added
+to the live database and never written here, and `schema.sql` could not build an empty
+database at all — it altered `tw_vehicles` before creating it. Both files now rebuild
+the live schema exactly, except that the live `tw_hours`, `tw_timecard_days` and
+`tw_work_history` are missing `security_invoker`, which the files keep on purpose.
+
+To check again, run `scripts/schema-catalog.sql` in both places and compare — the
+header of that file says how.
+
 **`schema-shop.sql` was written on 09/03/2026, and is worth knowing the history of.**
 Those tables were built directly in the database during the shop rollout and never
 written down — the repo described six tables while the app queried twenty-nine. That
@@ -161,7 +172,12 @@ outage away from being lost. Anything added from here goes in these files first.
 
 ### Where the data lives
 
-The tables are in the **existing `allen-qc` Supabase project**, not a new one, and are
+**The live app now runs on its own Supabase project, `qgsdpbgpftktaqncwdch`.** It
+started in the shared `allen-qc` project, and the paragraph below is how it was set up
+there. `allen-qc` still holds an older copy of the `tw_` tables that the app no longer
+reads — do not apply changes there thinking they will reach the shop.
+
+The tables were first put in the **existing `allen-qc` Supabase project**, not a new one, and are
 namespaced `tw_` — the same pattern the other apps in that database already use
 (`hct_` for the Haul Cycle Tracker, `bid_` for bid history, `po_` for purchasing). One
 database to back up, one set of logins, and a project that is actively used and so is
