@@ -24,6 +24,13 @@ const URL_ = process.env.APP_URL || "http://localhost:4173/";
 let bad = 0;
 const ok = (l, v, d) => { if (!v) bad++; console.log(`${v ? " ok " : " !! "} ${l}${!v && d ? ` — ${d}` : ""}`); };
 
+/* The board opens on "This week" (Monday through today, in the shop's
+   timezone), so the day has to be today — a fixed date drops off the
+   board the week after it was written. */
+const isoOf = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
+  year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+const TODAY = isoOf(new Date());
+
 const BOSS = { id: "m9", name: "Phil Hinkle", email: "phil_hinkle@theallen.com" };
 
 const day = (o) => ({
@@ -40,20 +47,20 @@ const day = (o) => ({
 const DAYS = [
   /* Six lines over five trucks — one truck was touched twice, which
      is why the list is shorter than the line count. */
-  day({ id: "m1", who: "Donald Bradley", emp: "5565", date: "2026-09-29",
+  day({ id: "m1", who: "Donald Bradley", emp: "5565", date: TODAY,
         clock: 9.33, booked: 9.33, lines: 6,
         units: ["DT-808", "Shop cleanup / housekeeping", "DT-885", "DT-887", "DT-896"],
         codes: ["885", "SHOP-CB", "835", "SHOP-CF"] }),
   /* Two lines, both shop, one code. */
-  day({ id: "m2", who: "Nick Shifflet", emp: "37243", date: "2026-09-29",
+  day({ id: "m2", who: "Nick Shifflet", emp: "37243", date: TODAY,
         clock: 8.85, booked: 8.85, lines: 2,
         units: ["Other shop time", "Parts run / pickup"], codes: ["SHOP-CF"] }),
   /* One truck, one code — the ordinary row. */
-  day({ id: "m3", who: "Stevie Winkler", emp: "43810", date: "2026-09-29",
+  day({ id: "m3", who: "Stevie Winkler", emp: "43810", date: TODAY,
         clock: 1.25, booked: 1.25, lines: 1,
         units: ["DT-890"], codes: ["830"] }),
   /* Still on the clock, nothing booked. The cells have to be a dash. */
-  day({ id: "m4", who: "Tyler Coffey", emp: "6340", date: "2026-09-29",
+  day({ id: "m4", who: "Tyler Coffey", emp: "6340", date: TODAY,
         clock: 0, booked: 0, lines: 0, open: true, units: [], codes: [] }),
 ];
 
