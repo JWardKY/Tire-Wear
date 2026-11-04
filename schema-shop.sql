@@ -219,6 +219,35 @@ create table if not exists tw_shifts (
   updated_at timestamptz default now() not null
 );
 
+-- Where each punch happened, as the phone or tablet reported it at the
+-- moment of the tap. Null on both ends of a punch somebody typed in by
+-- hand, and on a tap where the device would not say — geo_note then
+-- carries why ('denied', 'unavailable', 'timeout', 'unsupported'), so
+-- "no location" can be told apart from "location refused".
+--
+-- accuracy_m is the device's own radius, in metres. A phone indoors on
+-- wifi says 20; one with location services half off says 3000. A pin
+-- without it reads as more certain than it is.
+alter table tw_shifts add column if not exists in_lat double precision;
+alter table tw_shifts add column if not exists in_lng double precision;
+alter table tw_shifts add column if not exists in_accuracy_m integer;
+alter table tw_shifts add column if not exists in_geo_note text;
+alter table tw_shifts add column if not exists out_lat double precision;
+alter table tw_shifts add column if not exists out_lng double precision;
+alter table tw_shifts add column if not exists out_accuracy_m integer;
+alter table tw_shifts add column if not exists out_geo_note text;
+
+do $do$ begin
+  if not exists (select 1 from pg_constraint
+                  where conname = 'tw_shift_geo_sane' and conrelid = 'tw_shifts'::regclass) then
+    -- Both halves of a position or neither, and on the planet.
+    alter table tw_shifts add constraint tw_shift_geo_sane CHECK (
+      ((in_lat IS NULL) = (in_lng IS NULL)) AND ((out_lat IS NULL) = (out_lng IS NULL))
+      AND (in_lat  IS NULL OR (in_lat  BETWEEN -90 AND 90  AND in_lng  BETWEEN -180 AND 180))
+      AND (out_lat IS NULL OR (out_lat BETWEEN -90 AND 90  AND out_lng BETWEEN -180 AND 180)));
+  end if;
+end $do$;
+
 create table if not exists tw_time_entries (
   id uuid default gen_random_uuid() not null,
   mechanic_id uuid not null,
@@ -1664,7 +1693,16 @@ begin
 end;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.tw_punch_out(p_mechanic uuid)
+-- The location arguments were added later. The old one-argument
+-- signature is dropped first: left beside the new one, a call naming
+-- only p_mechanic would match both and Postgres would refuse it as
+-- ambiguous. Every new argument defaults to null, so a page still
+-- calling with p_mechanic alone keeps working.
+DROP FUNCTION IF EXISTS public.tw_punch_out(uuid);
+
+CREATE OR REPLACE FUNCTION public.tw_punch_out(p_mechanic uuid,
+   p_lat double precision DEFAULT NULL, p_lng double precision DEFAULT NULL,
+   p_accuracy_m integer DEFAULT NULL, p_geo_note text DEFAULT NULL)
  RETURNS jsonb
  LANGUAGE plpgsql
  SET search_path TO 'public', 'pg_temp'
@@ -1686,7 +1724,9 @@ begin
      a moment in the future, a zero-length shift is a better answer than
      an error in a mechanic's face at the end of a shift. */
   update public.tw_shifts
-     set ended_at = greatest(now(), started_at)
+     set ended_at = greatest(now(), started_at),
+         out_lat = p_lat, out_lng = p_lng,
+         out_accuracy_m = p_accuracy_m, out_geo_note = p_geo_note
    where id = v_id;
 
   return jsonb_build_object('ok', true, 'id', v_id);
@@ -1968,7 +2008,10 @@ SELECT s.id,
     tw_shift_hours(s.started_at, s.ended_at, s.lunch_minutes) AS clock_hours,
     (s.ended_at IS NULL) AS open,
     s.note,
-    s.updated_at
+    s.updated_at,
+    -- Appended: CREATE OR REPLACE VIEW only adds columns at the end.
+    s.in_lat, s.in_lng, s.in_accuracy_m, s.in_geo_note,
+    s.out_lat, s.out_lng, s.out_accuracy_m, s.out_geo_note
    FROM (tw_shifts s
      JOIN tw_mechanics m ON ((m.id = s.mechanic_id)));
 
@@ -2012,7 +2055,8 @@ SELECT s.id,
     s.started_at,
     s.note,
     ((s.started_at AT TIME ZONE 'America/New_York'::text))::date AS started_on,
-    (((s.started_at AT TIME ZONE 'America/New_York'::text))::date < ((now() AT TIME ZONE 'America/New_York'::text))::date) AS stale
+    (((s.started_at AT TIME ZONE 'America/New_York'::text))::date < ((now() AT TIME ZONE 'America/New_York'::text))::date) AS stale,
+    s.in_lat, s.in_lng, s.in_accuracy_m, s.in_geo_note
    FROM (tw_shifts s
      JOIN tw_mechanics m ON ((m.id = s.mechanic_id)))
   WHERE (s.ended_at IS NULL);

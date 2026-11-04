@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { C, FD } from "./theme.js";
 import { Btn, SectionLabel, Modal, nf } from "./ui.jsx";
 import * as now from "./nowData.js";
+import PunchPlace from "./PunchPlace.jsx";
 import { todayISO } from "./day.js";
 import { sayOffline } from "./dbError.js";
 
@@ -126,6 +127,7 @@ export default function NowSection({ who, tab, onBusy, supervisor, go }) {
                   ? `Left open since ${s.startedOn}`
                   : `In at ${new Date(s.startedAt).toLocaleTimeString([], {
                       hour: "numeric", minute: "2-digit" })}`}
+                <PunchPlace place={s.inPlace} style={{ marginLeft: 8 }} />
               </div>
               <OnWhat d={detail.get(s.mechanicId)} />
 

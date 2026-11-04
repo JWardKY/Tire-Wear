@@ -272,6 +272,13 @@ export default function HelpSection() {
           the clock only fills them in for you. If you forgot a whole day, see{" "}
           <B>Forgot to punch</B> below.
         </Note>
+        <Note>
+          Clocking in or out also records <B>where</B> you were, from your phone or
+          tablet's location — the first time, it will ask permission. Your supervisor
+          sees a map pin beside each punch. If location is off or the phone cannot get
+          a fix, you still clock in or out; the punch just says why there is no pin.
+          Times you type over by hand do not move the pin.
+        </Note>
         <Note tone="watch">
           Once you have clocked out, anything left over shows a <B>Put those hours on a
           shop</B> box. Pick the shop you were at, say roughly what you were doing, and
