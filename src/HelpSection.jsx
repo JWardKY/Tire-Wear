@@ -96,8 +96,8 @@ export default function HelpSection() {
         <Step n="1" head="Your email">
           The app asks for your Allen Company email, not a password. It goes on every
           reading you take, so the shop can tell whose gauge a number came from. It
-          remembers you on that phone or tablet until somebody presses SWITCH USER at
-          the top right.
+          remembers you on that phone or tablet until somebody taps the round badge
+          with your initials at the top right and chooses <B>SWITCH USER</B>.
         </Step>
         <Step n="2" head="Your PIN — four digits">
           Timecard is behind a PIN, because those are pay records and the tablet on the
@@ -671,7 +671,8 @@ export default function HelpSection() {
 
       <Block id="truck" title="One truck's file — everything about a unit">
         <p style={p}>
-          <B>TRUCK FILE</B> answers the question that used to mean opening five tabs:
+          <B>TRUCK FILE</B>, under <B>MORE</B> at the top, answers the question that used
+          to mean opening five tabs:
           what has been done to this thing. Type a truck number and the whole file comes
           up on one page.
         </p>
@@ -771,7 +772,9 @@ export default function HelpSection() {
           will also warn you if you try to close the tab with a clock still going.
         </Faq>
         <Faq q="I cannot see the Supervisor tab / it asks for a password.">
-          That one is not for the floor. Everything you need is on the other tabs.
+          It is under <B>MORE</B> at the top, with Truck file and Inventory, and it asks
+          for a supervisor's PIN because it is not for the floor. Everything you need is
+          on the other tabs.
         </Faq>
         {/* A tablet on shop wifi at the back of the building, or on cell data
             out at Clover Bottom, drops a request now and then. The app cannot
