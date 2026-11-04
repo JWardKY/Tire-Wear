@@ -207,7 +207,7 @@ export default function InventorySection({ who, tab, onBusy }) {
                     {visible.map((r) => (
                       <tr key={r.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                         <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>
-                          <button onClick={() => setOpening(r)} style={{ ...linkBtn, fontFamily: FM }}>
+                          <button onClick={() => setOpening(r)} className="text-link" style={{ ...linkBtn, fontFamily: FM }}>
                             {r.num}
                           </button>
                         </td>
@@ -226,10 +226,10 @@ export default function InventorySection({ who, tab, onBusy }) {
                         <td style={td}><StatePill state={r.state} /></td>
                         <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                           <button disabled={busy} onClick={() => setMoving({ part: r, kind: "issue" })}
-                            style={{ ...linkBtn, fontSize: 12.5 }}>Issue</button>
+                            className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Issue</button>
                           <span style={{ color: C.line }}> · </span>
                           <button disabled={busy} onClick={() => setMoving({ part: r, kind: "receive" })}
-                            style={{ ...linkBtn, fontSize: 12.5 }}>Receive</button>
+                            className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Receive</button>
                         </td>
                       </tr>
                     ))}

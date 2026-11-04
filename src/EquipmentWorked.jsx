@@ -372,7 +372,7 @@ export default function EquipmentWorked({ mechanic, date, vehicles, codes, parts
             it is still only on this phone until you press Save timecard.
           </span>
           <button onClick={() => setRestored(false)}
-            style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
+            className="text-link" style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
             Got it
           </button>
         </div>
@@ -554,7 +554,7 @@ function UnitCard({ card: c, index, count, flagged, now, vehicles, codeGroups, s
           </Btn>
           {count > 1 && (
             <button onClick={onRemove} disabled={running}
-              style={{ ...linkBtn, fontSize: 12.5, color: running ? C.muted : C.pull,
+              className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: running ? C.muted : C.pull,
                        cursor: running ? "not-allowed" : "pointer" }}>
               Remove
             </button>
@@ -952,7 +952,7 @@ function PartsPulled({ parts, picked, onChange }) {
                 style={{ ...inp, fontFamily: FM, width: 78, textAlign: "right" }} />
               <span style={{ fontSize: 12, color: C.muted, width: 34 }}>{p.uom}</span>
               <button onClick={() => drop(p)}
-                style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+                className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
             </div>
           ))}
         </div>

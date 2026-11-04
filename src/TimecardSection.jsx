@@ -320,11 +320,11 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
                     <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
                     <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                       <button disabled={busy} onClick={() => setEditing(e)}
-                        style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
+                        className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
                       <span style={{ color: C.line }}> · </span>
                       <button disabled={busy}
                         onClick={() => run(() => time.deleteEntry(e.id))}
-                        style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+                        className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
                     </td>
                   </tr>
                 ))}
@@ -861,7 +861,7 @@ function MissedPunch({ mechanic, viewing, onGoToDay, onBusy, onErr, onFixed }) {
         </Field>
         <Btn disabled={!stop || saving} onClick={fix}>Fix it</Btn>
         <button onClick={() => onGoToDay(sh.date)}
-          style={{ ...linkBtn, fontSize: 12.5, paddingBottom: 9 }}>
+          className="text-link" style={{ ...linkBtn, fontSize: 12.5, paddingBottom: 9 }}>
           or open that day
         </button>
       </div>

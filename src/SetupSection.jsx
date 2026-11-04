@@ -109,7 +109,7 @@ function Roster({ roster, run, supervisor }) {
                 </td>
                 <td style={{ ...td, fontFamily: FM, whiteSpace: "nowrap" }}>
                   {m.cell
-                    ? <a href={`tel:${m.cell.replace(/[^\d+]/g, "")}`}
+                    ? <a className="text-link" href={`tel:${m.cell.replace(/[^\d+]/g, "")}`}
                          style={{ color: C.green700 }}>{m.cell}</a>
                     : <span style={{ color: C.muted }}>—</span>}
                 </td>
@@ -126,7 +126,7 @@ function Roster({ roster, run, supervisor }) {
                     : <span style={{ color: C.muted }}>—</span>}
                 </td>
                 <td style={td}>
-                  <select style={{ ...inp, maxWidth: 150 }} value={m.role}
+                  <select style={{ ...inp, minWidth: 140, maxWidth: 170 }} value={m.role}
                     onChange={(e) => run(
                       () => setup.setRole(m.id, e.target.value),
                       `${m.name} is now ${e.target.value}.`)}>

@@ -48,6 +48,7 @@ const SUITES = [
   ["test-nowboard", "the Now board in a real browser — needs the app served"],
   ["test-punchboard", "fixing a missed punch in a real browser — needs the app served"],
   ["test-geoboard", "where a punch happened, granted and refused — needs the app served"],
+  ["test-ipad", "every screen at iPad size: no sideways scroll, 44px taps, no iOS zoom — needs the app served"],
   ["test-truckboard", "the truck file in a real browser — needs the app served"],
   ["test-dualboard", "mismatched duals on the Tires screen — needs the app served"],
   ["test-treadboard", "impossible tread on the Tires screen — needs the app served"],
