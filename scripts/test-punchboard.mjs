@@ -258,7 +258,9 @@ console.log("\n── a supervisor fixes it on the timecard ──");
   const { ctx, page, writes, errors, rest400 } = await session(
     new Function(`${badge(SUP.email)};${supervisor(SUP)}`));
 
-  await page.getByRole("button", { name: "Supervisor", exact: true }).first().click();
+  /* The office pages sit behind More since the header was regrouped. */
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Supervisor", exact: true }).click();
   await page.waitForTimeout(1200);
   await page.getByRole("button", { name: "Timecards", exact: true }).first().click();
   await page.waitForTimeout(1500);

@@ -24,9 +24,14 @@ import HelpSection from "./HelpSection.jsx";
    hitting a PIN prompt was a surprise. Everything gated now lives under
    Supervisor, at the end, where it announces itself.
 
-   `blurb` is the line under the logo, so the header says what you are
-   looking at rather than always saying tires. It may be a function of
-   the sub-tab where one line cannot cover the section honestly. */
+   `menu` says where a section sits in the header. Unset: a tab on the
+   bar, big enough to hit with gloves on. "more": behind the More
+   button — the office pages, which the floor opens rarely and which
+   made the bar ten tabs wide. "help": the round ? beside the account.
+
+   `blurb` is the line under the page title, so the page says what you
+   are looking at. It may be a function of the sub-tab where one line
+   cannot cover the section honestly. */
 
 export const SECTIONS = [
   {
@@ -91,12 +96,14 @@ export const SECTIONS = [
   },
   {
     key: "truck",
+    menu: "more",
     label: "Truck file",
     blurb: "Everything the shop knows about one unit — type a truck number",
     Component: TruckFileSection,
   },
   {
     key: "inventory",
+    menu: "more",
     label: "Inventory",
     blurb: "Parts on the shelf, what needs ordering, and where it all went",
     subTabs: [
@@ -112,6 +119,7 @@ export const SECTIONS = [
   },
   {
     key: "supervisor",
+    menu: "more",
     supervisor: true,
     label: "Supervisor",
     blurb: (tab) =>
@@ -138,6 +146,7 @@ export const SECTIONS = [
        handout — one source, so the paper on the wall cannot drift from
        what the app actually does. */
     key: "help",
+    menu: "help",
     label: "Help",
     blurb: "How to use this — and the printable version for the wall",
     Component: HelpSection,

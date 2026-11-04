@@ -240,7 +240,9 @@ page.on("response", (r) => {
 
 await page.goto(URL_, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1200);
-await page.getByRole("button", { name: "Truck file", exact: true }).first().click();
+/* The office pages sit behind More since the header was regrouped. */
+await page.getByRole("button", { name: "More", exact: true }).click();
+await page.getByRole("menuitem", { name: "Truck file", exact: true }).click();
 await page.waitForTimeout(1200);
 
 console.log("── typing a truck number ──");

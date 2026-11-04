@@ -41,6 +41,20 @@ body { -webkit-text-size-adjust: 100%; }
   .rail-grid { grid-template-columns: minmax(0, 1fr) !important; }
 }
 
+/* The header at tablet widths. Most of the shop uses it on an iPad:
+   810–834 wide standing up, 1080–1194 on its side. Below 1200 the
+   badge drops the name to its initials and the "Haul Division" label
+   goes, which is what lets an iPad on its side keep the whole header on
+   one row. Below 1024 — an iPad standing up, or a phone — the section
+   tabs take their own full-width row under the logo and the badge,
+   rather than pushing the badge down onto a row of its own. */
+@media (max-width: 1199px) {
+  .wide-only { display: none !important; }
+}
+@media (max-width: 1023px) {
+  .shell-nav { order: 3; flex-basis: 100% !important; }
+}
+
 /* Printing a timecard.
    The mechanic card has a Print button and a shop that prints one wants
    the day on paper, not the app's chrome. Everything marked no-print
