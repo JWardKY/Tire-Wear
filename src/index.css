@@ -55,6 +55,15 @@ body { -webkit-text-size-adjust: 100%; }
   .shell-nav { order: 3; flex-basis: 100% !important; }
 }
 
+/* The three office pages: a More menu until there is room for them as
+   tabs. Below the breakpoint the inline tabs are hidden; above it More
+   is. Set where all nine tabs, the ? and the badge fit on one row. */
+.office-inline { display: none !important; }
+@media (min-width: 1400px) {
+  .office-inline { display: inline-block !important; }
+  .office-more { display: none !important; }
+}
+
 /* Printing a timecard.
    The mechanic card has a Print button and a shop that prints one wants
    the day on paper, not the app's chrome. Everything marked no-print
