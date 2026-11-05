@@ -198,7 +198,7 @@ export default function DrivingTab({ date, mechanicId, entries, vehicles, codes,
                   <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                     <button onClick={() => onDelete(e.id)}
-                      style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+                      className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
                   </td>
                 </tr>
               ))}

@@ -16,7 +16,7 @@ export default function PunchPlace({ label, place, style }) {
     <span style={{ fontSize: 12, color: C.muted, whiteSpace: "nowrap", ...style }}>
       {label && <>{label} </>}
       {pin ? (
-        <a href={mapUrl(place)} target="_blank" rel="noopener noreferrer"
+        <a href={mapUrl(place)} target="_blank" rel="noopener noreferrer" className="text-link"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           title={`${place.lat}, ${place.lng}`}

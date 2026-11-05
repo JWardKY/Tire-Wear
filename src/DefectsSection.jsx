@@ -365,7 +365,7 @@ function DefectRow({ d, who, busy, dvir, onClaim, onRelease, onRepair, onReopen,
               {d.state === "open" && (
                 <>
                   <button onClick={() => onPriority(d.priority === "high" ? "" : "high")}
-                    disabled={busy} style={{ ...linkBtn, fontSize: 12.5, color: C.muted }}>
+                    disabled={busy} className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.muted }}>
                     {d.priority === "high" ? "Clear priority" : "Flag priority"}
                   </button>
                   <Btn tone="ghost" disabled={busy} onClick={onClaim}>Claim</Btn>
@@ -646,7 +646,7 @@ function FocusChip({ label, count, onClear }) {
       <span style={{ fontSize: 13, color: C.muted }}>
         {count} shown · you tapped this on the shop board
       </span>
-      <button onClick={onClear} style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
+      <button onClick={onClear} className="text-link" style={{ ...linkBtn, fontSize: 13, marginLeft: "auto" }}>
         Show all
       </button>
     </div>

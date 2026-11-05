@@ -64,6 +64,34 @@ body { -webkit-text-size-adjust: 100%; }
   .office-more { display: none !important; }
 }
 
+/* Fingers, not a mouse.
+   Most of the shop works on an iPad. Apple's guidance is a 44px target
+   for anything you tap, and any text box set below 16px makes iOS zoom
+   the whole page in when you tap it — and not zoom back. The app's
+   buttons, boxes and dropdowns are 35–37px and 14px, sized for a mouse.
+
+   This applies on anything tablet-sized and on any touch screen (an
+   iPad Pro on its side is 1366 wide, so width alone would miss it).
+   Desktop with a mouse is left as it was.
+
+   The underlined text buttons and links sit inside sentences ("Edit",
+   "Turn on", a phone number, a map pin)
+   and a 44px box would break the line they are in, so they keep their
+   look and get an invisible 44px tap area around them instead. */
+@media (max-width: 1199px), (pointer: coarse) {
+  button, select, textarea,
+  input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]):not([type=range]) {
+    min-height: 44px;
+  }
+  input, select, textarea { font-size: 16px !important; }
+  .text-link { position: relative; }
+  button.text-link { min-height: 0; }
+  .text-link::after {
+    content: ""; position: absolute; left: -6px; right: -6px;
+    top: 50%; height: 44px; transform: translateY(-50%);
+  }
+}
+
 /* Printing a timecard.
    The mechanic card has a Print button and a shop that prints one wants
    the day on paper, not the app's chrome. Everything marked no-print

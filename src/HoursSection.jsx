@@ -464,7 +464,7 @@ function ApprovalCell({ d, busy, onApprove, onPull }) {
           {d.approvedBy}
           {" · "}
           <button onClick={onPull} disabled={busy}
-            style={{ ...linkBtn, fontSize: 11.5, color: C.pull }}>
+            className="text-link" style={{ ...linkBtn, fontSize: 11.5, color: C.pull }}>
             take it back
           </button>
         </div>
@@ -478,7 +478,7 @@ function ApprovalCell({ d, busy, onApprove, onPull }) {
         <span style={{ color: C.watch, fontWeight: 700 }}>Changed since approving</span>
         <div>
           <button onClick={onApprove} disabled={busy || !!why}
-            style={{ ...linkBtn, fontSize: 11.5 }}>
+            className="text-link" style={{ ...linkBtn, fontSize: 11.5 }}>
             approve again
           </button>
         </div>
@@ -559,7 +559,7 @@ function NoPayrollRecord({ rows, onClose }) {
           The file downloaded, but {rows.length}{" "}
           {rows.length === 1 ? "person has" : "people have"} no payroll record
         </div>
-        <button onClick={onClose} style={{ ...linkBtn, fontSize: 12 }}>dismiss</button>
+        <button onClick={onClose} className="text-link" style={{ ...linkBtn, fontSize: 12 }}>dismiss</button>
       </div>
       <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6 }}>
         {rows.map((r) => (
@@ -591,7 +591,7 @@ function NotApproved({ rows, onClose }) {
         <div style={{ fontFamily: FD, fontSize: 17, fontWeight: 700, color: C.pull }}>
           Payroll did not run — {rows.length} card{rows.length === 1 ? "" : "s"} not approved
         </div>
-        <button onClick={onClose} style={{ ...linkBtn, fontSize: 12.5 }}>Dismiss</button>
+        <button onClick={onClose} className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Dismiss</button>
       </div>
       <p style={{ fontSize: 13, color: C.ink, margin: "6px 0 0", lineHeight: 1.55,
         maxWidth: 760 }}>
@@ -864,7 +864,7 @@ function Cards({ from, to, q, who, onErr }) {
                       onPull={() => setPulling(d)} />
                   </td>
                   <td style={{ ...td, textAlign: "right" }}>
-                    <button onClick={() => setOpen(d)} style={{ ...linkBtn, fontSize: 12.5 }}>
+                    <button onClick={() => setOpen(d)} className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>
                       Open
                     </button>
                   </td>
@@ -974,7 +974,7 @@ function Punches({ day, who, shifts, busy, setBusy, onErr, onChanged }) {
       {shifts.length === 0 && !adding && (
         <div style={{ fontSize: 13, color: C.muted }}>
           Never clocked in on this day — the hours below were entered by hand.{" "}
-          <button onClick={() => setAdding(true)} style={linkBtn}>Put the punches in</button>
+          <button onClick={() => setAdding(true)} className="text-link" style={linkBtn}>Put the punches in</button>
         </div>
       )}
 
@@ -1220,10 +1220,10 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
                   <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                     <button disabled={busy} onClick={() => openLine(e)}
-                      style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
+                      className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
                     <span style={{ color: C.line }}> · </span>
                     <button disabled={busy} onClick={() => { setRemoving(e); setWhy(""); }}
-                      style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+                      className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
                   </td>
                 </tr>
               ))}
@@ -1287,7 +1287,7 @@ function CardDialog({ day, who, busy, setBusy, onClose, onErr, onDeleted, onEdit
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
           {!confirming ? (
             <button onClick={() => setConfirming(true)}
-              style={{ ...linkBtn, fontSize: 13, color: C.pull }}>
+              className="text-link" style={{ ...linkBtn, fontSize: 13, color: C.pull }}>
               Delete this card
             </button>
           ) : (

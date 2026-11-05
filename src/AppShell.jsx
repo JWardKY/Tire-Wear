@@ -320,8 +320,11 @@ export default function AppShell({ who, onSwitchUser }) {
       </div>
 
       {locked ? (
-        <SupervisorGate what={section.label}
-          onIn={(u) => setSupervisor(u)} />
+        /* In the same column as every section, under the page title. */
+        <div className="mx-auto w-full" style={{ maxWidth: WIDTH, padding: "20px 16px 60px" }}>
+          <SupervisorGate what={section.label}
+            onIn={(u) => setSupervisor(u)} />
+        </div>
       ) : (
         /* A supervisor-gated section is told who unlocked it, so a
            deletion is attributed to the person who authorised it and

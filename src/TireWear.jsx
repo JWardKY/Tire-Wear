@@ -1126,7 +1126,7 @@ function ClockPin({ secs, unit, who, onClose, onIn }) {
             <b>{picked.name}</b> — put your PIN in and the hours go on your card.
             {" "}
             <button onClick={() => { setPicked(null); setBuf(""); setMsg(""); }}
-              style={{ ...linkBtn, fontSize: 12.5 }}>Not you?</button>
+              className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Not you?</button>
           </p>
           <div className="flex justify-center" style={{ gap: 10, margin: "6px 0 14px" }}>
             {[0, 1, 2, 3].map((i) => (
@@ -1401,7 +1401,7 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
               <tr key={p.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
                 <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>
                   {t ? (
-                    <button onClick={() => onTire(t)} style={linkBtn}>{p.id}</button>
+                    <button onClick={() => onTire(t)} className="text-link" style={linkBtn}>{p.id}</button>
                   ) : p.id}
                 </td>
                 <td style={{ ...td, color: C.muted }}>{p.role}{p.slot === "O" ? " outer" : p.slot === "I" ? " inner" : ""}</td>
@@ -1416,7 +1416,7 @@ function PositionTable({ v, positions, activeTireAt, tireStats, settings, mismat
                         </div>
                       )}
                     </>
-                  ) : <button onClick={() => onEmpty(p)} style={linkBtn}>Mount a tire</button>}
+                  ) : <button onClick={() => onEmpty(p)} className="text-link" style={linkBtn}>Mount a tire</button>}
                 </td>
                 <td style={{ ...td, color: C.muted }}>
                   {t ? sayType(t.type, t.caps) : "—"}</td>
@@ -1541,7 +1541,7 @@ function Catalog({ models, tires, actions, busy }) {
         </div>
         <div className="flex flex-wrap items-center" style={{ gap: 8 }}>
           <button onClick={() => setShowRetired((v) => !v)}
-            style={{ ...linkBtn, fontSize: 12.5 }}>
+            className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>
             {showRetired ? "Hide retired" : "Show retired"}
           </button>
           <Btn onClick={() => setAdding(true)}>ADD A TIRE</Btn>
@@ -1670,7 +1670,7 @@ function CatalogRow({ m, used, busy, plan, onSave, onPrice, onEdit, onRetire }) 
         {worthAsking(plan) && (
           <>
             <button onClick={onPrice} disabled={busy}
-              style={{ ...linkBtn, fontSize: 12.5, fontWeight: 700, color: C.green700 }}
+              className="text-link" style={{ ...linkBtn, fontSize: 12.5, fontWeight: 700, color: C.green700 }}
               title={`Put ${money(m.cost)} on the ${plan.total} fitted ${
                 plan.total === 1 ? "tire that needs it" : "tires that need it"}`}>
               Price {plan.total} fitted
@@ -1678,10 +1678,10 @@ function CatalogRow({ m, used, busy, plan, onSave, onPrice, onEdit, onRetire }) 
             {" · "}
           </>
         )}
-        <button onClick={onEdit} style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
+        <button onClick={onEdit} className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
         {" · "}
         <button onClick={onRetire}
-          style={{ ...linkBtn, fontSize: 12.5, color: m.active ? C.pull : C.green700 }}>
+          className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: m.active ? C.pull : C.green700 }}>
           {m.active ? "Retire" : "Put back"}
         </button>
       </td>
@@ -2375,7 +2375,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
           typo in the brand or the mount odometer was permanent — there
           is no delete. */}
       <div className="flex justify-end" style={{ marginBottom: 4 }}>
-        <button onClick={() => setEditing(true)} style={{ ...linkBtn, fontSize: 12.5 }}>
+        <button onClick={() => setEditing(true)} className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>
           Edit these details
         </button>
       </div>
@@ -2443,7 +2443,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
               <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{p.d}/32</td>
               <td style={{ ...td, textAlign: "right" }}>
                 {p.rid && (
-                  <button style={{ ...linkBtn, color: C.pull, fontSize: 12 }}
+                  <button className="text-link" style={{ ...linkBtn, color: C.pull, fontSize: 12 }}
                     onClick={() => onDeleteReading(p.rid)}>Remove</button>
                 )}
               </td>
@@ -2455,7 +2455,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
       {!pulling && !moving && (
         <div className="flex justify-between items-center">
           <div className="flex items-center" style={{ gap: 16 }}>
-            <button onClick={() => setPulling(true)} style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
+            <button onClick={() => setPulling(true)} className="text-link" style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
               Pull this tire off
             </button>
             {/* A rotation, not a correction. The edit form changes a
@@ -2463,7 +2463,7 @@ function TireDialog({ tire, stats, settings, brands, freePositions = [], busy,
                 actually being moved, and can swap it with the tire
                 already on the other wheel. */}
             <button onClick={() => { setMoving(true); setToPos(""); }}
-              style={{ ...linkBtn, fontWeight: 600 }}>
+              className="text-link" style={{ ...linkBtn, fontWeight: 600 }}>
               Move to another wheel
             </button>
           </div>
@@ -3155,7 +3155,7 @@ function Settings({ settings, tires, readings, odos, tireStats, actions, busy })
         <div style={{ marginTop: 16, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 14 }}>
           {!confirm ? (
             <button onClick={() => { setConfirm(true); setTyped(""); }}
-              style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
+              className="text-link" style={{ ...linkBtn, color: C.pull, fontWeight: 600 }}>
               Erase all tire data
             </button>
           ) : (

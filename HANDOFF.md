@@ -273,6 +273,29 @@ If this ever needs to be a real lock, in rough order of effort:
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
 
+### On an iPad
+
+Most of the shop uses this on an iPad — 810 wide standing up, 1080 on its side.
+Three rules keep it usable with a finger, and `scripts/test-ipad.mjs` checks all of
+them on every screen and sub-tab at both sizes (plus a desktop pass for layout):
+
+- **Nothing scrolls the page sideways.** A wide table goes in its own scrolling box.
+- **Anything you tap is at least 44px tall** — Apple's minimum. One rule in
+  `index.css` does this for every button, box and dropdown below 1200px wide or on
+  any touch screen; a desktop with a mouse is untouched. Underlined text buttons and
+  links inside a sentence carry `className="text-link"` and get an invisible 44px
+  tap area instead, so the line they sit in does not break.
+- **Text boxes are 16px or larger.** Below 16px iOS zooms the page in when you tap
+  one and does not zoom back. The same rule sets it.
+
+Every section's body sits in the shared column (`maxWidth: 1400`, `padding: 20px
+16px 60px`) so it lines up under the page title; the test fails a page that starts
+left of its title. A new screen that skips the column is the first thing it catches.
+
+The header changes shape by width: below 1400px the office pages sit behind More;
+below 1200px the badge shows initials only; below 1024px the tabs drop to their own
+row under the logo.
+
 ### Where a punch happened
 
 Clock in and Clock out ask the phone or tablet for its position and store it on the

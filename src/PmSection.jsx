@@ -275,7 +275,7 @@ function Board({ shown, counts, q, setQ, busy, setRecording }) {
                     <td style={td}><LevelPill level={r.level} /></td>
                     <td style={{ ...td, textAlign: "right" }}>
                       <button disabled={busy} onClick={() => setRecording(r)}
-                        style={{ ...linkBtn, fontSize: 12.5 }}>
+                        className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>
                         Record
                       </button>
                     </td>
@@ -456,7 +456,7 @@ function History({ programs, vehicles, busy, onErr, onDelete }) {
                           go from "ok" to overdue on the next load. Worth a
                           confirm, and worth saying why. */}
                       <button disabled={busy} onClick={() => setConfirming(r)}
-                        style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>
+                        className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>
                         Delete
                       </button>
                     </td>
@@ -535,11 +535,11 @@ function Programs({ programs, busy, onToggle, onNew, onEdit }) {
                   <td style={{ ...td, color: C.muted }}>{p.appliesTo || "Every unit"}</td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                     <button disabled={busy} onClick={() => onEdit(p)}
-                      style={{ ...linkBtn, fontSize: 12.5, marginRight: 12 }}>
+                      className="text-link" style={{ ...linkBtn, fontSize: 12.5, marginRight: 12 }}>
                       Edit
                     </button>
                     <button disabled={busy} onClick={() => onToggle(p)}
-                      style={{ ...linkBtn, fontSize: 12.5, color: p.active ? C.pull : C.good }}>
+                      className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: p.active ? C.pull : C.good }}>
                       {p.active ? "Turn off" : "Turn on"}
                     </button>
                   </td>
