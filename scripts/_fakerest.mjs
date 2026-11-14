@@ -184,5 +184,41 @@ export async function fakeRest(ctx, { rows, columns, rpc, after, onWrite } = {})
   return { writes };
 }
 
-/* Where the pre-installed Chromium lives in this environment. */
-export const CHROME = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+/* Where the pre-installed Chromium lives.
+
+   Found rather than named. This was a hardcoded path ending
+   chromium-1194/chrome-linux/chrome, and the day the container image
+   moved to chromium-1243 — a different build number AND a renamed
+   folder, chrome-linux64 — every browser test in the suite died at
+   launch with "executable doesn't exist". Nothing about the app had
+   changed.
+
+   So it looks: newest build first, both folder spellings, and it
+   still honours PLAYWRIGHT_BROWSERS_PATH if the environment sets one
+   somewhere else. If nothing turns up the tests skip with a sentence
+   saying so, which is the right outcome for a machine with no browser
+   on it — a failure here is never about the code under test. */
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
+function findChrome() {
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH || "/opt/pw-browsers";
+  let dirs = [];
+  try {
+    dirs = readdirSync(root)
+      .filter((d) => /^chromium-\d+$/.test(d))
+      /* Highest build number first: a container part-way through an
+         image bump can carry two, and the new one is the one
+         playwright-core expects. */
+      .sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
+  } catch { return ""; }
+  for (const d of dirs) {
+    for (const sub of ["chrome-linux64", "chrome-linux"]) {
+      const exe = join(root, d, sub, "chrome");
+      if (existsSync(exe)) return exe;
+    }
+  }
+  return "";
+}
+
+export const CHROME = findChrome();

@@ -34,6 +34,12 @@ const KINDS = new Set([
      the mechanic fixing their own missed punch-out or a supervisor
      fixing it for them. */
   "shift_corrected",
+  /* A punch TAKEN OFF, which a correction cannot describe: the row is
+     gone and nothing is left saying it was ever there. The one case
+     this exists for is a second punch laid on top of a shift already
+     clocked, which doubles a day and gets somebody's real hours
+     deleted instead. */
+  "shift_removed",
   /* A tire going on or coming off is derivable from tw_tires and shows
      in tw_work_history on its own. A CORRECTION is not: once the brand
      or the mount odometer has been overwritten there is nothing left
@@ -65,6 +71,7 @@ export const EVENT_LABEL = {
   timecard_line_edited: "Hours corrected by a supervisor",
   timecard_line_removed: "Hours removed by a supervisor",
   shift_corrected: "Punch corrected",
+  shift_removed: "Punch removed",
   work_order_assigned: "Work assigned",
   work_order_completed: "Work order completed",
   part_issued: "Parts issued",

@@ -24,6 +24,11 @@
 */
 import { chromium } from "playwright-core";
 import { fakeRest, CHROME } from "./_fakerest.mjs";
+/* The shop's date, not UTC. At 9pm Eastern the UTC date is already
+   tomorrow, so a fixture built from toISOString() lands on a day the
+   app is not showing and the test fails every evening. The app has
+   one answer to "what day is it" and the tests use it. */
+import { todayISO } from "../src/day.js";
 
 const URL_ = process.env.APP_URL || "http://localhost:4173/";
 
@@ -53,7 +58,7 @@ const rows = {
   /* A shop line already on the card. The Driving tab has to leave it
      alone: a tab that listed the whole day would look right until the
      day somebody tried to edit a gearbox rebuild from it. */
-  tw_time_entries: [{ id: "e-shop", mechanic_id: MECH.id, work_date: new Date().toISOString().slice(0, 10),
+  tw_time_entries: [{ id: "e-shop", mechanic_id: MECH.id, work_date: todayISO(),
     vehicle_id: "v1", unit_label: null, where_worked: "shop", hours: 3,
     cost_code: "880", work_order: null, note: "Gearbox out", defect_id: null,
     work_types: ["Repair"], unit_seconds: 0, stints: [], work_performed: null,
