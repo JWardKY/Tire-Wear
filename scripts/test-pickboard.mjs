@@ -18,6 +18,11 @@
 */
 import { chromium } from "playwright-core";
 import { fakeRest, CHROME } from "./_fakerest.mjs";
+/* The shop's date, not UTC. At 9pm Eastern the UTC date is already
+   tomorrow, so a fixture built from toISOString() lands on a day the
+   app is not showing and the test fails every evening. The app has
+   one answer to "what day is it" and the tests use it. */
+import { todayISO } from "../src/day.js";
 
 const URL_ = process.env.APP_URL || "http://localhost:4173/";
 
@@ -25,7 +30,7 @@ let bad = 0;
 const ok = (l, v, d) => { if (!v) bad++; console.log(`${v ? " ok " : " !! "} ${l}${!v && d ? ` — ${d}` : ""}`); };
 
 const MECH = { id: "m1", name: "Dylan Barnes", email: "dylan_barnes@theallen.com" };
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = todayISO();
 
 /* A fleet big enough that scrolling is the problem this solves. */
 const FLEET = [
