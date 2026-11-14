@@ -31,6 +31,7 @@ import { reasonsFor, keepReason, sayReason, isFailure, DEFAULT_REASON }
 import * as time from "./timeData.js";
 import * as setup from "./setupData.js";
 import { readUnlock, writeUnlock } from "./identity.js";
+import * as fc from "./tireForecast.js";
 import { hms, liveSeconds, realHours, sayLong, suggestCode, tireCode, toggle, EMPTY, treadEntry }
   from "./jobClock.js";
 
@@ -403,7 +404,10 @@ export default function TireWear({ who, tab, onBusy }) {
           />
         )}
         {tab === "analysis" && (
-          <Analysis {...{ tires, tireStats, settings, byNum, models }} />
+          <div className="grid gap-4">
+            <ReplacementForecast {...{ tires, tireStats, odos }} />
+            <Analysis {...{ tires, tireStats, settings, byNum, models }} />
+          </div>
         )}
         {tab === "catalog" && (
           <Catalog {...{ models, tires, actions, busy }} />
@@ -2658,6 +2662,220 @@ function OdoDialog({ veh, lastOdo, busy, onClose, onSave }) {
 }
 
 /* ── Analysis ─────────────────────────────────────────────────── */
+/* ── What to buy, and when ─────────────────────────────────────────
+   Every tire on a truck, its tread above the pull point, how fast it is
+   wearing and how far its truck runs: when it will need replacing, and
+   how many of each size to have on the shelf by then.
+
+   Above the wear charts and not tied to their fleet tab, because "what
+   do we need to buy" is a question about the whole fleet, and the rows
+   are already split by size — which is what separates a pickup's tires
+   from a dump truck's.
+
+   All the judgement is in tireForecast.js. The two things that made the
+   first draft wrong on this fleet's real data are handled there and
+   shown here: tires whose wear rate rests on one gauge and a mount
+   depth that looks wrong go to "check before ordering" instead of onto
+   the order, and every tire the forecast cannot speak for is counted
+   and named rather than silently treated as fine. */
+function ReplacementForecast({ tires, tireStats, odos }) {
+  const [open, setOpen] = useState(null);   // which list is expanded
+
+  const report = useMemo(() => {
+    const paces = fc.pacesByVehicle(odos, { today: todayISO() });
+    const rows = tires.filter((t) => !t.offDate && tireStats[t.id])
+      .map((t) => ({ tire: t, stats: tireStats[t.id] }));
+    return fc.forecastFleet(rows, paces);
+  }, [tires, tireStats, odos]);
+
+  const today = new Date(todayISO() + "T12:00:00");
+  const H = fc.HORIZONS;
+  const unknownTotal = Object.values(report.unknown).reduce((a, l) => a + l.length, 0);
+
+  const cell = { ...td, ...tdNum, fontFamily: FM };
+  const head = (h, right) => (
+    <th style={{ ...th, textAlign: right ? "right" : "left" }}>{h}</th>
+  );
+  const box = { background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+    overflow: "hidden" };
+  const label = { fontFamily: FD, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.09em",
+    textTransform: "uppercase", color: C.muted };
+
+  /* The list behind a number, opened in place. A count nobody can see
+     the tires behind is a count nobody can act on. */
+  const TireList = ({ items, showDue }) => (
+    <div style={{ overflowX: "auto", borderTop: `1px solid ${C.lineSoft}` }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+        <thead><tr>
+          {head("Truck")}{head("Wheel")}{head("Size")}{head("Tread", true)}
+          {showDue ? <>{head("Due in", true)}{head("By", true)}{head("Measured")}</>
+            : head("Why")}
+        </tr></thead>
+        <tbody>
+          {items.map(({ tire, stats, f, size }) => (
+            <tr key={tire.id} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+              <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{tire.veh}</td>
+              <td style={{ ...td, fontFamily: FM }}>{tire.pos}</td>
+              <td style={{ ...td, color: C.muted }}>{size}</td>
+              <td style={cell}>{stats.depth}/32</td>
+              {showDue ? (
+                <>
+                  <td style={{ ...cell, fontWeight: 600 }}>{fc.sayMonths(f.monthsLeft)}</td>
+                  <td style={{ ...cell, color: C.muted }}>
+                    {f.state === "past" ? "now" : fc.dueDate(f.monthsLeft, today)}
+                  </td>
+                  <td style={{ ...td, fontSize: 12.5, color: C.muted }}>
+                    {f.state === "past" ? `at or under its ${stats.pull}/32 pull point`
+                      : f.basis === "gauged" ? "between two gauges" : "from the mount depth"}
+                  </td>
+                </>
+              ) : (
+                <td style={{ ...td, fontSize: 12.5, color: C.muted }}>{f.why}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const toggle = (k) => setOpen((o) => (o === k ? null : k));
+  const more = (k, n, word) => n > 0 && (
+    <button onClick={() => toggle(k)} style={{ ...linkBtn, fontSize: 12.5 }}>
+      {open === k ? "Hide" : `Show the ${n} ${word}`}
+    </button>
+  );
+
+  return (
+    <div className="grid gap-4">
+      <div style={box}>
+        <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.lineSoft}` }}>
+          <div style={{ fontFamily: FD, fontSize: 22, fontWeight: 700, color: C.green900,
+            lineHeight: 1.1 }}>
+            Tires to replace
+          </div>
+          <div style={{ fontSize: 12.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+            {fc.sayCoverage(report.covered)}
+          </div>
+        </div>
+
+        {/* Past the limit: the one list that needs doing today. */}
+        <div style={{ padding: "11px 16px", background: report.past.length ? "#FDECEA" : "#EDF7F0",
+          borderBottom: `1px solid ${C.lineSoft}` }}
+          className="flex flex-wrap items-center justify-between gap-2">
+          <div style={{ fontSize: 14, color: C.ink }}>
+            <b style={{ fontFamily: FM, color: report.past.length ? C.pull : C.good }}>
+              {report.past.length}
+            </b>{" "}
+            {report.past.length === 1 ? "tire is" : "tires are"} at or past the pull point now
+          </div>
+          {more("past", report.past.length, report.past.length === 1 ? "tire" : "tires")}
+        </div>
+        {open === "past" && <TireList items={report.past} showDue />}
+
+        {/* What to buy, by size. Running totals, because the question
+            purchasing actually asks is "how many by March". */}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+            <thead><tr>
+              {head("Size")}{head("Now", true)}
+              {H.map((h) => <React.Fragment key={h}>{head(`By ${h} mo`, true)}</React.Fragment>)}
+            </tr></thead>
+            <tbody>
+              {report.bySize.map((s) => (
+                <tr key={s.size} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+                  <td style={{ ...td, fontFamily: FM, fontWeight: 600 }}>{s.size}</td>
+                  <td style={{ ...cell, color: s.past ? C.pull : C.muted }}>{s.past}</td>
+                  {H.map((h) => <td key={h} style={cell}>{s.byThen[h]}</td>)}
+                </tr>
+              ))}
+              <tr style={{ borderTop: `2px solid ${C.line}`, background: C.paper }}>
+                <td style={{ ...td, fontWeight: 700 }}>All sizes</td>
+                <td style={{ ...cell, fontWeight: 700 }}>{report.past.length}</td>
+                {report.bands.map((b) => (
+                  <td key={b.months} style={{ ...cell, fontWeight: 700 }}>{b.byThen}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: "9px 16px", fontSize: 12, color: C.muted, lineHeight: 1.55,
+          borderTop: `1px solid ${C.lineSoft}` }}>
+          Each column is the running total to have bought by then, including the tires
+          already past the limit. A size that reads oddly — <span style={{ fontFamily: FM }}>
+          295/80/22.55</span> — is how it was typed on the tire, and is left as typed rather
+          than guessed at.
+        </div>
+      </div>
+
+      {/* The order the forecast puts them in. */}
+      <div style={box}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2"
+          style={{ padding: "11px 16px" }}>
+          <div style={label}>Due within 12 months · soonest first</div>
+          {more("due", report.due.filter((d) => d.horizon !== "later").length, "tires")}
+        </div>
+        {open === "due" && (
+          <TireList items={report.due.filter((d) => d.horizon !== "later")} showDue />
+        )}
+      </div>
+
+      {/* Held back from the totals on purpose. A rate resting on one gauge
+          and a typed mount depth, wearing faster than this fleet wears,
+          is far more often the mount depth than the tire — and an order
+          placed on it is money spent on tires that are not due. */}
+      {report.check.length > 0 && (
+        <div style={{ ...box, borderLeft: `4px solid ${C.watch}` }}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2"
+            style={{ padding: "11px 16px" }}>
+            <div>
+              <div style={{ ...label, color: C.watch }}>
+                {fc.CHECK_LABEL} · {report.check.length}
+              </div>
+              <div style={{ fontSize: 12.5, color: C.muted, marginTop: 3, lineHeight: 1.5,
+                maxWidth: 760 }}>
+                Measured once, against the depth typed when the tire went on, and wearing
+                faster than anything else on the fleet. Usually that is the mount depth, not
+                the tire. Gauge them again — two readings take the mount depth out of it —
+                and they rejoin the forecast. Not included in the totals above.
+              </div>
+            </div>
+            {more("check", report.check.length, "tires")}
+          </div>
+          {open === "check" && <TireList items={report.check} />}
+        </div>
+      )}
+
+      {/* What the forecast cannot speak for. Never left off: more than half
+          this fleet is in here, and a total that does not say so reads as
+          the whole bill. */}
+      {unknownTotal > 0 && (
+        <div style={box}>
+          <div style={{ padding: "11px 16px" }}>
+            <div style={label}>Cannot forecast yet · {unknownTotal}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+              These are not counted as fine — they are counted as unknown.
+            </div>
+          </div>
+          {Object.entries(report.unknown).filter(([, l]) => l.length).map(([k, l]) => (
+            <div key={k} style={{ borderTop: `1px solid ${C.lineSoft}` }}>
+              <div className="flex flex-wrap items-center justify-between gap-2"
+                style={{ padding: "9px 16px" }}>
+                <div style={{ fontSize: 13.5 }}>
+                  <b style={{ fontFamily: FM }}>{l.length}</b>{" "}
+                  <span style={{ color: C.ink }}>{fc.UNKNOWN_LABEL[k]}</span>
+                </div>
+                {more(k, l.length, "tires")}
+              </div>
+              {open === k && <TireList items={l} />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Analysis({ tires, tireStats, settings, byNum, models = [] }) {
   const [unit, setUnit] = useState("32nd");
   const conv = (v) => (v == null ? null : unit === "32nd" ? v : v / MILS_PER_32ND);
