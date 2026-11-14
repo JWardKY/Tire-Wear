@@ -226,7 +226,8 @@ try {
 }
 
 const browser = await chromium.launch({ executablePath: CHROME });
-const ctx = await browser.newContext({ viewport: { width: 1400, height: 1200 } });
+const ctx = await browser.newContext({ viewport: { width: 1400, height: 1200 },
+  acceptDownloads: true });
 await ctx.addInitScript(() =>
   localStorage.setItem("tirewear:who", "jason_ward@theallen.com"));
 const { writes } = await fakeRest(ctx, { rows });
@@ -365,6 +366,43 @@ ok("the service still reads as over", /Over/.test(t));
 ok("the mismatched pair is still flagged", /1 MISMATCHED DUAL/i.test(t));
 ok("still no rejected reads", rest400.length === 0, rest400.join("\n    "));
 ok("still nothing written", writes.length === 0);
+
+console.log("\n── taking it away: CSV and PDF ──");
+/* The CSV used to ignore this range on every detail section while its
+   summary honoured it — a September file that listed August's hours.
+   Both exports now come from one report with the dates applied once. */
+const grab = async (name) => {
+  const [dl] = await Promise.all([
+    page.waitForEvent("download", { timeout: 20000 }),
+    page.getByRole("button", { name, exact: true }).first().click(),
+  ]);
+  const path = await dl.path();
+  return { name: dl.suggestedFilename(), body: (await import("node:fs")).readFileSync(path) };
+};
+const csvFile = await grab("CSV");
+const csvText = csvFile.body.toString("utf8");
+ok("the CSV is named for the truck and the range",
+  /^truck-file-DT-881_2026-09-01_to_today\.csv$/.test(csvFile.name), csvFile.name);
+ok("…holds September's hours", /4\.25/.test(csvText));
+/* The bug, directly. */
+ok("…and NOT August's, which the old export listed anyway",
+  !/Replaced marker light/.test(csvText),
+  (csvText.match(/[^\n]*Replaced marker light[^\n]*/) || [""])[0]);
+ok("…but still the tire, which is not a date question", /Continental/.test(csvText));
+ok("…and still the open defect", /Chamber leaking air/.test(csvText));
+
+const pdfFile = await grab("PDF");
+ok("there is a PDF button, and it gives a PDF",
+  pdfFile.body.subarray(0, 5).toString() === "%PDF-", pdfFile.body.subarray(0, 8).toString());
+ok("…named the same way", /^truck-file-DT-881_2026-09-01_to_today\.pdf$/.test(pdfFile.name),
+  pdfFile.name);
+const pdfText = pdfFile.body.toString("latin1");
+ok("…with the truck in it", pdfText.includes("DT-881"));
+ok("…September's hours in it", pdfText.includes("4.25"));
+ok("…and not August's", !pdfText.includes("Replaced marker light"));
+ok("…and the tire, because what is on the truck is current", pdfText.includes("Continental"));
+ok("Print is still there", (await page.getByRole("button", { name: "Print", exact: true }).count()) > 0);
+ok("exporting wrote nothing", writes.length === 0);
 
 console.log("\n── another truck ──");
 await page.getByRole("button", { name: /Another truck/i }).click();

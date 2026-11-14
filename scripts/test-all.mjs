@@ -47,6 +47,7 @@ const SUITES = [
   ["test-cardedit", "a supervisor changing somebody else's hours — needs no key"],
   ["test-doublepunch", "two punches for one shift — needs no key"],
   ["test-tireforecast", "when tires will need replacing — needs no key"],
+  ["test-truckreport", "a truck file as a CSV and a PDF — needs no key"],
   ["test-nowboard", "the Now board in a real browser — needs the app served"],
   ["test-punchboard", "fixing a missed punch in a real browser — needs the app served"],
   ["test-geoboard", "where a punch happened, granted and refused — needs the app served"],

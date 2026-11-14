@@ -3,6 +3,7 @@ import { C, FD, FB, FM } from "./theme.js";
 import {
   fmtDate, nf, toCSV, Btn, Field, SectionLabel, inp, th, td, tdNum, linkBtn,
 } from "./ui.jsx";
+import { reportOf, csvRows, filenameFor } from "./truckReport.js";
 import * as file from "./truckFile.js";
 import { findUnits, rollUp } from "./truckRollup.js";
 import { sayType } from "./retread.js";
@@ -51,6 +52,7 @@ export default function TruckFileSection({ onBusy }) {
   const [loading, setLoading] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [makingPdf, setMakingPdf] = useState(false);
   const box = useRef(null);
 
   useEffect(() => {
@@ -148,7 +150,21 @@ export default function TruckFileSection({ onBusy }) {
                 <Btn tone="ghost" onClick={() => { setFrom(""); setTo(""); }}>All of it</Btn>
               )}
               <Btn tone="ghost" onClick={() => window.print()}>Print</Btn>
-              <Btn tone="ghost" onClick={() => downloadFile(f, roll)}>CSV</Btn>
+              {/* The PDF library is loaded on the first press, not with the
+                  page — nobody in the shop should pay for it on every load. */}
+              <Btn tone="ghost" disabled={makingPdf} onClick={async () => {
+                setMakingPdf(true);
+                try {
+                  const { savePdf } = await import("./truckPdf.js");
+                  savePdf(reportOf(f, roll, { from, to }));
+                  setErr("");
+                } catch (e) {
+                  setErr(`The PDF could not be made — ${e.message || e}`);
+                } finally { setMakingPdf(false); }
+              }}>{makingPdf ? "Making PDF…" : "PDF"}</Btn>
+              <Btn tone="ghost" onClick={() => downloadFile(reportOf(f, roll, { from, to }))}>
+                CSV
+              </Btn>
             </>
           )}
         </div>
@@ -725,74 +741,16 @@ function Everything({ f, from, to }) {
    One file with every section stacked under its own heading, rather
    than seven downloads. Somebody sending a truck's history to a buyer
    or an insurer wants one attachment. */
-function downloadFile(f, roll) {
-  const rows = [];
-  const head = (t) => { rows.push([]); rows.push([t]); };
-
-  rows.push([`Truck file — ${f.unit.num}`]);
-  rows.push([[f.unit.make, f.unit.model, f.unit.year].filter(Boolean).join(" "),
-    f.unit.div || "", f.meter.odo != null ? `${f.meter.odo} mi` : "no mileage",
-    f.meter.date || ""]);
-
-  head("SUMMARY");
-  rows.push(["Labour hours", roll.labourHours], ["Entries", roll.lines],
-    ["Mechanics", roll.mechanics.length], ["Services done", roll.servicesDone],
-    ["Defects repaired", roll.repairedDefects], ["Jobs completed", roll.doneOrders],
-    ["Parts lines", roll.partLines], ["Parts cost", roll.partsCost],
-    ["Tires on it", roll.tiresOn], ["Tires pulled", roll.tiresOff],
-    ["Open defects", roll.openDefects], ["Open jobs", roll.openOrders]);
-
-  head("MECHANIC TIME");
-  rows.push(["mechanic", "hours", "days", "last_on_it"]);
-  roll.mechanics.forEach((m) => rows.push([m.mechanic, m.hours, m.days, m.last]));
-
-  head("HOURS, EVERY ENTRY");
-  rows.push(["date", "mechanic", "hours", "cost_code", "cost_code_name", "where",
-    "job_location", "work_order", "what_was_done"]);
-  f.hours.forEach((h) => rows.push([h.date, h.mechanic, h.hours, h.code, h.codeName,
-    h.where, h.jobLocation, h.workOrder, h.performed || h.note]));
-
-  head("TIRES");
-  rows.push(["position", "on_now", "brand", "model", "size", "type", "mounted",
-    "mounted_odo", "new_32nds", "removed", "removed_odo", "miles_run", "why", "cost"]);
-  f.tires.forEach((t) => rows.push([t.pos, t.on ? "yes" : "no", t.brand, t.model, t.size,
-    t.type, t.onDate, t.onOdo, t.newDepth, t.offDate, t.offOdo, t.miles, t.offReason, t.cost]));
-
-  head("SERVICES");
-  rows.push(["date", "service", "category", "odometer", "engine_hours", "labour_hours", "by", "note"]);
-  f.services.forEach((s) => rows.push([s.date, s.program, s.category, s.odo,
-    s.engineHours, s.hours, s.by, s.note]));
-
-  head("DEFECTS");
-  rows.push(["first_reported", "category", "note", "safety", "state", "times",
-    "repaired_at", "repaired_by", "repair_note", "repair_hours", "work_order"]);
-  f.defects.forEach((d) => rows.push([d.first, d.category, d.note, d.safety, d.state,
-    d.count, d.repairedAt, d.repairedBy, d.repairNote, d.repairHours, d.workOrder]));
-
-  head("WORK ORDERS");
-  rows.push(["order", "title", "detail", "state", "priority", "opened", "completed",
-    "completed_by", "note"]);
-  f.orders.forEach((w) => rows.push([w.wo, w.title, w.detail, w.state, w.priority,
-    w.at, w.completedAt, w.completedBy, w.note]));
-
-  head("PARTS");
-  rows.push(["at", "part_number", "name", "qty", "unit_cost", "who", "work_order"]);
-  f.parts.filter((p) => p.kind === "issue").forEach((p) => rows.push([p.at, p.partNumber,
-    p.name, p.qty, p.cost, p.who, p.workOrder]));
-
-  head("MILEAGE");
-  rows.push(["date", "odometer", "source", "by"]);
-  f.odos.forEach((o) => rows.push([o.date, o.odo, o.source, o.by]));
-
-  head("EVERYTHING");
-  rows.push(["at", "kind", "what", "detail", "who", "hours", "work_order"]);
-  f.history.forEach((r) => rows.push([r.at, r.kind, r.what, r.summary, r.who,
-    r.hours, r.workOrder]));
-
-  const blob = new Blob([toCSV(rows)], { type: "text/csv" });
+/* The CSV, from the same report the PDF is made from. It used to build
+   its own rows here and ignored From/To on every detail section while its
+   summary respected them — a "last month" file said 12.5 hours at the top
+   and listed every hour ever booked underneath. One definition of the
+   report, in truckReport.js, means the two files and the screen agree. */
+function downloadFile(report) {
+  const blob = new Blob([toCSV(csvRows(report))], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `truck-file-${f.unit.num}.csv`;
+  a.download = filenameFor(report, "csv");
   a.click();
   URL.revokeObjectURL(a.href);
 }
