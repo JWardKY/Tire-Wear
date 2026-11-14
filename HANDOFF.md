@@ -66,7 +66,7 @@ new to learn and nothing new to pay for:
 | Layer | Choice |
 |---|---|
 | Frontend | React + Vite |
-| Database | Supabase (Postgres), project `allen-qc` |
+| Database | Supabase (Postgres), project `qgsdpbgpftktaqncwdch` |
 | Access | None. The app asks for an Allen email and takes your word for it — see below |
 | Hosting | Netlify, deploys from `main` on push |
 | Charts | Recharts |
@@ -143,6 +143,17 @@ seed-shop.sql     cost codes and PM programs
 `schema.sql` goes first because `schema-shop.sql` references `tw_vehicles`. All four
 are re-runnable.
 
+**Last checked against the live database on 11/04/2026.** It had drifted: the tire
+catalog (`tw_tire_models`), Motive asset ids, driving lines, the payroll export columns,
+the unit and cost-code lists on a timecard day and `tw_day_summary` had all been added
+to the live database and never written here, and `schema.sql` could not build an empty
+database at all — it altered `tw_vehicles` before creating it. Both files now rebuild
+the live schema exactly, except that the live `tw_hours`, `tw_timecard_days` and
+`tw_work_history` are missing `security_invoker`, which the files keep on purpose.
+
+To check again, run `scripts/schema-catalog.sql` in both places and compare — the
+header of that file says how.
+
 **`schema-shop.sql` was written on 09/03/2026, and is worth knowing the history of.**
 Those tables were built directly in the database during the shop rollout and never
 written down — the repo described six tables while the app queried twenty-nine. That
@@ -161,7 +172,12 @@ outage away from being lost. Anything added from here goes in these files first.
 
 ### Where the data lives
 
-The tables are in the **existing `allen-qc` Supabase project**, not a new one, and are
+**The live app now runs on its own Supabase project, `qgsdpbgpftktaqncwdch`.** It
+started in the shared `allen-qc` project, and the paragraph below is how it was set up
+there. `allen-qc` still holds an older copy of the `tw_` tables that the app no longer
+reads — do not apply changes there thinking they will reach the shop.
+
+The tables were first put in the **existing `allen-qc` Supabase project**, not a new one, and are
 namespaced `tw_` — the same pattern the other apps in that database already use
 (`hct_` for the Haul Cycle Tracker, `bid_` for bid history, `po_` for purchasing). One
 database to back up, one set of logins, and a project that is actively used and so is
@@ -256,6 +272,52 @@ If this ever needs to be a real lock, in rough order of effort:
 2. **Supabase Auth** — the magic-link screen this replaced is in the git history at
    `src/SignIn.jsx` (commit `b5f7d6d`). Restoring it means putting the redirect URL in
    the Supabase dashboard and dropping the `tw_*_anon_all` policies.
+
+### On an iPad
+
+Most of the shop uses this on an iPad — 810 wide standing up, 1080 on its side.
+Three rules keep it usable with a finger, and `scripts/test-ipad.mjs` checks all of
+them on every screen and sub-tab at both sizes (plus a desktop pass for layout):
+
+- **Nothing scrolls the page sideways.** A wide table goes in its own scrolling box.
+- **Anything you tap is at least 44px tall** — Apple's minimum. One rule in
+  `index.css` does this for every button, box and dropdown below 1200px wide or on
+  any touch screen; a desktop with a mouse is untouched. Underlined text buttons and
+  links inside a sentence carry `className="text-link"` and get an invisible 44px
+  tap area instead, so the line they sit in does not break.
+- **Text boxes are 16px or larger.** Below 16px iOS zooms the page in when you tap
+  one and does not zoom back. The same rule sets it.
+
+Every section's body sits in the shared column (`maxWidth: 1400`, `padding: 20px
+16px 60px`) so it lines up under the page title; the test fails a page that starts
+left of its title. A new screen that skips the column is the first thing it catches.
+
+The header changes shape by width: below 1400px the office pages sit behind More;
+below 1200px the badge shows initials only; below 1024px the tabs drop to their own
+row under the logo.
+
+### Where a punch happened
+
+Clock in and Clock out ask the phone or tablet for its position and store it on the
+shift: `in_lat` / `in_lng` / `in_accuracy_m` and the same for `out_`. A supervisor sees
+a map pin beside each punch in the card dialog on Hours, the mechanic sees their own on
+the Timecard clock, and the Now board shows where each person on the clock punched in.
+
+**A location never stops a punch.** If the device refuses, has location off, or cannot
+get a fix within eight seconds, the punch goes through and `in_geo_note` /
+`out_geo_note` says why (`denied`, `unavailable`, `timeout`, `unsupported`). A clock that
+will not clock is one people stop using. `src/geo.js` is the only place that asks.
+
+Two things to know when reading a pin:
+
+- **It is where the device was, not proof of where the person was.** The accuracy is
+  the device's own estimate — indoors on wifi it can be a few hundred feet. It is the
+  same honour system as the email at sign-in.
+- **Typing over a time does not move the pin.** A correction is not a punch, and a
+  punch added by hand on Hours has no location at all.
+
+Browsers only give a position over HTTPS, which Netlify serves; `npm run dev` on
+`localhost` counts as secure too.
 
 ### Work orders, and the history
 

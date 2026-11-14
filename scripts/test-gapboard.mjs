@@ -39,10 +39,11 @@ const ok = (l, v, d) => { if (!v) bad++; console.log(`${v ? " ok " : " !! "} ${l
 const BADGE = "jason_ward@theallen.com";
 const BOSS = { id: "s1", name: "Jason Ward" };
 const MECH = { id: "m1", name: "Joshua Sawyers", email: "joshua@theallen.com" };
-/* Today, not a fixed day. The board opens on "this week", so a
-   fixture pinned to a date goes out of range the moment the week
-   rolls over and the whole test fails on an empty board. */
-const DATE = new Date().toISOString().slice(0, 10);
+/* Today in the shop's timezone: the Timecards tab opens on "This
+   week" (Monday through today), and a fixed date falls out of it. */
+const isoOf = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
+  year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+const DATE = isoOf(new Date());
 
 /* 4.60 on the clock. */
 const SHIFT = { id: "sh1", mechanic_id: MECH.id, work_date: DATE,
@@ -219,7 +220,15 @@ const entryWrites = (m) =>
 
 await page.goto(URL_, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1400);
-await page.getByRole("button", { name: "Supervisor", exact: true }).first().click();
+/* A tab on a wide screen, behind More on a narrower one. */
+{
+  const tabBtn = page.getByRole("button", { name: "Supervisor", exact: true });
+  if (await tabBtn.first().isVisible()) await tabBtn.first().click();
+  else {
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Supervisor", exact: true }).click();
+  }
+}
 await page.waitForTimeout(1200);
 await page.getByRole("button", { name: "Timecards", exact: true }).first().click();
 await page.waitForTimeout(1800);

@@ -38,8 +38,11 @@ export default function SetupSection({ who, tab, onBusy, supervisor }) {
     finally { onBusy?.(false); }
   };
 
+  /* The same centred column every section sits in, so the page lines
+     up under the header and its title rather than starting at the
+     window's edge. */
   return (
-    <div>
+    <div className="mx-auto w-full" style={{ maxWidth: 1400, padding: "20px 16px 60px" }}>
       {err && <div style={banner(C.pull)}>{err}</div>}
       {note && <div style={banner(C.good)}>{note}</div>}
       {tab === "codes" ? <Codes codes={codes} run={run} />
@@ -106,7 +109,7 @@ function Roster({ roster, run, supervisor }) {
                 </td>
                 <td style={{ ...td, fontFamily: FM, whiteSpace: "nowrap" }}>
                   {m.cell
-                    ? <a href={`tel:${m.cell.replace(/[^\d+]/g, "")}`}
+                    ? <a className="text-link" href={`tel:${m.cell.replace(/[^\d+]/g, "")}`}
                          style={{ color: C.green700 }}>{m.cell}</a>
                     : <span style={{ color: C.muted }}>—</span>}
                 </td>
@@ -123,7 +126,7 @@ function Roster({ roster, run, supervisor }) {
                     : <span style={{ color: C.muted }}>—</span>}
                 </td>
                 <td style={td}>
-                  <select style={{ ...inp, maxWidth: 150 }} value={m.role}
+                  <select style={{ ...inp, minWidth: 140, maxWidth: 170 }} value={m.role}
                     onChange={(e) => run(
                       () => setup.setRole(m.id, e.target.value),
                       `${m.name} is now ${e.target.value}.`)}>

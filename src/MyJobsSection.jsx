@@ -189,7 +189,7 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
                 {j.startedAt ? "TAP TO GET BACK ON IT" : "TAP TO START"}
               </span>
               <button onClick={(e) => { e.stopPropagation(); setOpenJob(j); }}
-                style={{ ...linkBtn, fontSize: 11.5 }}>
+                className="text-link" style={{ ...linkBtn, fontSize: 11.5 }}>
                 what is on it
               </button>
             </div>
@@ -223,7 +223,7 @@ export default function MyJobsSection({ me, onBusy, onBookHours, onStartJob, go 
                 TAP TO START
               </span>
               <button onClick={(e) => { e.stopPropagation(); go?.("defects", "open", "mine"); }}
-                style={{ ...linkBtn, fontSize: 11.5 }}>
+                className="text-link" style={{ ...linkBtn, fontSize: 11.5 }}>
                 open the defect
               </button>
             </div>

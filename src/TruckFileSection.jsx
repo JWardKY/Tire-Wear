@@ -501,7 +501,7 @@ function MechanicTime({ f, roll, from, to }) {
             ))}
           </Table>
           {lines.length > shown.length && (
-            <button onClick={() => setAll(true)} style={{ ...linkBtn, marginTop: 8 }}>
+            <button onClick={() => setAll(true)} className="text-link" style={{ ...linkBtn, marginTop: 8 }}>
               Show all {lines.length} entries
             </button>
           )}
@@ -652,7 +652,7 @@ function Parts({ f, from, to }) {
             ))}
           </Table>
           {lines.length > shown.length && (
-            <button onClick={() => setAll(true)} style={{ ...linkBtn, marginTop: 8 }}>
+            <button onClick={() => setAll(true)} className="text-link" style={{ ...linkBtn, marginTop: 8 }}>
               Show all {lines.length} lines
             </button>
           )}
@@ -711,7 +711,7 @@ function Everything({ f, from, to }) {
             ))}
           </Table>
           {rows.length > shown.length && (
-            <button onClick={() => setAll(true)} style={{ ...linkBtn, marginTop: 8 }}>
+            <button onClick={() => setAll(true)} className="text-link" style={{ ...linkBtn, marginTop: 8 }}>
               Show all {rows.length}
             </button>
           )}

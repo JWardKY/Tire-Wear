@@ -24,6 +24,13 @@ const URL_ = process.env.APP_URL || "http://localhost:4173/";
 let bad = 0;
 const ok = (l, v, d) => { if (!v) bad++; console.log(`${v ? " ok " : " !! "} ${l}${!v && d ? ` — ${d}` : ""}`); };
 
+/* The board opens on "This week" (Monday through today, in the shop's
+   timezone), so the day has to be today — a fixed date drops off the
+   board the week after it was written. */
+const isoOf = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
+  year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+const TODAY = isoOf(new Date());
+
 const BOSS = { id: "m9", name: "Phil Hinkle", email: "phil_hinkle@theallen.com" };
 
 const day = (o) => ({
@@ -37,29 +44,23 @@ const day = (o) => ({
   units: o.units, cost_codes: o.codes,
 });
 
-/* Today, not a fixed day. The board opens on "this week", so a
-   fixture pinned to a date silently goes out of range the moment the
-   week rolls over — this test passed for weeks and then failed one
-   morning with nothing changed but the calendar. */
-const DATE = new Date().toISOString().slice(0, 10);
-
 const DAYS = [
   /* Six lines over five trucks — one truck was touched twice, which
      is why the list is shorter than the line count. */
-  day({ id: "m1", who: "Donald Bradley", emp: "5565", date: DATE,
+  day({ id: "m1", who: "Donald Bradley", emp: "5565", date: TODAY,
         clock: 9.33, booked: 9.33, lines: 6,
         units: ["DT-808", "Shop cleanup / housekeeping", "DT-885", "DT-887", "DT-896"],
         codes: ["885", "SHOP-CB", "835", "SHOP-CF"] }),
   /* Two lines, both shop, one code. */
-  day({ id: "m2", who: "Nick Shifflet", emp: "37243", date: DATE,
+  day({ id: "m2", who: "Nick Shifflet", emp: "37243", date: TODAY,
         clock: 8.85, booked: 8.85, lines: 2,
         units: ["Other shop time", "Parts run / pickup"], codes: ["SHOP-CF"] }),
   /* One truck, one code — the ordinary row. */
-  day({ id: "m3", who: "Stevie Winkler", emp: "43810", date: DATE,
+  day({ id: "m3", who: "Stevie Winkler", emp: "43810", date: TODAY,
         clock: 1.25, booked: 1.25, lines: 1,
         units: ["DT-890"], codes: ["830"] }),
   /* Still on the clock, nothing booked. The cells have to be a dash. */
-  day({ id: "m4", who: "Tyler Coffey", emp: "6340", date: DATE,
+  day({ id: "m4", who: "Tyler Coffey", emp: "6340", date: TODAY,
         clock: 0, booked: 0, lines: 0, open: true, units: [], codes: [] }),
 ];
 
@@ -101,7 +102,15 @@ page.on("response", (r) => {
 
 await page.goto(URL_, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1200);
-await page.getByRole("button", { name: "Supervisor", exact: true }).first().click();
+/* A tab on a wide screen, behind More on a narrower one. */
+{
+  const tabBtn = page.getByRole("button", { name: "Supervisor", exact: true });
+  if (await tabBtn.first().isVisible()) await tabBtn.first().click();
+  else {
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Supervisor", exact: true }).click();
+  }
+}
 await page.waitForTimeout(1500);
 await page.getByRole("button", { name: "Timecards", exact: true }).first().click();
 await page.waitForTimeout(2000);

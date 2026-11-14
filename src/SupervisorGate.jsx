@@ -108,7 +108,7 @@ export default function SupervisorGate({ what, onIn }) {
 
   if (!roster.length) {
     return (
-      <div style={{ maxWidth: 520, padding: 8 }}>
+      <div style={{ maxWidth: 520 }}>
         <Card title={`The ${what.toLowerCase()} tab is for supervisors`}
           note="Nobody on the roster is marked Dashboard or Admin yet, so there is no one to let in. Set somebody's role under Supervisor → Mechanics — which needs a supervisor too, so the first one has to be set in the database.">
           <div />
@@ -119,7 +119,7 @@ export default function SupervisorGate({ what, onIn }) {
 
   if (!picked) {
     return (
-      <div style={{ maxWidth: 560, padding: 8 }}>
+      <div style={{ maxWidth: 560 }}>
         <Card title={`The ${what.toLowerCase()} tab is for supervisors`}
           note="Hours, timecards, the work log, the roster and the cost codes. Tap your name, then your four-digit PIN. It is the same PIN as your timecard.">
           <div style={{ display: "grid", gap: 7,

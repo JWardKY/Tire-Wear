@@ -6,6 +6,8 @@ import {
 } from "./ui.jsx";
 import * as time from "./timeData.js";
 import * as clock from "./nowData.js";
+import { whereAmI } from "./geo.js";
+import PunchPlace from "./PunchPlace.jsx";
 import * as setup from "./setupData.js";
 import * as buy from "./purchasingData.js";
 import MyJobs from "./MyJobsSection.jsx";
@@ -318,11 +320,11 @@ export default function TimecardSection({ who, tab, onBusy, go, focus, onClearFo
                     <td style={{ ...td, ...tdNum, fontWeight: 600 }}>{nf(e.hours, 2)}</td>
                     <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                       <button disabled={busy} onClick={() => setEditing(e)}
-                        style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
+                        className="text-link" style={{ ...linkBtn, fontSize: 12.5 }}>Edit</button>
                       <span style={{ color: C.line }}> · </span>
                       <button disabled={busy}
                         onClick={() => run(() => time.deleteEntry(e.id))}
-                        style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
+                        className="text-link" style={{ ...linkBtn, fontSize: 12.5, color: C.pull }}>Remove</button>
                     </td>
                   </tr>
                 ))}
@@ -859,7 +861,7 @@ function MissedPunch({ mechanic, viewing, onGoToDay, onBusy, onErr, onFixed }) {
         </Field>
         <Btn disabled={!stop || saving} onClick={fix}>Fix it</Btn>
         <button onClick={() => onGoToDay(sh.date)}
-          style={{ ...linkBtn, fontSize: 12.5, paddingBottom: 9 }}>
+          className="text-link" style={{ ...linkBtn, fontSize: 12.5, paddingBottom: 9 }}>
           or open that day
         </button>
       </div>
@@ -890,6 +892,7 @@ const LUNCH = [0, 15, 30, 45, 60];
 function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSaved }) {
   const [sh, setSh] = React.useState(null);
   const [, tick] = React.useState(0);
+  const [locating, setLocating] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try { setSh(await clock.shiftForDay(mechanicId, date)); }
@@ -947,13 +950,22 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
             {running ? "On the clock now"
               : "Punching in shows you on the shop board. It does not book hours."}
+            {" "}Where you clock in and out is recorded with the time.
           </div>
         </div>
         <Btn tone={running ? "ghost" : "solid"}
-          onClick={() => go(() => running
-            ? clock.punchOut(mechanicId)
-            : clock.punchIn(mechanicId))}>
-          {running ? "Clock out" : "Clock in"}
+          disabled={locating}
+          onClick={() => go(async () => {
+            /* The position is asked for first and never fails the
+               punch — see geo.js. The wait is shown on the button so a
+               slow GPS fix does not read as a dead button. */
+            setLocating(true);
+            let g;
+            try { g = await whereAmI(); } finally { setLocating(false); }
+            return running ? clock.punchOut(mechanicId, g)
+                           : clock.punchIn(mechanicId, null, g);
+          })}>
+          {locating ? "Getting location…" : running ? "Clock out" : "Clock in"}
         </Btn>
       </div>
 
@@ -981,6 +993,13 @@ function Shift({ mechanicId, date, entries, mechanic, codes, onBusy, onErr, onSa
               </select>
             </Field>
           </div>
+          {(sh.inPlace?.lat != null || sh.inPlace?.note
+            || sh.outPlace?.lat != null || sh.outPlace?.note) && (
+            <div className="flex flex-wrap" style={{ gap: 14, margin: "2px 0 4px" }}>
+              <PunchPlace label="In:" place={sh.inPlace} />
+              {!sh.open && <PunchPlace label="Out:" place={sh.outPlace} />}
+            </div>
+          )}
           <p style={{ fontSize: 11.5, color: C.muted, margin: "2px 0 0" }}>
             The clock fills these in. Type over them if you forgot to punch —
             the change saves when you click away, and is noted with your name on it.
