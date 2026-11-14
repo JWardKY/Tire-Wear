@@ -108,7 +108,13 @@ ok("it says which fleet these numbers are",
    not in this figure. */
 ok("only the haul tires are counted", /\b3 tires with a wear rate\b/.test(t),
   (t.match(/\d+ tires? with a wear rate/) || [""])[0]);
-ok("the pickups are not in it", !/\b7 tires\b/.test(t), (t.match(/\d+ tires? with a wear rate/) || [""])[0]);
+/* Asked of the wear-rate figure itself, not the whole page. The
+   replacement forecast above the charts is fleet-wide on purpose — it
+   buys by tire size, so a pickup's tires and a dump truck's never share
+   a row — and it rightly says "of 7 tires". Scanning the whole body for
+   "7 tires" caught that and called it a leak. */
+ok("the pickups are not in it",
+  !/\b7 tires? with a wear rate\b/.test(t), (t.match(/\d+ tires? with a wear rate/) || [""])[0]);
 
 /* The table at the bottom follows the fleet too — it is the same
    comparison written out. */
